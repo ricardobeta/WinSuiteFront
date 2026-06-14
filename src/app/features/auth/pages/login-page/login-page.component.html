@@ -1,0 +1,69 @@
+<div class="auth-layout">
+  <section class="hero-panel">
+    <img
+      class="hero-image"
+      src="/images/auth-hero.jpg"
+      alt="Ilustracion abstracta tecnologica"
+    />
+    <div class="overlay"></div>
+    <div class="hero-content">
+      <img class="brand-logo" src="/images/winsuite-logo.png" alt="Winsuite" />
+      <h1>Gestiona tu negocio multitenant con una sola plataforma</h1>
+      <p class="subtitle">
+        Controla acceso, tenants y operaciones desde un flujo moderno basado en Angular 21 y Firebase.
+      </p>
+    </div>
+  </section>
+
+  <section class="form-panel">
+    <mat-card appearance="outlined" class="auth-card">
+      <h2>Iniciar sesion</h2>
+      <p class="muted">Ingresa con tu cuenta para continuar.</p>
+
+      @if (auth.error(); as apiError) {
+        <p class="error-banner">{{ apiError }}</p>
+      }
+
+      <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
+        <mat-form-field appearance="outline">
+          <mat-label>Correo electronico</mat-label>
+          <input matInput type="email" formControlName="email" />
+          @if (hasControlError('email', 'required')) {
+            <mat-error>El correo es obligatorio.</mat-error>
+          } @else if (hasControlError('email', 'email')) {
+            <mat-error>Ingresa un correo valido.</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Contrasena</mat-label>
+          <input matInput type="password" formControlName="password" />
+          @if (hasControlError('password', 'required')) {
+            <mat-error>La contrasena es obligatoria.</mat-error>
+          }
+        </mat-form-field>
+
+        <mat-checkbox formControlName="remember">Recordarme</mat-checkbox>
+
+        <button
+          mat-flat-button
+          color="primary"
+          class="full-width"
+          type="submit"
+          [disabled]="auth.loading()"
+        >
+          @if (auth.loading()) {
+            <mat-spinner diameter="18"></mat-spinner>
+          } @else {
+            <span>Entrar</span>
+          }
+        </button>
+      </form>
+
+      <p class="switch-text">
+        Aun no tienes cuenta?
+        <a routerLink="/auth/register">Registrate aqui</a>
+      </p>
+    </mat-card>
+  </section>
+</div>

@@ -1,0 +1,78 @@
+.page-card {
+  padding: 1.25rem;
+  display: grid;
+  gap: 1rem;
+}
+
+.toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+  color: var(--primary);
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.toolbar p {
+  margin: 0.25rem 0 0;
+  color: var(--muted-foreground);
+}
+
+.table-wrap {
+  overflow: auto;
+}
+
+table {
+  width: 100%;
+  min-width: 860px;
+}
+
+.chip-activo {
+  background: rgb(16 185 129 / 18%);
+}
+
+.chip-inactivo {
+  background: rgb(148 163 184 / 22%);
+}
+
+.empty-state {
+  border: 1px dashed rgb(148 163 184 / 30%);
+  border-radius: var(--tc-radius-lg);
+  padding: 2rem 1.25rem;
+  text-align: center;
+  color: var(--muted-foreground);
+}
+
+.empty-state mat-icon {
+  width: 44px;
+  height: 44px;
+  font-size: 44px;
+  color: var(--primary);
+}
+
+.empty-state h3 {
+  margin: 0.75rem 0 0.2rem;
+  color: var(--foreground);
+}
+
+.empty-state p {
+  margin: 0;
+}
+
+@media (max-width: 900px) {
+  .toolbar {
+    align-items: start;
+    flex-direction: column;
+  }
+}

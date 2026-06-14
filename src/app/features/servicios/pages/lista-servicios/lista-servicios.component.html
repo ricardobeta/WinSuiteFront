@@ -1,0 +1,91 @@
+<section class="surface-card page-card">
+  <div class="toolbar">
+    <div>
+      <p class="eyebrow">Servicios</p>
+      <h2>Lista de servicios</h2>
+      <p>Administra el catalogo de servicios comerciales de tu tenant.</p>
+    </div>
+
+    @if (canCreate()) {
+      <button mat-raised-button color="primary" type="button" (click)="crearNuevo()">
+        <mat-icon>add</mat-icon>
+        Nuevo servicio
+      </button>
+    }
+  </div>
+
+  @if (serviciosCount() === 0) {
+    <div class="empty-state">
+      <mat-icon>build_circle</mat-icon>
+      <h3>No hay servicios registrados</h3>
+      <p>Crea el primer servicio para comenzar.</p>
+    </div>
+  } @else {
+    <div class="table-wrap">
+      <table mat-table [dataSource]="dataSource" matSort>
+        <ng-container matColumnDef="nombre">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Nombre</th>
+          <td mat-cell *matCellDef="let servicio">{{ servicio.nombre }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="descripcion">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Descripcion</th>
+          <td mat-cell *matCellDef="let servicio">{{ servicio.descripcion }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="precio">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Precio</th>
+          <td mat-cell *matCellDef="let servicio">{{ servicio.precio | currency: 'USD' : 'symbol' : '1.2-2' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="impuestoPorcentaje">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>IVA %</th>
+          <td mat-cell *matCellDef="let servicio">{{ servicio.impuestoPorcentaje ?? 0 | number:'1.0-2' }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="activo">
+          <th mat-header-cell *matHeaderCellDef mat-sort-header>Estado</th>
+          <td mat-cell *matCellDef="let servicio">
+            <mat-chip [class.chip-activo]="servicio.activo" [class.chip-inactivo]="!servicio.activo">
+              {{ servicio.activo ? 'Activo' : 'Inactivo' }}
+            </mat-chip>
+          </td>
+        </ng-container>
+
+        <ng-container matColumnDef="acciones">
+          <th mat-header-cell *matHeaderCellDef>Acciones</th>
+          <td mat-cell *matCellDef="let servicio">
+            @if (canUpdate()) {
+              <button
+                mat-icon-button
+                color="primary"
+                type="button"
+                matTooltip="Editar servicio"
+                (click)="editar(servicio.id!)"
+              >
+                <mat-icon>edit</mat-icon>
+              </button>
+            }
+
+            @if (canDelete()) {
+              <button
+                mat-icon-button
+                color="warn"
+                type="button"
+                matTooltip="Eliminar servicio"
+                (click)="eliminar(servicio.id!)"
+              >
+                <mat-icon>delete</mat-icon>
+              </button>
+            }
+          </td>
+        </ng-container>
+
+        <tr mat-header-row *matHeaderRowDef="displayedColumns()"></tr>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns()"></tr>
+      </table>
+    </div>
+
+    <mat-paginator [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons></mat-paginator>
+  }
+</section>

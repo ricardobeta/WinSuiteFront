@@ -1,0 +1,134 @@
+<div class="auth-layout">
+  <section class="hero-panel">
+    <img
+      class="hero-image"
+      src="/images/auth-hero.jpg"
+      alt="Ilustracion abstracta tecnologica"
+    />
+    <div class="overlay"></div>
+    <div class="hero-content">
+      <img class="brand-logo" src="/images/winsuite-logo.png" alt="Winsuite" />
+      <h1>Registro guiado para usuarios y negocio</h1>
+      <p class="subtitle">
+        Primero creamos el usuario en Firebase y luego tu tenant en backend para operar como multitenant.
+      </p>
+
+      <div class="steps">
+        @for (step of steps; track step.id) {
+          <div class="step-chip" [class.active]="currentStep() === step.id">
+            <span>{{ step.id }}</span>
+            <div>
+              <strong>{{ step.title }}</strong>
+              <small>{{ step.description }}</small>
+            </div>
+          </div>
+        }
+      </div>
+    </div>
+  </section>
+
+  <section class="form-panel">
+    <mat-card appearance="outlined" class="auth-card">
+      <h2>Crear cuenta</h2>
+      <p class="muted">Paso {{ currentStep() }} de 2</p>
+
+      @if (auth.error(); as apiError) {
+        <p class="error-banner">{{ apiError }}</p>
+      }
+
+      @if  (currentStep() === 1) {
+        <form [formGroup]="userForm" (ngSubmit)="nextStep()" novalidate>
+          <mat-form-field appearance="outline">
+            <mat-label>Nombre completo</mat-label>
+            <input matInput formControlName="fullName" />
+            @if (hasUserError('fullName', 'required')) {
+              <mat-error>El nombre completo es obligatorio.</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Correo electronico</mat-label>
+            <input matInput type="email" formControlName="email" />
+            @if (hasUserError('email', 'required')) {
+              <mat-error>El correo es obligatorio.</mat-error>
+            } @else if (hasUserError('email', 'email')) {
+              <mat-error>Ingresa un correo valido.</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Contrasena</mat-label>
+            <input matInput type="password" formControlName="password" />
+            @if (hasUserError('password', 'required')) {
+              <mat-error>La contrasena es obligatoria.</mat-error>
+            } @else if (hasUserError('password', 'minlength')) {
+              <mat-error>La contrasena debe tener al menos 6 caracteres.</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Repite la contrasena</mat-label>
+            <input matInput type="password" formControlName="confirmPassword" />
+            @if (hasUserError('confirmPassword', 'required')) {
+              <mat-error>Debes repetir la contrasena.</mat-error>
+            } @else if (hasPasswordMismatch()) {
+              <mat-error>Las contrasenas no coinciden.</mat-error>
+            }
+          </mat-form-field>
+
+          <button mat-flat-button color="primary" class="full-width" type="submit">
+            Continuar con datos del negocio
+          </button>
+        </form>
+      } @else {
+        <form [formGroup]="businessForm" (ngSubmit)="submit()" novalidate>
+          <mat-form-field appearance="outline">
+            <mat-label>Nombre del negocio</mat-label>
+            <input matInput formControlName="businessName" />
+            @if (hasBusinessError('businessName', 'required')) {
+              <mat-error>El nombre del negocio es obligatorio.</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Pais</mat-label>
+            <mat-select formControlName="country">
+              @for (country of countries; track country) {
+                <mat-option [value]="country">{{ country }}</mat-option>
+              }
+            </mat-select>
+            @if (hasBusinessError('country', 'required')) {
+              <mat-error>Selecciona un pais.</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Telefono celular</mat-label>
+            <input matInput placeholder="+593999999999" formControlName="mobilePhone" />
+            @if (hasBusinessError('mobilePhone', 'required')) {
+              <mat-error>El telefono celular es obligatorio.</mat-error>
+            } @else if (hasBusinessError('mobilePhone', 'pattern')) {
+              <mat-error>Ingresa un telefono celular valido.</mat-error>
+            }
+          </mat-form-field>
+
+          <div class="actions">
+            <button mat-stroked-button type="button" (click)="prevStep()">Volver</button>
+            <button mat-flat-button color="primary" type="submit" [disabled]="auth.loading()">
+              @if (auth.loading()) {
+                <mat-spinner diameter="18"></mat-spinner>
+              } @else {
+                <span>Crear cuenta</span>
+              }
+            </button>
+          </div>
+        </form>
+      }
+
+      <p class="switch-text">
+        Ya tienes cuenta?
+        <a routerLink="/auth/login">Inicia sesion</a>
+      </p>
+    </mat-card>
+  </section>
+</div>

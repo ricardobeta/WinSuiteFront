@@ -1,0 +1,26 @@
+@use '../styles/_tokens';
+
+.surface-card {
+	background: var(--tc-surface-container-lowest);
+	border: none;
+	border-radius: var(--tc-radius-lg);
+	box-shadow: var(--tc-elevation-1);
+	transition: box-shadow .18s ease, transform .12s ease;
+}
+
+.cdk-overlay-pane .mat-dialog-container {
+	background: var(--tc-glass-bg);
+	backdrop-filter: blur(14px);
+	-webkit-backdrop-filter: blur(14px);
+	border-radius: var(--tc-radius-md);
+	border: none;
+	color: var(--foreground);
+}
+
+.btn-cta,
+button.mat-flat-button[color="primary"] {
+	background: var(--tc-gradient-primary) !important;
+	color: var(--tc-on-primary) !important;
+	border-radius: var(--tc-radius-md) !important;
+}
+

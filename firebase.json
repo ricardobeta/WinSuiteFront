@@ -1,0 +1,23 @@
+{
+  "hosting": {
+    "target": "dashboard",
+    "public": "dist/winsuite/browser",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "database": {
+    "rules": "realtime-database.rules.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
+}

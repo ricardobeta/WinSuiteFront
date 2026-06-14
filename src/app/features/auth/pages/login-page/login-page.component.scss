@@ -1,0 +1,135 @@
+.auth-layout {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  background: var(--background);
+}
+
+.hero-panel {
+  position: relative;
+  overflow: hidden;
+  background: var(--tc-surface-container-highest);
+}
+
+.hero-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.9;
+}
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgb(15 23 42 / 60%), rgb(15 23 42 / 95%));
+}
+
+.hero-content {
+  position: relative;
+  z-index: 1;
+  max-width: 540px;
+  padding: 3.5rem;
+  color: #ffffff;
+}
+
+.brand-logo {
+  width: min(260px, 78vw);
+  height: auto;
+  margin: 0 0 1rem;
+  display: block;
+  border-radius: var(--radius-md);
+  background: rgb(255 255 255 / 92%);
+  padding: 0.35rem 0.75rem;
+  box-shadow: 0 16px 36px rgb(0 0 0 / 18%);
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(2rem, 4vw, 3.2rem);
+  line-height: 1.08;
+}
+
+.subtitle {
+  margin-top: 1.2rem;
+  color: rgb(255 255 255 / 72%);
+  font-size: 1rem;
+  line-height: 1.6;
+}
+
+.form-panel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.auth-card {
+  width: min(440px, 100%);
+  border-radius: var(--radius-xl);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  background: var(--tc-surface-container-lowest);
+  box-shadow: var(--tc-elevation-1);
+}
+
+h2 {
+  margin: 0.25rem 0 0;
+  color: var(--foreground);
+}
+
+.muted {
+  margin: 0 0 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.error-banner {
+  margin: 0 0 0.5rem;
+  color: var(--destructive);
+  background: rgb(239 68 68 / 10%);
+  border-radius: var(--radius-md);
+  padding: 0.6rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.full-width {
+  width: 100%;
+  min-height: 46px;
+  margin-top: 0.25rem;
+}
+
+.switch-text {
+  margin: 0.5rem 0 0;
+  color: var(--muted-foreground);
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.switch-text a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+@media (width <= 980px) {
+  .auth-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-panel {
+    min-height: 240px;
+  }
+
+  .hero-content {
+    padding: 2rem;
+  }
+}

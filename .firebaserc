@@ -1,0 +1,17 @@
+{
+  "projects": {
+    "default": "wa-marketing-ea461"
+  },
+  "targets": {
+    "wa-marketing-ea461": {
+      "hosting": {
+        "dashboard": [
+          "wa-marketing-ea461"
+        ],
+        "winsuite": [
+          "wa-marketing-ea461"
+        ]
+      }
+    }
+  }
+}

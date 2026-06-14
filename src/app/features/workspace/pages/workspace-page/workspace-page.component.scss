@@ -1,0 +1,26 @@
+.workspace-placeholder {
+  padding: clamp(20px, 3vw, 32px);
+  min-height: calc(100dvh - var(--topbar-height) - 64px);
+  background: var(--tc-surface);
+}
+
+.module {
+  margin: 0 0 var(--space-2);
+  color: var(--muted-foreground);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 42px);
+}
+
+p {
+  margin: var(--space-4) 0 0;
+  max-width: 62ch;
+  color: var(--muted-foreground);
+  line-height: 1.6;
+}

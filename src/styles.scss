@@ -1,0 +1,204 @@
+@use '@angular/material' as mat;
+@use 'styles/_tokens';
+@use 'styles/_material-mapping';
+
+@include mat.core();
+
+$winsuite-theme: mat.define-theme((
+	color: (
+		theme-type: light,
+		primary: mat.$azure-palette,
+		tertiary: mat.$blue-palette,
+		use-system-variables: true
+	),
+	typography: (
+		brand-family: 'Inter, "Segoe UI", sans-serif',
+		plain-family: 'Inter, "Segoe UI", sans-serif'
+	),
+	density: (
+		scale: 0
+	)
+));
+
+$winsuite-theme-dark: mat.define-theme((
+	color: (
+		theme-type: dark,
+		primary: mat.$azure-palette,
+		tertiary: mat.$blue-palette,
+		use-system-variables: true
+	),
+	typography: (
+		brand-family: 'Inter, "Segoe UI", sans-serif',
+		plain-family: 'Inter, "Segoe UI", sans-serif'
+	),
+	density: (
+		scale: 0
+	)
+));
+
+@include mat.all-component-themes($winsuite-theme);
+
+:root {
+	--background: #f8f9fa;
+	--foreground: #2d3335;
+	--border: #e8e8e8;
+	--input: #dee3e6;
+	--primary: #066b5e;
+	--primary-foreground: #ffffff;
+	--primary-container: #a0f2e1;
+	--on-primary-container: #005d51;
+	--tertiary: #3a647d;
+	--secondary: #ccefeb;
+	--secondary-foreground: #00b09f;
+	--muted: #e8e8e8;
+	--muted-foreground: #949494;
+	--success: #00c417;
+	--success-foreground: #ffffff;
+	--accent: #00b09f;
+	--accent-foreground: #ffffff;
+	--destructive: #ff0000;
+	--destructive-foreground: #ffffff;
+	--warning: #ff7308;
+	--warning-foreground: #ffffff;
+	--card: #ffffff;
+	--card-foreground: #2d3335;
+	--sidebar: #f1f4f5;
+	--sidebar-foreground: #4a4a4a;
+	--sidebar-primary: #dee3e6;
+	--sidebar-primary-foreground: #2d3335;
+	--radius-sm: 4px;
+	--radius-md: 8px;
+	--radius-lg: 1rem;
+	--radius-xl: 24px;
+	--font-family-body: 'Inter', 'Segoe UI', sans-serif;
+
+	--space-1: 4px;
+	--space-2: 8px;
+	--space-3: 12px;
+	--space-4: 16px;
+	--space-5: 20px;
+	--space-6: 24px;
+	--space-8: 32px;
+
+	--sidebar-width-collapsed: 72px;
+	--sidebar-width-expanded: 248px;
+	--topbar-height: 64px;
+
+	/* Material System variables (M3) aligned to Tactile Clarity palette */
+	--mat-sys-primary: #066b5e;
+	--mat-sys-on-primary: #ffffff;
+	--mat-sys-primary-container: #a0f2e1;
+	--mat-sys-on-primary-container: #005d51;
+	--mat-sys-tertiary: #3a647d;
+	--mat-sys-surface: #f8f9fa;
+	--mat-sys-surface-container-low: #f1f4f5;
+	--mat-sys-surface-container-highest: #dee3e6;
+	--mat-sys-surface-container-lowest: #ffffff;
+	--mat-sys-on-surface: #2d3335;
+
+	/* Angular Material filled button tokens override */
+	--mat-button-filled-container-color: var(--tc-primary);
+	--mat-button-filled-label-text-color: var(--tc-on-primary);
+	--mdc-filled-button-container-color: var(--tc-primary);
+	--mdc-filled-button-label-text-color: var(--tc-on-primary);
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	background: var(--background);
+	color: var(--foreground);
+	font-family: var(--font-family-body);
+	transition:
+		background-color 0.2s ease,
+		color 0.2s ease,
+		border-color 0.2s ease;
+}
+
+html {
+	color-scheme: light;
+}
+
+* {
+	box-sizing: border-box;
+}
+
+.page-shell {
+	min-height: 100dvh;
+	background: var(--background);
+}
+
+.surface-card {
+	background: var(--card);
+	border: 1px solid var(--tc-ghost-border);
+	border-radius: var(--radius-lg);
+	box-shadow: var(--tc-elevation-1);
+}
+
+html.theme-dark {
+	@include mat.all-component-colors($winsuite-theme-dark);
+	color-scheme: dark;
+
+	--background: #111315;
+	--foreground: #f5f7f8;
+	--border: #242a2d;
+	--input: #171b1d;
+	--primary: #26d2bf;
+	--primary-foreground: #062a27;
+	--secondary: #183532;
+	--secondary-foreground: #b8f2eb;
+	--muted: #1d2225;
+	--muted-foreground: #9ca7ad;
+	--success: #30d158;
+	--success-foreground: #04150a;
+	--accent: #1fb8aa;
+	--accent-foreground: #041817;
+	--destructive: #ff5c5c;
+	--destructive-foreground: #220606;
+	--warning: #ff9f43;
+	--warning-foreground: #2b1400;
+	--card: #15191b;
+	--card-foreground: #f5f7f8;
+	--sidebar: #121618;
+	--sidebar-foreground: #d8dee2;
+	--sidebar-primary: #1c2a28;
+	--sidebar-primary-foreground: #26d2bf;
+
+	/* Material System variables for dark mode */
+	--mat-sys-primary: #26d2bf;
+	--mat-sys-on-primary: #062a27;
+	--mat-sys-primary-container: #1c2a28;
+	--mat-sys-on-primary-container: #b8f2eb;
+	--mat-sys-tertiary: #6f8fa8;
+	--mat-sys-surface: #111315;
+	--mat-sys-surface-container-low: #15191b;
+	--mat-sys-surface-container-highest: #242a2d;
+	--mat-sys-surface-container-lowest: #121618;
+	--mat-sys-on-surface: #f5f7f8;
+
+	/* Keep filled buttons on brand primary in dark mode too */
+	--mat-button-filled-container-color: var(--tc-primary);
+	--mat-button-filled-label-text-color: var(--tc-on-primary);
+	--mdc-filled-button-container-color: var(--tc-primary);
+	--mdc-filled-button-label-text-color: var(--tc-on-primary);
+}
+
+app-workspace-shell .workspace-shell .logo-btn {
+	width: 144px;
+	height: 76px;
+	background: transparent;
+	padding: 0;
+}
+
+app-workspace-shell .workspace-shell .logo-btn img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+app-workspace-shell .workspace-shell .sidebar.collapsed .logo-btn {
+	width: 48px;
+	height: 48px;
+}
+
+ 

@@ -1,0 +1,323 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+
+    "Negocio": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+      }
+    },
+
+    "tenant_users": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        "$userId": {
+          ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+          ".validate": "newData.hasChildren(['active', 'joinedAt', 'role', 'tenantId', 'userId'])"
+        }
+      }
+    },
+
+    "clientes": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        "configuracion": {
+          ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+          ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+        },
+        "lista": {
+          ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+          "$clienteId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        }
+      }
+    },
+
+    "Facturacion": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        "configuracion": {
+          ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+        }
+      }
+    },
+
+    "firmas": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        "$firmaId": {
+          ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+        }
+      }
+    },
+
+    "archivos": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        "$archivoId": {
+          ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+        }
+      }
+    },
+
+    "archivos_stats": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+      }
+    },
+
+    "ventas": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+
+        "configuracion": {
+          "ventas": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          },
+          "usuariosAlmacenes": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+
+        "secuencias": {
+          "$secuenciaId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+
+        "sesiones": {
+          "$sesionId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+
+        "documentos": {
+          "$ventaId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+
+        "ventasItems": {
+          "$ventaId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+            "$itemId": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          }
+        },
+
+        "ventasPagos": {
+          "$ventaId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+            "$pagoId": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          }
+        }
+      }
+    },
+
+    "servicios": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+
+        "lista": {
+          ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+          "$servicioId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+
+        "configuracion": {
+          ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+          ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+        }
+      }
+    },
+
+    "inventario": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+
+        "almacenes": {
+          "$almacenId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+
+        "categorias": {
+          "$categoriaId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+
+        "camposPersonalizados": {
+          "$entidad": {
+            "$campoId": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          }
+        },
+
+        "configuracion": {
+          "inventario": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+
+        "productos": {
+          "$productoId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+
+        "proveedores": {
+          "$proveedorId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+
+        "unidades": {
+          "$unidadId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+
+        "kardex": {
+          "$productoId": {
+            "$movimientoId": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          }
+        },
+
+        "stock": {
+          "$productoId": {
+            "$almacenId": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          }
+        },
+
+        "recetasAuditoria": {
+          "$recetaId": {
+            "$auditoriaId": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          }
+        },
+
+        "locks": {
+          "recetas": {
+            "$almacenId": {
+              "$recetaId": {
+                ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+              }
+            }
+          }
+        },
+
+        "ordenesCompra": {
+          "$ordenId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+
+        "ordenesCompraItems": {
+          "$ordenId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+            "$itemId": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          }
+        },
+
+        "consecutivos": {
+          "ordenesCompra": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+
+        "recepcionesOC": {
+          "$recepcionId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        }
+      }
+    },
+
+    "contabilidad": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        "configuracion": {
+          "empresa": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          },
+          "integraciones": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+        "periodos": {
+          "$periodoId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+        "auditoriaPeriodos": {
+          "$periodoId": {
+            "$auditId": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          }
+        },
+        "planCuentas": {
+          "$cuentaId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+        "asientos": {
+          "$asientoId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+        "asientosOrigen": {
+          "$origenTipo": {
+            "$origenId": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          }
+        },
+        "mapeosAutomaticos": {
+          "categorias": {
+            "$categoriaId": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          }
+        },
+        "pendientesContabilizacion": {
+          "$pendienteId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+        "secuencias": {
+          "asientos": {
+            "$anio": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          }
+        },
+        "saldos": {
+          "$periodo": {
+            "$cuentaId": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          }
+        }
+      }
+    }
+  }
+}

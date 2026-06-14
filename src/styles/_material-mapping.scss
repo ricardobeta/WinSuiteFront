@@ -1,0 +1,286 @@
+/* Partial mapping of Angular Material components to Tactile Clarity tokens
+   This is an incremental approach: key components are mapped to CSS variables
+   so they visually follow the design tokens while leaving the Material theme
+   definitions intact for component internals.
+*/
+
+/* Keep overlays above app shells and fixed elements */
+.cdk-overlay-container,
+.cdk-global-overlay-wrapper,
+.cdk-overlay-pane {
+  z-index: 1400 !important;
+}
+
+/* Select panel visual layer and contrast */
+.mat-mdc-select-panel,
+.mat-select-panel,
+.mat-mdc-autocomplete-panel,
+.mat-mdc-menu-panel {
+  background: var(--tc-surface-container-lowest) !important;
+  color: var(--tc-on-surface) !important;
+  border: 1px solid var(--tc-ghost-border) !important;
+  box-shadow: var(--tc-elevation-1) !important;
+  border-radius: var(--tc-radius-md) !important;
+}
+
+.cdk-overlay-pane:not(.mat-mdc-select-panel-above) {
+  background: transparent !important;
+}
+
+.mat-mdc-option,
+.mat-mdc-select-value,
+.mat-mdc-select-arrow,
+.mat-mdc-menu-item {
+  color: var(--tc-on-surface) !important;
+}
+
+.mat-mdc-option:hover,
+.mat-mdc-option.mdc-list-item--selected,
+.mat-mdc-option.mdc-list-item--activated,
+.mat-mdc-menu-item:hover {
+  background: var(--tc-surface-container-low) !important;
+}
+
+.mat-mdc-option .mdc-list-item__primary-text {
+  color: var(--tc-on-surface) !important;
+}
+
+/* Tooltip overlay */
+.mat-mdc-tooltip {
+  --mdc-plain-tooltip-container-color: color-mix(in srgb, var(--tc-on-surface) 92%, black);
+  --mdc-plain-tooltip-supporting-text-color: var(--tc-surface-container-lowest);
+  --mat-tooltip-container-color: color-mix(in srgb, var(--tc-on-surface) 92%, black);
+  --mat-tooltip-supporting-text-color: var(--tc-surface-container-lowest);
+}
+
+.mat-mdc-tooltip .mdc-tooltip__surface {
+  background: color-mix(in srgb, var(--tc-on-surface) 92%, black) !important;
+  color: var(--tc-surface-container-lowest) !important;
+  border-radius: var(--tc-radius-sm) !important;
+  box-shadow: var(--tc-elevation-1) !important;
+  padding: .45rem .65rem !important;
+  line-height: 1.35 !important;
+  max-width: 320px !important;
+}
+
+/* Datepicker / calendar overlay */
+.mat-datepicker-content,
+.mat-calendar,
+.mat-mdc-datepicker-content,
+.mat-datepicker-popup {
+  background: var(--tc-surface-container-lowest) !important;
+  color: var(--tc-on-surface) !important;
+  border: 1px solid var(--tc-ghost-border) !important;
+  border-radius: var(--tc-radius-md) !important;
+  box-shadow: var(--tc-elevation-1) !important;
+}
+
+.mat-calendar-body-cell-content,
+.mat-calendar-table-header,
+.mat-calendar-body-label,
+.mat-calendar-period-button,
+.mat-calendar-previous-button,
+.mat-calendar-next-button {
+  color: var(--tc-on-surface) !important;
+}
+
+.mat-calendar-body-selected {
+  background: var(--tc-primary) !important;
+  color: var(--tc-on-primary) !important;
+}
+
+.mat-calendar-body-today:not(.mat-calendar-body-selected) {
+  border-color: var(--tc-primary) !important;
+}
+
+/* Snackbar / top-right notifications */
+.mat-mdc-snack-bar-container {
+  --mdc-snackbar-container-color: var(--tc-surface-container-lowest);
+  --mdc-snackbar-supporting-text-color: var(--tc-on-surface);
+  --mat-snack-bar-button-color: var(--tc-primary);
+}
+
+.mat-mdc-snack-bar-container .mdc-snackbar__surface {
+  background: var(--tc-surface-container-lowest) !important;
+  color: var(--tc-on-surface) !important;
+  border: 1px solid var(--tc-ghost-border) !important;
+  border-radius: var(--tc-radius-md) !important;
+  box-shadow: var(--tc-elevation-1) !important;
+}
+
+.mat-mdc-snack-bar-container .mat-mdc-button,
+.mat-mdc-snack-bar-container .mdc-button__label {
+  color: var(--tc-primary) !important;
+}
+
+/* Cards */
+.mat-card, .mat-mdc-card {
+  background: var(--tc-surface-container-lowest) !important;
+  color: var(--card-foreground) !important;
+  border: 1px solid var(--tc-ghost-border) !important;
+  border-radius: var(--tc-radius-lg) !important;
+  box-shadow: var(--tc-elevation-1) !important;
+}
+
+/* Toolbar / topbar */
+.mat-toolbar, .mat-mdc-toolbar {
+  background: var(--tc-surface-container-highest) !important;
+  color: var(--sidebar-foreground) !important;
+}
+
+/* Sidenav */
+.mat-sidenav {
+  background: var(--tc-surface-container) !important;
+  color: var(--sidebar-foreground) !important;
+  border: none !important;
+}
+
+/* Buttons: primary will use gradient defined in tokens */
+/* CTA / Primary buttons */
+button.mat-flat-button.mat-primary,
+button.mat-mdc-button.mat-primary,
+.btn-cta {
+  background: var(--tc-gradient-primary) !important;
+  color: var(--tc-on-primary) !important;
+  border-radius: var(--tc-radius-md) !important;
+  box-shadow: none !important;
+  transition: transform .12s ease, box-shadow .12s ease, opacity .12s ease;
+}
+
+/* Raised variant: slight elevation */
+button.mat-raised-button.mat-primary,
+button.mat-mdc-button.mat-raised.mat-primary {
+  background: var(--tc-gradient-primary) !important;
+  color: var(--tc-on-primary) !important;
+  border-radius: var(--tc-radius-md) !important;
+  box-shadow: 0 8px 20px rgba(var(--tc-primary-rgb), 0.12) !important;
+}
+
+/* Hover / active states */
+button.mat-flat-button.mat-primary:hover,
+button.mat-raised-button.mat-primary:hover,
+.btn-cta:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 26px rgba(var(--tc-primary-rgb), 0.10) !important;
+}
+
+/* Focus ring for accessibility */
+button.mat-flat-button.mat-primary:focus-visible,
+button.mat-raised-button.mat-primary:focus-visible,
+.btn-cta:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 6px rgba(var(--tc-primary-rgb), 0.12) !important;
+}
+
+/* Disabled state */
+button.mat-flat-button.mat-primary[disabled],
+button.mat-raised-button.mat-primary[disabled],
+.btn-cta[disabled] {
+  opacity: 0.6;
+  filter: grayscale(0.05);
+  transform: none;
+  box-shadow: none !important;
+}
+
+/* Form fields (filled appearance) */
+.mat-form-field-appearance-fill .mat-form-field-flex {
+  background: var(--tc-surface-container-low) !important;
+  border-radius: var(--tc-radius-md) !important;
+}
+
+/* Outline appearance: soften outline and use tonal focus ring */
+.mat-form-field-appearance-outline .mat-form-field-outline {
+  stroke: none !important;
+  border: 0 !important;
+}
+.mat-form-field-appearance-outline .mat-form-field-wrapper {
+  background: var(--tc-surface-container-highest) !important;
+  border-radius: var(--tc-radius-md) !important;
+  padding: 0.25rem 0.5rem !important;
+}
+.mat-form-field-appearance-outline .mat-form-field-flex:focus-within {
+  box-shadow: 0 0 0 6px rgba(var(--tc-primary-rgb), 0.06) !important;
+}
+
+/* MDC form field (Angular Material modern classes) */
+.mat-mdc-form-field .mat-mdc-text-field-wrapper {
+  background: var(--tc-surface-container-highest) !important;
+  border-radius: var(--tc-radius-md) !important;
+}
+
+.mat-mdc-form-field .mdc-notched-outline__leading,
+.mat-mdc-form-field .mdc-notched-outline__notch,
+.mat-mdc-form-field .mdc-notched-outline__trailing {
+  border-color: transparent !important;
+  border-width: 0 !important;
+}
+
+.mat-mdc-form-field.mat-focused .mat-mdc-text-field-wrapper {
+  box-shadow:
+    inset 0 -2px 0 0 var(--tc-primary),
+    0 0 0 6px rgba(var(--tc-primary-rgb), 0.06) !important;
+}
+
+/* Dialog content spacing */
+.mat-dialog-content .cliente-form,
+.mat-dialog-content form {
+  padding: 0 !important;
+}
+
+/* Dialog container fallback (in case not covered by app.scss) */
+.mat-dialog-container {
+  background: var(--tc-glass-bg) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  border-radius: var(--tc-radius-md) !important;
+}
+
+/* Tables: header tone and zebra rows for readability */
+.mat-table thead tr {
+  background: var(--tc-surface-container-low) !important;
+}
+.mat-table tbody tr:nth-child(odd) {
+  background: var(--tc-surface) !important;
+}
+.mat-table tbody tr:hover {
+  background: var(--tc-surface-container-low) !important;
+}
+
+/* Icon buttons: subtle tonal hover */
+button.mat-icon-button {
+  background: transparent !important;
+  color: inherit !important;
+}
+button.mat-icon-button:hover {
+  background: var(--tc-surface-container-low) !important;
+}
+
+/* Dialog actions spacing */
+.mat-dialog-actions {
+  gap: var(--space-3) !important;
+  padding: 1rem 0 0 0 !important;
+}
+
+/* Slide toggle: improve unselected state (avoid white + black harsh contrast) */
+.mat-mdc-slide-toggle {
+  --mdc-switch-unselected-track-color: var(--tc-surface-container-highest);
+  --mdc-switch-unselected-track-outline-color: color-mix(in srgb, var(--tc-on-surface) 15%, transparent);
+  --mdc-switch-unselected-handle-color: color-mix(in srgb, var(--tc-on-surface) 70%, white);
+
+  --mdc-switch-selected-track-color: var(--tc-primary);
+  --mdc-switch-selected-track-outline-color: var(--tc-primary);
+  --mdc-switch-selected-handle-color: var(--tc-on-primary);
+
+  --mdc-switch-unselected-focus-state-layer-color: var(--tc-on-surface);
+  --mdc-switch-selected-focus-state-layer-color: var(--tc-primary);
+  --mdc-switch-unselected-hover-state-layer-color: var(--tc-on-surface);
+  --mdc-switch-selected-hover-state-layer-color: var(--tc-primary);
+}
+
+.mat-mdc-slide-toggle .mdc-switch .mdc-switch__track {
+  border-color: color-mix(in srgb, var(--tc-on-surface) 15%, transparent) !important;
+}
+
+.mat-mdc-slide-toggle .mdc-switch.mdc-switch--unselected .mdc-switch__handle::after {
+  background: color-mix(in srgb, var(--tc-on-surface) 70%, white) !important;
+}

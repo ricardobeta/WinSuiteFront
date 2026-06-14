@@ -1,0 +1,116 @@
+<div class="workspace-shell" [class.sidebar-expanded]="!isSidebarCollapsed()">
+  <button
+    type="button"
+    class="mobile-backdrop"
+    [class.visible]="!isSidebarCollapsed()"
+    aria-label="Cerrar menu"
+    (click)="toggleSidebar()"
+  ></button>
+
+  <aside class="sidebar surface-card" [class.collapsed]="isSidebarCollapsed()">
+    <div class="sidebar-top">
+      <button type="button" class="logo-btn" aria-label="Menu principal">
+        <img src="/images/winsuite-logo.png" alt="Winsuite" />
+      </button>
+    </div>
+
+    <nav class="menu-list" aria-label="Menu principal">
+      @for (item of menuItems(); track item.id) {
+        <div class="menu-group">
+          <button
+            type="button"
+            class="menu-item"
+            [class.active]="isActive(item)"
+            [class.has-children]="!!item.children?.length"
+            (click)="onMenuItemClick(item)"
+          >
+            <span class="material-symbols-outlined">{{ item.icon }}</span>
+            <span class="item-label">{{ item.label }}</span>
+            @if (item.children?.length && !isSidebarCollapsed()) {
+              <span class="material-symbols-outlined chevron">
+                {{ isExpanded(item.id) ? 'expand_less' : 'expand_more' }}
+              </span>
+            }
+          </button>
+
+          @if (item.children?.length && isExpanded(item.id) && !isSidebarCollapsed()) {
+            <div class="submenu-list">
+              @for (child of item.children; track child.id) {
+                <a
+                  class="submenu-item"
+                  [class.active]="isActive(child)"
+                  [routerLink]="child.route"
+                  (click)="closeSidebarOnMobile()"
+                >
+                  <span class="material-symbols-outlined">{{ child.icon }}</span>
+                  <span>{{ child.label }}</span>
+                </a>
+              }
+            </div>
+          }
+        </div>
+      }
+    </nav>
+
+    <div class="sidebar-footer">
+      <button type="button" class="menu-item">
+        <span class="material-symbols-outlined">settings</span>
+        <span class="item-label">Configuracion</span>
+      </button>
+      <button type="button" class="menu-item" (click)="onLogout()">
+        <span class="material-symbols-outlined">logout</span>
+        <span class="item-label">Cerrar sesion</span>
+      </button>
+    </div>
+  </aside>
+
+  <section class="main-content page-shell">
+    <header class="topbar surface-card">
+      <div class="breadcrumb-group">
+        <button
+          type="button"
+          class="icon-btn menu-trigger-btn"
+          aria-label="Abrir menu"
+          (click)="toggleSidebar()"
+        >
+          <span class="material-symbols-outlined">menu</span>
+        </button>
+        <span class="crumb-muted">{{ breadcrumb().module }}</span>
+        <span class="material-symbols-outlined">chevron_right</span>
+        <span class="crumb-active">{{ breadcrumb().page }}</span>
+      </div>
+
+      <div class="topbar-actions">
+        <label class="search-box" aria-label="Busqueda contextual">
+          <span class="material-symbols-outlined">search</span>
+          <input type="search" [placeholder]="moduleSearchPlaceholder()" />
+        </label>
+
+        <button
+          type="button"
+          class="icon-btn theme-toggle-btn"
+          [attr.aria-label]="theme.theme() === 'dark' ? 'Activar modo claro' : 'Activar modo oscuro'"
+          (click)="theme.toggleTheme()"
+        >
+          <span class="material-symbols-outlined">
+            {{ theme.theme() === 'dark' ? 'light_mode' : 'dark_mode' }}
+          </span>
+        </button>
+
+        <div class="profile-chip">
+          <div class="profile-text">
+            <strong>{{ auth.currentUser()?.displayName || 'Usuario WinSuite' }}</strong>
+            <small>{{ auth.currentUser()?.email || 'ADMIN' }}</small>
+          </div>
+          <div class="avatar">
+            {{ (auth.currentUser()?.displayName || auth.currentUser()?.email || 'W').charAt(0).toUpperCase() }}
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="workspace-content">
+      <router-outlet />
+    </main>
+  </section>
+</div>
