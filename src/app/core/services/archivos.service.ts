@@ -47,6 +47,13 @@ export class ArchivosService {
               contentType: value.contentType,
               extension: value.extension,
               sourceModule: value.sourceModule,
+              jobId: value.jobId,
+              claveAcceso: value.claveAcceso,
+              tipoArchivo: value.tipoArchivo,
+              fechaEmision: value.fechaEmision,
+              rucProveedor: value.rucProveedor,
+              proveedor: value.proveedor,
+              numeroDocumento: value.numeroDocumento,
               uploadedBy: value.uploadedBy,
               uploadedById: value.uploadedById,
               uploadedAt: typeof value.uploadedAt === 'number' ? value.uploadedAt : Date.now(),
@@ -249,7 +256,7 @@ export class ArchivosService {
 
     const extension = this.getExtension(file.name);
     if (!extension || !ARCHIVO_ALLOWED_EXTENSIONS.includes(extension)) {
-      return 'Tipo de archivo no permitido. Usa Excel, CSV o imagenes.';
+      return 'Tipo de archivo no permitido. Usa Excel, CSV, XML, PDF o imagenes.';
     }
 
     return null;

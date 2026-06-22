@@ -3,6 +3,7 @@ import { Routes } from '@angular/router';
 import { FacturacionShellComponent } from './pages/facturacion-shell/facturacion-shell.component';
 import { FirmasPageComponent } from './pages/firmas-page/firmas-page.component';
 import { ConfiguracionFacturacionPageComponent } from './pages/configuracion-facturacion-page/configuracion-facturacion-page.component';
+import { SriDescargasPageComponent } from './pages/sri-descargas-page/sri-descargas-page.component';
 
 export const FACTURACION_ROUTES: Routes = [
 	{
@@ -32,6 +33,14 @@ export const FACTURACION_ROUTES: Routes = [
 				data: {
 					module: 'Facturación Electrónica',
 					page: 'Configuración'
+				}
+			},
+			{
+				path: 'sri',
+				component: SriDescargasPageComponent,
+				data: {
+					module: 'FacturaciÃ³n ElectrÃ³nica',
+					page: 'Descargas SRI'
 				}
 			},
 			{

@@ -41,6 +41,11 @@
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
         "configuracion": {
           ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+        },
+        "facturas": {
+          "$facturaId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
         }
       }
     },
@@ -64,6 +69,34 @@
     },
 
     "archivos_stats": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+      }
+    },
+
+    "sri_config": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+      }
+    },
+
+    "sri_descargas": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+      }
+    },
+
+    "sri_archivos_index": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+      }
+    },
+
+    "dashboard": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
         ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"

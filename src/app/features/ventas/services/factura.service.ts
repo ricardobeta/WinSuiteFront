@@ -1,8 +1,10 @@
 import { Injectable, inject } from '@angular/core';
+import { Database, ref, set } from '@angular/fire/database';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../../environments/environment';
+import { AuthService } from '../../../core/services/auth.service';
 import { ClientesService } from '../../../core/services/clientes.service';
 import { FacturacionConfigService } from '../../../core/services/facturacion-config.service';
 import { AlmacenesService } from '../../inventario/services/almacenes.service';
@@ -16,6 +18,7 @@ import {
   FacturaEstadoPaso,
   FacturaFormaPago,
   FacturaPago,
+  FacturaSriRegistro,
   FacturaTipoIdentificacionComprador,
   FacturaTipoEmision,
   SriResponse
@@ -33,6 +36,8 @@ interface EmitirFacturaOptions {
 })
 export class FacturaService {
   private readonly http = inject(HttpClient);
+  private readonly database = inject(Database);
+  private readonly auth = inject(AuthService);
   private readonly clientesService = inject(ClientesService);
   private readonly facturacionConfig = inject(FacturacionConfigService);
   private readonly almacenesService = inject(AlmacenesService);
@@ -130,6 +135,21 @@ export class FacturaService {
     }
 
     if (soloGenerar) {
+      await this.persistirRegistroSri(
+        detalle,
+        facturaGenerada,
+        claveAcceso,
+        {
+          estado: 'OMITIDO_MODO_PRUEBA',
+          mensajes: 'Firmado y envio omitidos por bandera soloGenerarEnPruebas.'
+        },
+        {
+          estado: 'GENERADA_MODO_PRUEBA',
+          mensajes: 'Autorizacion SRI omitida por bandera soloGenerarEnPruebas.'
+        },
+        firmaId
+      );
+
       options.onStep?.('autorizada');
       return {
         facturaGenerada,
@@ -154,6 +174,8 @@ export class FacturaService {
 
     options.onStep?.('autorizando');
     const respuestaAutorizacion = await this.esperarAutorizacion(claveAcceso, intervaloMs, intentosMaximos);
+
+    await this.persistirRegistroSri(detalle, facturaGenerada, claveAcceso, respuestaFirma, respuestaAutorizacion, firmaId);
 
     options.onStep?.('autorizada');
 
@@ -188,6 +210,53 @@ export class FacturaService {
     }
 
     throw new Error('Se agotó el tiempo de espera para la autorización SRI.');
+  }
+
+  private async persistirRegistroSri(
+    detalle: VentaDetalle,
+    facturaGenerada: Factura,
+    claveAcceso: string,
+    respuestaFirma: SriResponse,
+    respuestaAutorizacion: SriResponse,
+    firmaId: string | null
+  ): Promise<void> {
+    const ventaId = detalle.documento.id;
+    if (!ventaId) {
+      return;
+    }
+
+    const estadoSri = (respuestaAutorizacion.estado ?? '').trim().toUpperCase();
+    const autorizada = estadoSri === 'AUTORIZADO' || estadoSri === 'AUTORIZADA';
+    const fechaAutorizacion = respuestaAutorizacion.fechaAutorizacion ?? null;
+    const now = Date.now();
+    const registro: FacturaSriRegistro = {
+      ventaId,
+      ventaNumero: detalle.documento.numero,
+      claveAcceso,
+      estadoSri,
+      autorizada,
+      numeroAutorizacion: respuestaAutorizacion.numeroAutorizacion ?? null,
+      fechaAutorizacion,
+      autorizadaEn: autorizada ? this.parseSriDate(fechaAutorizacion) ?? now : null,
+      ambiente: respuestaAutorizacion.ambiente ?? facturaGenerada.ambiente ?? null,
+      establecimiento: facturaGenerada.establecimiento ?? null,
+      puntoEmision: facturaGenerada.puntoEmision ?? null,
+      secuencial: facturaGenerada.secuencial ?? null,
+      total: this.round(facturaGenerada.importeTotal || detalle.documento.total),
+      moneda: facturaGenerada.moneda || detalle.documento.moneda || 'USD',
+      clienteId: detalle.documento.clienteId,
+      clienteNombre: detalle.documento.clienteNombre,
+      firmaId,
+      mensajes: respuestaAutorizacion.mensajes ?? respuestaFirma.mensajes ?? null,
+      creadoEn: detalle.documento.creadoEn,
+      actualizadoEn: now
+    };
+
+    try {
+      await set(ref(this.database, `Facturacion/${this.auth.getTenantId()}/facturas/${this.safeRtdbKey(ventaId)}`), registro);
+    } catch (error) {
+      console.warn('No se pudo registrar la metrica SRI de la factura.', error);
+    }
   }
 
   private async getDetalleVentaOrThrow(ventaId: string): Promise<VentaDetalle> {
@@ -358,6 +427,15 @@ export class FacturaService {
     return `${year}-${month}-${day}`;
   }
 
+  private parseSriDate(value: string | null | undefined): number | null {
+    if (!value) {
+      return null;
+    }
+
+    const parsed = Date.parse(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+
   private round(value: number): number {
     return Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100;
   }
@@ -368,5 +446,9 @@ export class FacturaService {
 
   private extractRucFromTenantFallback(): string {
     return '0000000000001';
+  }
+
+  private safeRtdbKey(value: string): string {
+    return value.replace(/[.#$\[\]\/]/g, '_');
   }
 }

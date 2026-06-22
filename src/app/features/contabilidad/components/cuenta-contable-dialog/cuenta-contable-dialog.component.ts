@@ -16,6 +16,7 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
 
 export interface CuentaContableDialogData {
   cuenta?: CuentaContable;
+  cuentaInicial?: Partial<CuentaContable>;
   cuentas: CuentaContable[];
 }
 
@@ -189,17 +190,18 @@ export class CuentaContableDialogComponent implements OnInit {
   });
 
   ngOnInit(): void {
-    if (this.data.cuenta) {
+    const cuentaInicial = this.data.cuenta ?? this.data.cuentaInicial;
+    if (cuentaInicial) {
       this.form.patchValue({
-        id: this.data.cuenta.id ?? '',
-        codigo: this.data.cuenta.codigo,
-        nombre: this.data.cuenta.nombre,
-        descripcion: this.data.cuenta.descripcion ?? '',
-        cuentaPadreId: this.data.cuenta.cuentaPadreId ?? null,
-        tipo: this.data.cuenta.tipo,
-        naturaleza: this.data.cuenta.naturaleza,
-        permiteMovimiento: this.data.cuenta.permiteMovimiento,
-        estado: this.data.cuenta.estado
+        id: this.data.cuenta?.id ?? '',
+        codigo: cuentaInicial.codigo ?? '',
+        nombre: cuentaInicial.nombre ?? '',
+        descripcion: cuentaInicial.descripcion ?? '',
+        cuentaPadreId: cuentaInicial.cuentaPadreId ?? null,
+        tipo: cuentaInicial.tipo ?? 'ACTIVO',
+        naturaleza: cuentaInicial.naturaleza ?? 'DEUDORA',
+        permiteMovimiento: cuentaInicial.permiteMovimiento ?? true,
+        estado: cuentaInicial.estado ?? 'ACTIVA'
       });
     }
 

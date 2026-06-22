@@ -181,6 +181,9 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
               <ng-container matColumnDef="acciones">
                 <th mat-header-cell *matHeaderCellDef>Acciones</th>
                 <td mat-cell *matCellDef="let row">
+                  <button mat-button type="button" (click)="abrirSubcuenta(row)" [disabled]="!canCreate()" matTooltipPosition="above" [matTooltip]="ayuda.agregarSubcuenta">
+                    Añadir
+                  </button>
                   <button mat-button type="button" (click)="abrirDialogo(row)" [disabled]="!canUpdate()">Editar</button>
                   <button mat-button type="button" (click)="alternarEstado(row)" [disabled]="!canUpdate()">
                     {{ row.estado === 'ACTIVA' ? 'Inactivar' : 'Activar' }}
@@ -247,6 +250,7 @@ export class PlanCuentasComponent implements OnInit {
     plantillaEsf: 'Carga una estructura base de Activo, Pasivo y Patrimonio para Estado de Situacion Financiera.',
     planCompleto: 'Agrega cuentas de Activo, Pasivo, Patrimonio, Ingresos, Costos y Gastos para reportes financieros completos.',
     nuevaCuenta: 'Crea una cuenta manual. Use cuentas padre para agrupar y cuentas de movimiento para registrar asientos.',
+    agregarSubcuenta: 'Crea una subcuenta bajo esta cuenta, prellenando la cuenta padre y el siguiente codigo disponible.',
     buscar: 'Filtra por codigo o nombre para ubicar rapidamente una cuenta dentro del plan.',
     tipo: 'Clasificacion que determina en que reporte aparece la cuenta: balance general o resultado integral.',
     estado: 'Activa permite nuevos registros; inactiva conserva saldos historicos pero evita uso operativo.',
@@ -322,6 +326,46 @@ export class PlanCuentasComponent implements OnInit {
     });
   }
 
+  protected abrirSubcuenta(padre: CuentaContable): void {
+    if (!padre.id) {
+      return;
+    }
+
+    const codigo = this.siguienteCodigoHijo(padre);
+    const dialogRef = this.dialog.open(CuentaContableDialogComponent, {
+      width: '760px',
+      maxWidth: '96vw',
+      data: {
+        cuentaInicial: {
+          codigo,
+          nombre: '',
+          descripcion: `Subcuenta de ${padre.codigo} - ${padre.nombre}`,
+          cuentaPadreId: padre.id,
+          nivel: this.planCuentasService.calcularNivel(codigo),
+          tipo: padre.tipo,
+          naturaleza: padre.naturaleza,
+          permiteMovimiento: true,
+          estado: 'ACTIVA',
+          origen: 'MANUAL',
+          seccionReporte: padre.seccionReporte,
+          ordenReporte: this.planCuentasService.sugerirOrdenReporte(codigo),
+          incluyeEnEstadoFinanciero: padre.incluyeEnEstadoFinanciero ?? true
+        },
+        cuentas: this.cuentas()
+      }
+    });
+
+    dialogRef.afterClosed().subscribe((result: CuentaContable | undefined) => {
+      if (!result) {
+        return;
+      }
+
+      void this.planCuentasService.guardarCuenta(result).then(() => {
+        this.mostrarMensaje('Subcuenta creada.', 'add');
+      });
+    });
+  }
+
   protected confirmarPlantilla(): void {
     if (this.cuentas().length === 0) {
       void this.cargarPlantilla();
@@ -383,6 +427,25 @@ export class PlanCuentasComponent implements OnInit {
 
   protected esCuentaPadre(cuenta: CuentaContable): boolean {
     return !!cuenta.id && this.cuentasHijasPorPadre().has(cuenta.id);
+  }
+
+  private siguienteCodigoHijo(padre: CuentaContable): string {
+    const codigoPadre = this.planCuentasService.normalizarCodigo(padre.codigo);
+    const hijosDirectos = this.cuentas()
+      .map((cuenta) => this.planCuentasService.normalizarCodigo(cuenta.codigo))
+      .filter((codigo) => this.planCuentasService.obtenerCodigoPadre(codigo) === codigoPadre);
+
+    if (hijosDirectos.length === 0) {
+      const primerSegmento = this.planCuentasService.calcularNivel(codigoPadre) <= 1 ? '1' : '01';
+      return `${codigoPadre}.${primerSegmento}`;
+    }
+
+    const segmentosHijos = hijosDirectos
+      .map((codigo) => codigo.split('.').at(-1) ?? '0')
+      .filter((segmento) => /^\d+$/.test(segmento));
+    const ancho = Math.max(...segmentosHijos.map((segmento) => segmento.length), 1);
+    const siguiente = Math.max(...segmentosHijos.map((segmento) => Number(segmento)), 0) + 1;
+    return `${codigoPadre}.${String(siguiente).padStart(ancho, '0')}`;
   }
 
   private async cargarPlantilla(): Promise<void> {

@@ -38,7 +38,7 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
     <section class="asiento-form-page">
       <header class="surface-card page-header">
         <div>
-          <p class="eyebrow">Asiento manual</p>
+          <p class="eyebrow">Asiento contable</p>
           <h2>{{ asientoId() ? (numero() || 'Borrador') : 'Nuevo asiento' }}</h2>
           <p>{{ estado() }}</p>
         </div>

@@ -104,3 +104,26 @@ export interface FacturaEmisionResultado {
   respuestaAutorizacion: SriResponse;
   claveAcceso: string;
 }
+
+export interface FacturaSriRegistro {
+  ventaId: string;
+  ventaNumero: string;
+  claveAcceso: string;
+  estadoSri: string;
+  autorizada: boolean;
+  numeroAutorizacion: string | null;
+  fechaAutorizacion: string | null;
+  autorizadaEn: number | null;
+  ambiente: string | null;
+  establecimiento: string | null;
+  puntoEmision: string | null;
+  secuencial: string | null;
+  total: number;
+  moneda: string;
+  clienteId: string | null;
+  clienteNombre: string;
+  firmaId: string | null;
+  mensajes: string | null;
+  creadoEn: number;
+  actualizadoEn: number;
+}

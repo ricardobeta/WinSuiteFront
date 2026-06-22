@@ -18,7 +18,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
       <nav class="subnav surface-card" aria-label="Navegacion de contabilidad">
         <a routerLink="plan-cuentas" routerLinkActive="active-link">Plan de cuentas</a>
         <a routerLink="configuracion" routerLinkActive="active-link">Configuracion</a>
-        <a routerLink="asientos" routerLinkActive="active-link">Asientos manuales</a>
+        <a routerLink="asientos" routerLinkActive="active-link">Asientos contables</a>
         <a routerLink="reportes" routerLinkActive="active-link">Reportes</a>
       </nav>
 

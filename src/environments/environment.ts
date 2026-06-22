@@ -4,6 +4,10 @@ export interface AppEnvironment {
   production: boolean;
   firebase: FirebaseOptions;
   apiBaseUrl: string;
+  support?: {
+    whatsappPhone: string;
+    whatsappMessage: string;
+  };
   facturacion?: {
     soloGenerarEnPruebas: boolean;
   };
@@ -12,6 +16,10 @@ export interface AppEnvironment {
 export const environment: AppEnvironment = {
   production: false,
   apiBaseUrl: 'http://localhost:8080',
+  support: {
+    whatsappPhone: '',
+    whatsappMessage: 'Hola, necesito ayuda con Winsuite.'
+  },
   facturacion: {
     // Si está en true, el flujo de facturación se corta después de GENERADO.
     soloGenerarEnPruebas: true

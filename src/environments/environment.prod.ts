@@ -1,6 +1,10 @@
 export const environment = {
   production: true,
   apiBaseUrl: 'https://api.winsuit.app',
+  support: {
+    whatsappPhone: '',
+    whatsappMessage: 'Hola, necesito ayuda con Winsuite.'
+  },
   facturacion: {
     soloGenerarEnPruebas: false
   },

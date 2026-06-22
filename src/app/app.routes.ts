@@ -31,7 +31,7 @@ export const routes: Routes = [
 			},
 			{
 				path: 'dashboard',
-				component: WorkspacePageComponent,
+				loadComponent: () => import('./features/dashboard/pages/dashboard-page/dashboard-page.component').then((component) => component.DashboardPageComponent),
 				data: {
 					module: 'Ventas',
 					page: 'Dashboard'

@@ -16,8 +16,10 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { AuthorizationService } from '../../../../core/services/authorization.service';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
-import { AsientoContable, EstadoAsiento } from '../../models/contabilidad.models';
+import { PendienteContabilizacionDialogComponent } from '../../components/pendiente-contabilizacion-dialog/pendiente-contabilizacion-dialog.component';
+import { AsientoContable, EstadoAsiento, OrigenAsiento, PendienteContabilizacion } from '../../models/contabilidad.models';
 import { AsientosContablesService } from '../../services/asientos-contables.service';
+import { IntegracionContableService } from '../../services/integracion-contable.service';
 
 @Component({
   selector: 'app-asientos-list',
@@ -42,12 +44,12 @@ import { AsientosContablesService } from '../../services/asientos-contables.serv
         <div>
           <p class="eyebrow">Contabilidad</p>
           <h2>
-            Asientos manuales
-            <button mat-icon-button type="button" matTooltipPosition="above" [matTooltip]="ayuda.submodulo" aria-label="Ayuda asientos manuales">
+            Asientos contables
+            <button mat-icon-button type="button" matTooltipPosition="above" [matTooltip]="ayuda.submodulo" aria-label="Ayuda asientos contables">
               <mat-icon>help_outline</mat-icon>
             </button>
           </h2>
-          <p>Registra ajustes, aperturas y movimientos contables manuales.</p>
+          <p>Consulta asientos manuales, automaticos, borradores y aprobados del tenant.</p>
         </div>
         <a mat-raised-button color="primary" routerLink="/workspace/contabilidad/asientos/nuevo" [class.disabled-link]="!canCreate()" matTooltipPosition="above" [matTooltip]="ayuda.nuevo">
           <mat-icon>add</mat-icon>
@@ -76,6 +78,18 @@ import { AsientosContablesService } from '../../services/asientos-contables.serv
             <mat-icon>help_outline</mat-icon>
           </button>
         </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Origen</mat-label>
+          <mat-select [value]="origenFiltro()" (valueChange)="origenFiltro.set($event)">
+            <mat-option value="TODOS">Todos</mat-option>
+            <mat-option value="MANUAL">Manual</mat-option>
+            <mat-option value="VENTA_POS">Venta POS</mat-option>
+            <mat-option value="REVERSO_VENTA">Reverso venta</mat-option>
+            <mat-option value="RECEPCION_OC">Recepcion OC</mat-option>
+            <mat-option value="REVERSO_RECEPCION_OC">Reverso recepcion</mat-option>
+          </mat-select>
+        </mat-form-field>
       </section>
 
       <section class="surface-card table-card">
@@ -88,7 +102,7 @@ import { AsientosContablesService } from '../../services/asientos-contables.serv
           <div class="empty-state">
             <mat-icon>receipt_long</mat-icon>
             <h3>Sin asientos</h3>
-            <p>Crea el primer asiento manual para este tenant.</p>
+            <p>Crea el primer asiento contable o activa integraciones automaticas.</p>
           </div>
         } @else {
           <div class="table-wrap">
@@ -111,6 +125,16 @@ import { AsientosContablesService } from '../../services/asientos-contables.serv
               <ng-container matColumnDef="glosa">
                 <th mat-header-cell *matHeaderCellDef>Detalle</th>
                 <td mat-cell *matCellDef="let row">{{ row.glosa }}</td>
+              </ng-container>
+
+              <ng-container matColumnDef="origen">
+                <th mat-header-cell *matHeaderCellDef>Origen</th>
+                <td mat-cell *matCellDef="let row">
+                  <mat-chip [class.origen-auto]="row.origen !== 'MANUAL'">{{ etiquetaOrigen(row.origen) }}</mat-chip>
+                  @if (row.origenNumero) {
+                    <span class="origin-number">{{ row.origenNumero }}</span>
+                  }
+                </td>
               </ng-container>
 
               <ng-container matColumnDef="totalDebe">
@@ -148,6 +172,61 @@ import { AsientosContablesService } from '../../services/asientos-contables.serv
           </div>
         }
       </section>
+
+      <section class="surface-card table-card">
+        <div class="section-head">
+          <div>
+            <h3>Pendientes automaticos</h3>
+            <p>Documentos de POS, inventario o compras que no pudieron generar asiento automatico.</p>
+          </div>
+          <mat-chip [class.estado-borrador]="pendientesAutomaticos().length > 0">{{ pendientesAutomaticos().length }}</mat-chip>
+        </div>
+
+        @if (pendientesAutomaticos().length === 0) {
+          <div class="empty-state compact">
+            <mat-icon>task_alt</mat-icon>
+            <h3>Sin pendientes automaticos</h3>
+          </div>
+        } @else {
+          <div class="table-wrap">
+            <table mat-table [dataSource]="pendientesAutomaticos()">
+              <ng-container matColumnDef="origen">
+                <th mat-header-cell *matHeaderCellDef>Origen</th>
+                <td mat-cell *matCellDef="let row">
+                  <strong>{{ etiquetaOrigen(row.origenTipo) }}</strong>
+                  <span class="origin-number">{{ row.origenNumero || row.origenId }}</span>
+                </td>
+              </ng-container>
+
+              <ng-container matColumnDef="modulo">
+                <th mat-header-cell *matHeaderCellDef>Modulo</th>
+                <td mat-cell *matCellDef="let row">{{ row.origenModulo }}</td>
+              </ng-container>
+
+              <ng-container matColumnDef="motivo">
+                <th mat-header-cell *matHeaderCellDef>Motivo</th>
+                <td mat-cell *matCellDef="let row">{{ row.motivo }}</td>
+              </ng-container>
+
+              <ng-container matColumnDef="fecha">
+                <th mat-header-cell *matHeaderCellDef>Fecha</th>
+                <td mat-cell *matCellDef="let row">{{ row.creadoEn | date:'short' }}</td>
+              </ng-container>
+
+              <ng-container matColumnDef="acciones">
+                <th mat-header-cell *matHeaderCellDef>Acciones</th>
+                <td mat-cell *matCellDef="let row">
+                  <button mat-button type="button" (click)="verPendiente(row)">Ver detalle</button>
+                  <button mat-button type="button" (click)="reintentarPendiente(row)" [disabled]="!canCreate()">Reintentar</button>
+                </td>
+              </ng-container>
+
+              <tr mat-header-row *matHeaderRowDef="columnasPendientes"></tr>
+              <tr mat-row *matRowDef="let row; columns: columnasPendientes"></tr>
+            </table>
+          </div>
+        }
+      </section>
     </section>
   `,
   styles: [`
@@ -157,13 +236,19 @@ import { AsientosContablesService } from '../../services/asientos-contables.serv
     .page-header h2 { display: inline-flex; align-items: center; gap: .35rem; }
     .page-header p { margin: .35rem 0 0; color: var(--muted-foreground); }
     .eyebrow { margin: 0 0 .35rem; text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; color: var(--primary); }
-    .filters-card { padding: 1rem; display: grid; grid-template-columns: minmax(260px, 1fr) 220px; gap: .75rem; background: var(--tc-surface-container-lowest); }
+    .filters-card { padding: 1rem; display: grid; grid-template-columns: minmax(260px, 1fr) 220px 220px; gap: .75rem; background: var(--tc-surface-container-lowest); }
     .table-card { padding: 1rem; background: var(--tc-surface-container-lowest); }
+    .section-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
+    .section-head h3, .section-head p { margin: 0; }
+    .section-head p, .origin-number { color: var(--muted-foreground); }
+    .origin-number { display: block; font-size: .82rem; margin-top: .15rem; }
     .table-wrap { overflow: auto; }
     table { width: 100%; min-width: 1080px; }
     .estado-borrador { background: color-mix(in srgb, #f59e0b 18%, transparent); }
     .estado-aprobado { background: color-mix(in srgb, var(--primary) 18%, transparent); }
+    .origen-auto { background: color-mix(in srgb, #0f766e 16%, transparent); color: #0f5f59; }
     .empty-state { min-height: 240px; display: grid; place-items: center; align-content: center; gap: .5rem; text-align: center; color: var(--muted-foreground); }
+    .empty-state.compact { min-height: 120px; }
     .empty-state h3 { margin: 0; color: var(--foreground); }
     .empty-state p { margin: 0; }
     .disabled-link { pointer-events: none; opacity: .55; }
@@ -176,23 +261,27 @@ import { AsientosContablesService } from '../../services/asientos-contables.serv
 })
 export class AsientosListComponent implements OnInit {
   private readonly service = inject(AsientosContablesService);
+  private readonly integracionService = inject(IntegracionContableService);
   private readonly authorization = inject(AuthorizationService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   private readonly router = inject(Router);
 
-  protected readonly columnas = ['numero', 'fecha', 'periodo', 'glosa', 'totalDebe', 'totalHaber', 'estado', 'acciones'];
+  protected readonly columnas = ['numero', 'fecha', 'periodo', 'glosa', 'origen', 'totalDebe', 'totalHaber', 'estado', 'acciones'];
+  protected readonly columnasPendientes = ['origen', 'modulo', 'motivo', 'fecha', 'acciones'];
   protected readonly asientos = signal<AsientoContable[]>([]);
+  protected readonly pendientesAutomaticos = signal<PendienteContabilizacion[]>([]);
   protected readonly cargando = signal(true);
   protected readonly busqueda = signal('');
   protected readonly estadoFiltro = signal<EstadoAsiento | 'TODOS'>('TODOS');
+  protected readonly origenFiltro = signal<OrigenAsiento | 'TODOS'>('TODOS');
   protected readonly canCreate = computed(() => this.authorization.canAccess('contabilidad', 'create'));
   protected readonly canDelete = computed(() => this.authorization.canAccess('contabilidad', 'delete'));
   protected readonly ayuda = {
-    submodulo: 'Registro de comprobantes contables manuales. Solo los asientos aprobados afectan mayores, balances y estados financieros.',
+    submodulo: 'Registro de comprobantes contables manuales y automaticos. Solo los asientos aprobados afectan mayores, balances y estados financieros.',
     nuevo: 'Crea un asiento en borrador para registrar aperturas, ajustes o movimientos que no vienen de POS/compras.',
-    buscar: 'Busca por numero de asiento, detalle general o referencia del documento soporte.',
+    buscar: 'Busca por numero, detalle, referencia, origen o documento origen.',
     estado: 'Borrador no afecta reportes; aprobado impacta saldos; reversado conserva trazabilidad del asiento anulado.',
     editar: 'Permite revisar el detalle. Solo los borradores se pueden modificar.',
     duplicar: 'Copia lineas y datos para acelerar registros similares sin afectar el asiento original.',
@@ -206,9 +295,12 @@ export class AsientosListComponent implements OnInit {
       const matchText = !term
         || (asiento.numero ?? '').toLowerCase().includes(term)
         || asiento.glosa.toLowerCase().includes(term)
-        || (asiento.referencia ?? '').toLowerCase().includes(term);
+        || (asiento.referencia ?? '').toLowerCase().includes(term)
+        || (asiento.origenNumero ?? '').toLowerCase().includes(term)
+        || (asiento.origen ?? 'MANUAL').toLowerCase().includes(term);
       const matchEstado = this.estadoFiltro() === 'TODOS' || asiento.estado === this.estadoFiltro();
-      return matchText && matchEstado;
+      const matchOrigen = this.origenFiltro() === 'TODOS' || (asiento.origen ?? 'MANUAL') === this.origenFiltro();
+      return matchText && matchEstado && matchOrigen;
     });
   });
 
@@ -225,6 +317,14 @@ export class AsientosListComponent implements OnInit {
           this.cargando.set(false);
           this.mostrarMensaje('No se pudieron cargar los asientos.', 'error');
         }
+      });
+
+    this.integracionService
+      .getPendientes()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (pendientes) => this.pendientesAutomaticos.set(pendientes),
+        error: () => this.mostrarMensaje('No se pudieron cargar los pendientes automaticos.', 'error')
       });
   }
 
@@ -267,6 +367,30 @@ export class AsientosListComponent implements OnInit {
         this.mostrarMensaje('Borrador eliminado.', 'delete');
       });
     });
+  }
+
+  protected etiquetaOrigen(origen: OrigenAsiento | null | undefined): string {
+    const labels: Record<OrigenAsiento, string> = {
+      MANUAL: 'Manual',
+      VENTA_POS: 'Venta POS',
+      REVERSO_VENTA: 'Reverso venta',
+      RECEPCION_OC: 'Recepcion OC',
+      REVERSO_RECEPCION_OC: 'Reverso recepcion'
+    };
+    return origen ? labels[origen] ?? origen : 'Manual';
+  }
+
+  protected verPendiente(pendiente: PendienteContabilizacion): void {
+    this.dialog.open(PendienteContabilizacionDialogComponent, {
+      width: '780px',
+      maxWidth: '96vw',
+      data: pendiente
+    });
+  }
+
+  protected async reintentarPendiente(pendiente: PendienteContabilizacion): Promise<void> {
+    await this.integracionService.reintentarPendiente(pendiente);
+    this.mostrarMensaje('Pendiente marcado para revision.', 'refresh');
   }
 
   private mostrarMensaje(message: string, icon: string): void {

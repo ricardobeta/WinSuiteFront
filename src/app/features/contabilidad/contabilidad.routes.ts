@@ -42,7 +42,7 @@ export const CONTABILIDAD_ROUTES: Routes = [
         component: AsientosListComponent,
         data: {
           module: 'Contabilidad',
-          page: 'Asientos manuales'
+          page: 'Asientos contables'
         }
       },
       {

@@ -129,6 +129,10 @@ export class FacturacionConfigService {
     return this.http.post<FirmaDigitalConfig>(`${environment.apiBaseUrl}/api/firmas`, body);
   }
 
+  eliminarFirma(firmaId: string): Observable<void> {
+    return this.http.delete<void>(`${environment.apiBaseUrl}/api/firmas/${encodeURIComponent(firmaId)}`);
+  }
+
   async getConfiguracionOnce(): Promise<ConfiguracionFacturacion> {
     const snapshot = await get(ref(this.database, this.getConfigPath()));
     if (!snapshot.exists()) {

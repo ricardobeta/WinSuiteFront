@@ -7,10 +7,13 @@ import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { FacturacionConfigService } from '../../../../core/services/facturacion-config.service';
 import { FirmaDigitalConfig } from '../../../../shared/models/facturacion.models';
 
@@ -22,11 +25,13 @@ import { FirmaDigitalConfig } from '../../../../shared/models/facturacion.models
 		ReactiveFormsModule,
 		MatButtonModule,
 		MatCardModule,
+		MatDialogModule,
 		MatFormFieldModule,
 		MatIconModule,
 		MatInputModule,
 		MatSnackBarModule,
-		MatTableModule
+		MatTableModule,
+		MatTooltipModule
 	],
 	template: `
 		<section class="page-grid">
@@ -103,6 +108,21 @@ import { FirmaDigitalConfig } from '../../../../shared/models/facturacion.models
 								<th mat-header-cell *matHeaderCellDef>Razón social</th>
 								<td mat-cell *matCellDef="let row">{{ row.razonSocial || '-' }}</td>
 							</ng-container>
+							<ng-container matColumnDef="acciones">
+								<th mat-header-cell *matHeaderCellDef>Acciones</th>
+								<td mat-cell *matCellDef="let row">
+									<button
+										mat-icon-button
+										color="warn"
+										type="button"
+										matTooltip="Eliminar firma"
+										[disabled]="eliminandoId() === row.id"
+										(click)="confirmarEliminarFirma(row)"
+									>
+										<mat-icon>{{ eliminandoId() === row.id ? 'hourglass_empty' : 'delete' }}</mat-icon>
+									</button>
+								</td>
+							</ng-container>
 							<tr mat-header-row *matHeaderRowDef="columnasFirmas"></tr>
 							<tr mat-row *matRowDef="let row; columns: columnasFirmas"></tr>
 						</table>
@@ -138,12 +158,14 @@ import { FirmaDigitalConfig } from '../../../../shared/models/facturacion.models
 export class FirmasPageComponent {
 	private readonly formBuilder = inject(FormBuilder);
 	private readonly destroyRef = inject(DestroyRef);
+	private readonly dialog = inject(MatDialog);
 	private readonly snackBar = inject(MatSnackBar);
 	private readonly facturacionService = inject(FacturacionConfigService);
 
-	protected readonly columnasFirmas = ['nombreArchivo', 'nombreComercial', 'ruc', 'razonSocial'];
+	protected readonly columnasFirmas = ['nombreArchivo', 'nombreComercial', 'ruc', 'razonSocial', 'acciones'];
 	protected readonly firmas = signal<FirmaDigitalConfig[]>([]);
 	protected readonly subiendo = signal(false);
+	protected readonly eliminandoId = signal<string | null>(null);
 	protected readonly selectedFile = signal<File | null>(null);
 	protected readonly selectedFileName = signal('');
 
@@ -202,6 +224,41 @@ export class FirmasPageComponent {
 				this.subiendo.set(false);
 				this.mostrarMensaje('No se pudo cargar la firma.', 'error');
 			}
+		});
+	}
+
+	protected confirmarEliminarFirma(firma: FirmaDigitalConfig): void {
+		if (!firma.id) {
+			this.mostrarMensaje('No se pudo identificar la firma.', 'error');
+			return;
+		}
+
+		const nombre = firma.nombreComercial || firma.nombreArchivo;
+		const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+			width: '420px',
+			data: {
+				title: 'Eliminar firma',
+				message: `¿Deseas eliminar ${nombre}? Se borrará el archivo .p12 del Storage y su registro de Firebase.`,
+				confirmText: 'Eliminar'
+			}
+		});
+
+		dialogRef.afterClosed().subscribe((confirmado) => {
+			if (!confirmado) {
+				return;
+			}
+
+			this.eliminandoId.set(firma.id);
+			this.facturacionService.eliminarFirma(firma.id).subscribe({
+				next: () => {
+					this.eliminandoId.set(null);
+					this.mostrarMensaje('Firma eliminada correctamente.', 'delete');
+				},
+				error: () => {
+					this.eliminandoId.set(null);
+					this.mostrarMensaje('No se pudo eliminar la firma.', 'error');
+				}
+			});
 		});
 	}
 

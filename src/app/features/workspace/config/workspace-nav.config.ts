@@ -31,6 +31,14 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
         requiredAction: 'read'
       },
       {
+        id: 'billing-sri',
+        label: 'SRI',
+        icon: 'cloud_download',
+        route: '/workspace/facturacion/sri',
+        requiredModule: 'facturacion',
+        requiredAction: 'read'
+      },
+      {
         id: 'billing-config',
         label: 'Configuración',
         icon: 'tune',
@@ -237,7 +245,7 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
       },
       {
         id: 'accounting-journals',
-        label: 'Asientos manuales',
+        label: 'Asientos contables',
         icon: 'receipt_long',
         route: '/workspace/contabilidad/asientos',
         requiredModule: 'contabilidad',
