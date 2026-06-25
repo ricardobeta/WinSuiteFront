@@ -50,7 +50,7 @@ import { FacturaEmisionEstado } from '../../../../shared/models/factura.models';
             mat-raised-button
             color="primary"
             type="button"
-            [disabled]="cargando() || facturando() || !puedeFacturar()"
+            [disabled]="cargando() || facturando() || !puedeSolicitarFacturacion()"
             (click)="facturar()"
           >
             @if (facturando()) {
@@ -59,7 +59,7 @@ import { FacturaEmisionEstado } from '../../../../shared/models/factura.models';
             } @else {
               <span class="button-content">
                 <mat-icon>receipt_long</mat-icon>
-                <span>Facturar</span>
+                <span>{{ etiquetaBotonFacturar() }}</span>
               </span>
             }
           </button>
@@ -236,6 +236,15 @@ export class VentaDetalleComponent {
     if (!detalle || !ventaId) {
       return;
     }
+    if (!this.puedeSolicitarFacturacion()) {
+      const emision = this.emision();
+      const estado = (emision?.estadoSri ?? '').trim().toUpperCase();
+      const mensaje = emision?.autorizada || estado === 'AUTORIZADO' || estado === 'AUTORIZADA'
+        ? 'Esta venta ya tiene una factura autorizada.'
+        : 'Ya existe una emisión en proceso para esta venta.';
+      this.snackBar.open(mensaje, 'Cerrar', { duration: 2800 });
+      return;
+    }
 
     const firma = await firstValueFrom(this.facturacionService.getFirmaParaAlmacen(detalle.documento.almacenId));
     const almacen = await firstValueFrom(this.facturacionService.getPuntoEmisionParaAlmacen(detalle.documento.almacenId));
@@ -317,6 +326,24 @@ export class VentaDetalleComponent {
     if (emision.emailEstado === 'SKIPPED_NO_RECIPIENT') return 'Sin destinatario; documentos disponibles';
     if (emision.emailEstado === 'FAILED') return `Fallido: ${emision.emailError || 'revisa la configuración'}`;
     return emision.emailEstado || 'Pendiente';
+  }
+
+  protected puedeSolicitarFacturacion(): boolean {
+    if (!this.puedeFacturar()) return false;
+    const emision = this.emision();
+    if (!emision?.claveAcceso && !emision?.estadoSri) return true;
+
+    const estado = (emision.estadoSri ?? '').trim().toUpperCase();
+    return estado === 'ERROR';
+  }
+
+  protected etiquetaBotonFacturar(): string {
+    const emision = this.emision();
+    const estado = (emision?.estadoSri ?? '').trim().toUpperCase();
+    if (emision?.autorizada || estado === 'AUTORIZADO' || estado === 'AUTORIZADA') return 'Facturada';
+    if (estado === 'ERROR') return 'Reintentar facturación';
+    if (emision?.claveAcceso || estado) return 'Emisión en proceso';
+    return 'Facturar';
   }
 
   protected descargar(tipo: 'ride' | 'xml'): void {
