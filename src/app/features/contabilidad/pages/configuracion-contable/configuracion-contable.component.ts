@@ -107,7 +107,15 @@ type CuentaIntegracionCampo = {
               <div class="grid-3">
                 <mat-form-field appearance="outline">
                   <mat-label>RUC</mat-label>
-                  <input matInput maxlength="13" [(ngModel)]="empresaForm.ruc" name="ruc" [readonly]="!canUpdate()" />
+                  <input
+                    matInput
+                    maxlength="20"
+                    inputmode="numeric"
+                    [ngModel]="empresaForm.ruc"
+                    (ngModelChange)="actualizarRucEmpresa($event)"
+                    name="ruc"
+                    [readonly]="!canUpdate()"
+                  />
                   <button mat-icon-button matIconSuffix type="button" matTooltipPosition="above" [matTooltip]="ayudaConfig.ruc" aria-label="Ayuda RUC">
                     <mat-icon>help_outline</mat-icon>
                   </button>
@@ -737,6 +745,10 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
     } finally {
       this.guardandoEmpresa.set(false);
     }
+  }
+
+  protected actualizarRucEmpresa(value: string): void {
+    this.empresaForm.ruc = value.replace(/\D/g, '').slice(0, 13);
   }
 
   protected cambiarAnio(value: string | number): void {

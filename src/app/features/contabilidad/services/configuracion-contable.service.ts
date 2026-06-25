@@ -51,7 +51,7 @@ export class ConfiguracionContableService {
     const timestamp = Date.now();
     const payload: ConfiguracionEmpresaContable = {
       ...empresa,
-      ruc: empresa.ruc.trim(),
+      ruc: this.normalizarRuc(empresa.ruc),
       razonSocial: empresa.razonSocial.trim(),
       nombreComercial: empresa.nombreComercial?.trim() ?? '',
       actividadEconomicaCodigo: empresa.actividadEconomicaCodigo.trim(),
@@ -181,25 +181,14 @@ export class ConfiguracionContableService {
   }
 
   validarRucEcuador(ruc: string): boolean {
-    const value = ruc.trim();
+    const value = this.normalizarRuc(ruc);
     if (!/^\d{13}$/.test(value) || value.slice(10) !== '001') {
       return false;
     }
 
+    const provincia = Number(value.slice(0, 2));
     const thirdDigit = Number(value[2]);
-    if (thirdDigit < 6) {
-      return this.validarCedula(value.slice(0, 10));
-    }
-
-    if (thirdDigit === 6) {
-      return this.validarRucPublico(value);
-    }
-
-    if (thirdDigit === 9) {
-      return this.validarRucJuridico(value);
-    }
-
-    return false;
+    return provincia >= 1 && provincia <= 24 && thirdDigit !== 7 && thirdDigit !== 8;
   }
 
   private validarEmpresa(empresa: ConfiguracionEmpresaContable): void {
@@ -222,6 +211,10 @@ export class ConfiguracionContableService {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(empresa.correoNotificacionesSri)) {
       throw new Error('Ingresa un correo SRI valido.');
     }
+  }
+
+  private normalizarRuc(ruc: string): string {
+    return ruc.replace(/\D/g, '').slice(0, 13);
   }
 
   private crearPeriodo(anio: number, mes: number, timestamp: number): PeriodoContable {
@@ -278,40 +271,4 @@ export class ConfiguracionContableService {
     } satisfies AuditoriaPeriodoContable);
   }
 
-  private validarCedula(identificacion: string): boolean {
-    const provincia = Number(identificacion.slice(0, 2));
-    if (provincia < 1 || provincia > 24) {
-      return false;
-    }
-
-    const coefficients = [2, 1, 2, 1, 2, 1, 2, 1, 2];
-    const total = coefficients.reduce((sum, coefficient, index) => {
-      const result = Number(identificacion[index]) * coefficient;
-      return sum + (result > 9 ? result - 9 : result);
-    }, 0);
-    const digit = total % 10 === 0 ? 0 : 10 - (total % 10);
-    return digit === Number(identificacion[9]);
-  }
-
-  private validarRucPublico(ruc: string): boolean {
-    const coefficients = [3, 2, 7, 6, 5, 4, 3, 2];
-    const total = coefficients.reduce((sum, coefficient, index) => sum + Number(ruc[index]) * coefficient, 0);
-    const digit = 11 - (total % 11);
-    if (digit === 10) {
-      return false;
-    }
-    const check = digit === 11 ? 0 : digit;
-    return check === Number(ruc[8]);
-  }
-
-  private validarRucJuridico(ruc: string): boolean {
-    const coefficients = [4, 3, 2, 7, 6, 5, 4, 3, 2];
-    const total = coefficients.reduce((sum, coefficient, index) => sum + Number(ruc[index]) * coefficient, 0);
-    const digit = 11 - (total % 11);
-    if (digit === 10) {
-      return false;
-    }
-    const check = digit === 11 ? 0 : digit;
-    return check === Number(ruc[9]);
-  }
 }

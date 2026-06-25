@@ -156,12 +156,28 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
 
               <mat-form-field appearance="outline">
                 <mat-label>Debe</mat-label>
-                <input matInput type="number" min="0" step="0.01" [ngModel]="linea.debe" (ngModelChange)="actualizarImporte(index, 'debe', $event)" [readonly]="!editable()" />
+                <input
+                  matInput
+                  type="text"
+                  inputmode="decimal"
+                  [ngModel]="importeInputValue(linea, 'debe')"
+                  (ngModelChange)="actualizarImporte(index, 'debe', $event)"
+                  (blur)="formatearImporte(index, 'debe')"
+                  [readonly]="!editable()"
+                />
               </mat-form-field>
 
               <mat-form-field appearance="outline">
                 <mat-label>Haber</mat-label>
-                <input matInput type="number" min="0" step="0.01" [ngModel]="linea.haber" (ngModelChange)="actualizarImporte(index, 'haber', $event)" [readonly]="!editable()" />
+                <input
+                  matInput
+                  type="text"
+                  inputmode="decimal"
+                  [ngModel]="importeInputValue(linea, 'haber')"
+                  (ngModelChange)="actualizarImporte(index, 'haber', $event)"
+                  (blur)="formatearImporte(index, 'haber')"
+                  [readonly]="!editable()"
+                />
               </mat-form-field>
 
               @if (editable()) {
@@ -241,6 +257,7 @@ export class AsientoFormComponent implements OnInit {
     this.service.crearLineaVacia(),
     this.service.crearLineaVacia()
   ]);
+  protected readonly importeInputs = signal<Record<string, string>>({});
   protected readonly cuentas = signal<CuentaContable[]>([]);
   protected readonly guardando = signal(false);
   protected readonly error = signal<string | null>(null);
@@ -322,8 +339,32 @@ export class AsientoFormComponent implements OnInit {
     this.lineas.update((lineas) => lineas.map((linea, i) => i === index ? { ...linea, [campo]: value } : linea));
   }
 
+  protected importeInputValue(linea: AsientoContableLinea, campo: 'debe' | 'haber'): string {
+    return this.importeInputs()[this.importeInputKey(linea.id, campo)] ?? this.formatImporte(linea[campo]);
+  }
+
   protected actualizarImporte(index: number, campo: 'debe' | 'haber', value: string | number): void {
-    const amount = this.service.roundToTwo(Number(value || 0));
+    const lineId = this.lineas()[index]?.id;
+    if (!lineId) {
+      return;
+    }
+
+    const inputValue = this.normalizarImporteInput(String(value ?? ''));
+    const amount = this.parseImporteInput(inputValue);
+    const oppositeField = campo === 'debe' ? 'haber' : 'debe';
+    const updates: Record<string, string> = {
+      [this.importeInputKey(lineId, campo)]: inputValue
+    };
+
+    if (amount > 0) {
+      updates[this.importeInputKey(lineId, oppositeField)] = this.formatImporte(0);
+    }
+
+    this.importeInputs.update((inputs) => ({
+      ...inputs,
+      ...updates
+    }));
+
     this.lineas.update((lineas) => lineas.map((linea, i) => {
       if (i !== index) {
         return linea;
@@ -332,6 +373,18 @@ export class AsientoFormComponent implements OnInit {
       return campo === 'debe'
         ? { ...linea, debe: amount, haber: amount > 0 ? 0 : linea.haber }
         : { ...linea, haber: amount, debe: amount > 0 ? 0 : linea.debe };
+    }));
+  }
+
+  protected formatearImporte(index: number, campo: 'debe' | 'haber'): void {
+    const linea = this.lineas()[index];
+    if (!linea) {
+      return;
+    }
+
+    this.importeInputs.update((inputs) => ({
+      ...inputs,
+      [this.importeInputKey(linea.id, campo)]: this.formatImporte(linea[campo])
     }));
   }
 
@@ -419,6 +472,38 @@ export class AsientoFormComponent implements OnInit {
     this.estado.set(asiento.estado);
     this.asientoReversadoId.set(asiento.asientoReversadoId ?? null);
     this.lineas.set(asiento.lineas.length > 0 ? asiento.lineas : [this.service.crearLineaVacia(), this.service.crearLineaVacia()]);
+    this.importeInputs.set({});
+  }
+
+  private importeInputKey(lineId: string, campo: 'debe' | 'haber'): string {
+    return `${lineId}:${campo}`;
+  }
+
+  private normalizarImporteInput(value: string): string {
+    const normalizedSeparator = value.replace(/,/g, '.');
+    const numeric = normalizedSeparator.replace(/[^\d.]/g, '');
+    const [integerRaw = '', ...decimalParts] = numeric.split('.');
+    const decimalRaw = decimalParts.join('');
+    const integerPart = integerRaw.replace(/^0+(?=\d)/, '') || (numeric.startsWith('.') ? '0' : integerRaw);
+
+    if (!numeric.includes('.')) {
+      return integerPart;
+    }
+
+    if (normalizedSeparator.endsWith('.') || normalizedSeparator.endsWith(',')) {
+      return `${integerPart || '0'}.`;
+    }
+
+    return `${integerPart || '0'}.${decimalRaw.slice(0, 2)}`;
+  }
+
+  private parseImporteInput(value: string): number {
+    const amount = Number.parseFloat(value);
+    return Number.isFinite(amount) ? this.service.roundToTwo(amount) : 0;
+  }
+
+  private formatImporte(value: number): string {
+    return this.service.roundToTwo(value).toFixed(2);
   }
 
   private parseFecha(value: string): Date | null {
