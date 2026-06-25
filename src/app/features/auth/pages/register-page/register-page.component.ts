@@ -45,7 +45,7 @@ export class RegisterPageComponent {
   protected readonly currentStep = signal<1 | 2>(1);
   protected readonly steps: RegisterStep[] = [
     { id: 1, title: 'Usuario', description: 'Datos de acceso y perfil' },
-    { id: 2, title: 'Negocio', description: 'Datos de tenant y contacto' }
+    { id: 2, title: 'Negocio', description: 'Datos de la empresa y contacto' }
   ];
 
   protected readonly countries = [

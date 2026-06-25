@@ -55,7 +55,7 @@ import { SriDownloadJob, SriFrecuencia } from '../../../../shared/models/sri.mod
         <mat-card appearance="outlined" class="surface-card">
           <mat-card-header>
             <mat-card-title>Credenciales y batch</mat-card-title>
-            <mat-card-subtitle>La clave se cifra en el backend</mat-card-subtitle>
+            <mat-card-subtitle>La clave se guarda protegida para tus procesos autorizados</mat-card-subtitle>
           </mat-card-header>
           <mat-card-content>
             <form class="form" [formGroup]="configForm" (ngSubmit)="saveConfig()">

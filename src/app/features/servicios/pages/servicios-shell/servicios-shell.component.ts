@@ -12,7 +12,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
           <p class="eyebrow">Modulo Servicios</p>
           <h1>Servicios</h1>
           <p>
-            Gestiona el catalogo de servicios del tenant y prepara la configuracion funcional del modulo.
+            Gestiona el catalogo de servicios, precios y configuraciones que usa tu operacion comercial.
           </p>
         </div>
       </header>

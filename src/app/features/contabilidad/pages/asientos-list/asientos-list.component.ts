@@ -49,7 +49,7 @@ import { IntegracionContableService } from '../../services/integracion-contable.
               <mat-icon>help_outline</mat-icon>
             </button>
           </h2>
-          <p>Consulta asientos manuales, automaticos, borradores y aprobados del tenant.</p>
+          <p>Consulta asientos manuales, automaticos, borradores y aprobados de la empresa.</p>
         </div>
         <a mat-raised-button color="primary" routerLink="/workspace/contabilidad/asientos/nuevo" [class.disabled-link]="!canCreate()" matTooltipPosition="above" [matTooltip]="ayuda.nuevo">
           <mat-icon>add</mat-icon>

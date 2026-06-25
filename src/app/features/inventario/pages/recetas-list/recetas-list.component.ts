@@ -47,7 +47,7 @@ import { ProductosService } from '../../services/productos.service';
       } @else if (recetas().length === 0) {
         <section class="empty-card">
           <h3>Sin recetas</h3>
-          <p>No hay productos tipo receta creados para este tenant.</p>
+          <p>No hay productos tipo receta creados para esta empresa.</p>
         </section>
       } @else {
         <div class="table-wrap">

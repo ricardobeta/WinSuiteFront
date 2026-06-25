@@ -112,7 +112,7 @@ import { UsuariosAlmacenesConfig, UsuarioAlmacenAsignacion } from '../../models/
         } @else if (colaboradores().length === 0) {
           <div class="empty-state">
             <mat-icon>people</mat-icon>
-            <p>No hay colaboradores disponibles en este tenant.</p>
+            <p>No hay colaboradores disponibles en esta empresa.</p>
           </div>
         } @else if (almacenesActivos().length === 0) {
           <div class="empty-state">

@@ -80,7 +80,7 @@ declare global {
         <div class="header-row">
           <div>
             <p class="eyebrow">{{ instances().length }} instancia(s)</p>
-            <h2>Conexiones del tenant</h2>
+            <h2>Conexiones de la empresa</h2>
           </div>
         </div>
 

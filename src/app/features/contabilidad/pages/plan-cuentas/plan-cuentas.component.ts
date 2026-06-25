@@ -49,7 +49,7 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
               <mat-icon>help_outline</mat-icon>
             </button>
           </h2>
-          <p>Administra la estructura base de Estado de Situacion Financiera por tenant.</p>
+          <p>Administra la estructura base del Estado de Situacion Financiera de tu empresa.</p>
         </div>
         <div class="header-actions">
           <button mat-stroked-button type="button" (click)="confirmarPlantilla()" [disabled]="cargando() || aplicandoPlantilla() || !canCreate()" matTooltipPosition="above" [matTooltip]="ayuda.plantillaEsf">
@@ -301,7 +301,7 @@ export class PlanCuentasComponent implements OnInit {
   protected readonly canCreate = computed(() => this.authorization.canAccess('contabilidad', 'create'));
   protected readonly canUpdate = computed(() => this.authorization.canAccess('contabilidad', 'update'));
   protected readonly ayuda = {
-    submodulo: 'Catalogo contable del tenant. Define jerarquia, naturaleza y cuentas que se usaran en asientos, reportes y balances.',
+    submodulo: 'Catalogo contable de la empresa. Define jerarquia, naturaleza y cuentas que se usaran en asientos, reportes y balances.',
     plantillaEsf: 'Carga una estructura base de Activo, Pasivo y Patrimonio para Estado de Situacion Financiera.',
     planCompleto: 'Agrega cuentas de Activo, Pasivo, Patrimonio, Ingresos, Costos y Gastos para reportes financieros completos.',
     nuevaCuenta: 'Crea una cuenta manual. Use cuentas padre para agrupar y cuentas de movimiento para registrar asientos.',

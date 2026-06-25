@@ -120,7 +120,7 @@ export class ArchivosService {
       try {
         tenantId = this.authService.getTenantId();
       } catch (error) {
-        subscriber.error(error instanceof Error ? error : new Error('No se pudo resolver el tenantId.'));
+        subscriber.error(error instanceof Error ? error : new Error('No se pudo identificar la empresa asociada a la sesion.'));
         return;
       }
 

@@ -37,7 +37,7 @@ import { ColaboradoresService } from '../../services/colaboradores.service';
         <div>
           <p class="eyebrow">Colaboradores</p>
           <h2>Lista de colaboradores</h2>
-          <p>Consulta usuarios del tenant y ajusta su acceso por rol.</p>
+          <p>Consulta colaboradores y ajusta su acceso por rol.</p>
         </div>
         @if (authorization.canAccess('colaboradores', 'create')) {
           <a mat-raised-button color="primary" routerLink="/workspace/colaboradores/nuevo">

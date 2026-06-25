@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Database, ref, set } from '@angular/fire/database';
-import { HttpClient } from '@angular/common/http';
+import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 
 import { environment } from '../../../../environments/environment';
@@ -30,6 +30,19 @@ interface EmitirFacturaOptions {
   intervaloMs?: number;
   intentosMaximos?: number;
   soloGenerar?: boolean;
+}
+
+export class FacturaSriError extends Error {
+  constructor(
+    message: string,
+    readonly estadoSri: string,
+    readonly claveAcceso: string | null,
+    readonly mensajes: string | null,
+    readonly emision: FacturaEmisionEstado | null = null
+  ) {
+    super(message);
+    this.name = 'FacturaSriError';
+  }
 }
 
 @Injectable({
@@ -134,7 +147,7 @@ export class FacturaService {
 
     const claveAcceso = facturaGenerada.claveAcceso ?? solicitud.claveAcceso;
     if (!claveAcceso) {
-      throw new Error('El backend no retornó clave de acceso para la factura.');
+      throw new Error('No se recibio la clave de acceso para la factura.');
     }
 
     if (soloGenerar) {
@@ -268,9 +281,14 @@ export class FacturaService {
     const intentosMaximos = options.intentosMaximos ?? 40;
     options.onStep?.('armando');
     options.onStep?.('generando');
-    let emision = await firstValueFrom(
-      this.http.post<FacturaEmisionEstado>(`${environment.apiBaseUrl}/api/invoices/emissions`, { ventaId })
-    );
+    let emision: FacturaEmisionEstado;
+    try {
+      emision = await firstValueFrom(
+        this.http.post<FacturaEmisionEstado>(`${environment.apiBaseUrl}/api/invoices/emissions`, { ventaId })
+      );
+    } catch (error) {
+      throw this.toFacturaSriError(error, null);
+    }
     options.onStep?.('autorizando');
     for (let intento = 0; intento < intentosMaximos && !this.esEstadoFinal(emision.estadoSri); intento++) {
       await this.delay(intervaloMs);
@@ -280,7 +298,13 @@ export class FacturaService {
       throw new Error('La factura continúa en proceso. El servidor seguirá consultando al SRI automáticamente.');
     }
     if (!emision.autorizada) {
-      throw new Error(emision.mensajes || `El SRI respondió ${emision.estadoSri}.`);
+      throw new FacturaSriError(
+        emision.mensajes || `El SRI respondió ${emision.estadoSri}.`,
+        this.normalizarEstadoSri(emision.estadoSri),
+        emision.claveAcceso,
+        emision.mensajes,
+        emision
+      );
     }
     options.onStep?.('autorizada');
     return {
@@ -310,7 +334,24 @@ export class FacturaService {
   }
 
   private esEstadoFinal(estado: string): boolean {
-    return ['AUTORIZADO', 'AUTORIZADA', 'RECHAZADO', 'DEVUELTA', 'ERROR'].includes((estado ?? '').trim().toUpperCase());
+    return ['AUTORIZADO', 'AUTORIZADA', 'NO_AUTORIZADO', 'RECHAZADO', 'DEVUELTA', 'ERROR'].includes(this.normalizarEstadoSri(estado));
+  }
+
+  private normalizarEstadoSri(estado: string | null | undefined): string {
+    const normalizado = (estado ?? '').trim().toUpperCase().replace(/[\s-]+/g, '_');
+    return normalizado === 'NOAUTORIZADO' ? 'NO_AUTORIZADO' : normalizado;
+  }
+
+  private toFacturaSriError(error: unknown, fallback: FacturaEmisionEstado | null): FacturaSriError {
+    if (error instanceof FacturaSriError) return error;
+    if (error instanceof HttpErrorResponse) {
+      const backendMessage = typeof error.error === 'string'
+        ? error.error
+        : error.error?.message || error.error?.error || error.message;
+      return new FacturaSriError(backendMessage || 'No se pudo completar la facturación.', fallback?.estadoSri || 'ERROR', fallback?.claveAcceso || null, backendMessage || null, fallback);
+    }
+    const message = error instanceof Error ? error.message : 'No se pudo completar la facturación.';
+    return new FacturaSriError(message, fallback?.estadoSri || 'ERROR', fallback?.claveAcceso || null, message, fallback);
   }
 
   private async getDetalleVentaOrThrow(ventaId: string): Promise<VentaDetalle> {

@@ -40,7 +40,7 @@ import { FirmaDigitalConfig } from '../../../../shared/models/facturacion.models
 					<p class="eyebrow">Firmas digitales</p>
 					<h2>Carga y administración de archivos .p12</h2>
 					<p>
-						Sube firmas por tenant, revisa el listado precargado y deja lista la información operativa para el flujo de facturación.
+						Sube firmas de la empresa, revisa el listado precargado y deja lista la informacion operativa para el flujo de facturacion.
 					</p>
 				</div>
 			</div>
@@ -238,7 +238,7 @@ export class FirmasPageComponent {
 			width: '420px',
 			data: {
 				title: 'Eliminar firma',
-				message: `¿Deseas eliminar ${nombre}? Se borrará el archivo .p12 del Storage y su registro de Firebase.`,
+				message: `Deseas eliminar ${nombre}? Se borrara el archivo de firma y su registro operativo.`,
 				confirmText: 'Eliminar'
 			}
 		});

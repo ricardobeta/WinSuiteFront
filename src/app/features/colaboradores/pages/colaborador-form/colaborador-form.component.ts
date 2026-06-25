@@ -36,7 +36,7 @@ import { ColaboradoresService } from '../../services/colaboradores.service';
       <div>
         <p class="eyebrow">Colaboradores</p>
         <h2>{{ isEditMode() ? 'Editar colaborador' : 'Crear colaborador' }}</h2>
-        <p>Define acceso y datos del usuario tenant.</p>
+        <p>Define los datos del colaborador y su acceso dentro de la empresa.</p>
       </div>
 
       <form [formGroup]="form" class="form-grid" (ngSubmit)="guardar()">

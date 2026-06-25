@@ -85,7 +85,7 @@ type CuentaIntegracionCampo = {
               <mat-icon>help_outline</mat-icon>
             </button>
           </h2>
-          <p>Define la empresa que llevara contabilidad y controla los periodos mensuales del tenant.</p>
+          <p>Define la empresa que llevara contabilidad y controla sus periodos mensuales.</p>
         </div>
       </header>
 

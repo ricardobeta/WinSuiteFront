@@ -220,7 +220,7 @@ export class AuthService {
     const tenantId = this.normalizeTenantId(response.tenantId);
     if (!tenantId) {
       this.clearTenantFromStorage();
-      throw new Error('El token autenticado no contiene tenantId.');
+      throw new Error('No se pudo identificar la empresa asociada a tu cuenta.');
     }
 
     this.tenantId.set(tenantId);
@@ -245,7 +245,7 @@ export class AuthService {
       return cachedTenantId;
     }
 
-    throw new Error('No se pudo resolver el tenantId del usuario autenticado.');
+    throw new Error('No se pudo identificar la empresa asociada al usuario autenticado.');
   }
 
   private async hydrateTenantId(user: User): Promise<void> {

@@ -9,9 +9,9 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
     <section class="contabilidad-shell">
       <header class="contabilidad-hero surface-card">
         <div>
-          <p class="eyebrow">Modulo Contabilidad</p>
+          <p class="eyebrow">Gestion contable</p>
           <h1>Contabilidad</h1>
-          <p>Configura la estructura contable base del tenant para operar con informacion financiera aislada.</p>
+          <p>Organiza tu plan de cuentas, asientos, periodos y reportes para tomar decisiones con informacion financiera clara.</p>
         </div>
       </header>
 

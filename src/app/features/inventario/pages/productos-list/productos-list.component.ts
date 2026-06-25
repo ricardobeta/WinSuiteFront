@@ -49,7 +49,7 @@ import { ProductosService } from '../../services/productos.service';
       } @else if (productos().length === 0) {
         <section class="empty-card">
           <h3>Sin productos</h3>
-          <p>No hay productos registrados para este tenant.</p>
+          <p>No hay productos registrados para esta empresa.</p>
         </section>
       } @else {
         <div class="table-wrap">

@@ -10,7 +10,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
       <header class="archivos-hero surface-card">
         <div>
           <p class="eyebrow">Administrador de archivos</p>
-          <h1>Archivos del tenant</h1>
+          <h1>Archivos de la empresa</h1>
           <p>
             Centraliza la carga de excels e imagenes para compartirlas con todo el equipo.
           </p>

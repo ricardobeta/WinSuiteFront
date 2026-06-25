@@ -47,7 +47,7 @@ export interface ArchivoSelectorDialogResult {
     <section class="selector-shell">
       <header class="selector-hero surface-card">
         <div class="hero-copy">
-          <p class="eyebrow">Archivos del tenant</p>
+          <p class="eyebrow">Archivos de la empresa</p>
           <h2>{{ data.title ?? 'Buscar, reutilizar o subir archivo' }}</h2>
           <p>{{ data.subtitle ?? 'Encuentra un documento existente o sube uno nuevo sin salir de esta ventana.' }}</p>
 

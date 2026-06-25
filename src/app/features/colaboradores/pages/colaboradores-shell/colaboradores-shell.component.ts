@@ -12,7 +12,7 @@ import { MatIconModule } from '@angular/material/icon';
       <div>
         <p class="eyebrow">Colaboradores</p>
         <h2>Gestión de colaboradores y roles</h2>
-        <p>Administra usuarios del tenant, su acceso por módulos y permisos CRUD.</p>
+        <p>Administra colaboradores, roles y accesos segun las responsabilidades de cada equipo.</p>
       </div>
       <div class="actions">
         <a mat-raised-button color="primary" routerLink="/workspace/colaboradores/nuevo">

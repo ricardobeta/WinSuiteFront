@@ -11,9 +11,10 @@ import { firstValueFrom } from 'rxjs';
 
 import { VentaDetalle } from '../../models/ventas.models';
 import { VentasService } from '../../services/ventas.service';
-import { FacturaService } from '../../services/factura.service';
+import { FacturaService, FacturaSriError } from '../../services/factura.service';
 import { FacturacionConfigService } from '../../../../core/services/facturacion-config.service';
 import { FacturaConfirmDialogComponent } from '../factura-confirm-dialog/factura-confirm-dialog.component';
+import { FacturaSriErrorDialogComponent } from '../factura-sri-error-dialog/factura-sri-error-dialog.component';
 import { IntegracionContableService } from '../../../contabilidad/services/integracion-contable.service';
 import { FacturaEmisionEstado } from '../../../../shared/models/factura.models';
 
@@ -312,7 +313,16 @@ export class VentaDetalleComponent {
       this.snackBar.open(mensaje, 'Cerrar', { duration: 4000 });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo completar la facturación.';
-      this.snackBar.open(message, 'Cerrar', { duration: 3500 });
+      if (error instanceof FacturaSriError) {
+        if (error.emision) {
+          this.emision.set(error.emision);
+        } else {
+          await this.refrescarEmision();
+        }
+        this.mostrarErrorSri(error.estadoSri, error.claveAcceso, error.mensajes || message);
+      } else {
+        this.snackBar.open(message, 'Cerrar', { duration: 3500 });
+      }
     } finally {
       this.facturando.set(false);
       this.pasoFactura.set('');
@@ -328,6 +338,24 @@ export class VentaDetalleComponent {
     return emision.emailEstado || 'Pendiente';
   }
 
+  private async refrescarEmision(): Promise<void> {
+    const ventaId = this.ventaId();
+    if (!ventaId) return;
+    try {
+      this.emision.set(await this.facturaService.getEmision(ventaId));
+    } catch {
+      // Si no se puede refrescar, el popup igual mostrara el error recibido.
+    }
+  }
+
+  private mostrarErrorSri(estadoSri: string, claveAcceso: string | null, mensaje: string): void {
+    this.dialog.open(FacturaSriErrorDialogComponent, {
+      width: '620px',
+      maxWidth: '95vw',
+      data: { estadoSri, claveAcceso, mensaje }
+    });
+  }
+
   protected puedeSolicitarFacturacion(): boolean {
     if (!this.puedeFacturar()) return false;
     const emision = this.emision();
@@ -341,6 +369,7 @@ export class VentaDetalleComponent {
     const emision = this.emision();
     const estado = (emision?.estadoSri ?? '').trim().toUpperCase();
     if (emision?.autorizada || estado === 'AUTORIZADO' || estado === 'AUTORIZADA') return 'Facturada';
+    if (['NO_AUTORIZADO', 'NO AUTORIZADO', 'RECHAZADO', 'DEVUELTA'].includes(estado)) return 'No autorizada';
     if (estado === 'ERROR') return 'Reintentar facturación';
     if (emision?.claveAcceso || estado) return 'Emisión en proceso';
     return 'Facturar';

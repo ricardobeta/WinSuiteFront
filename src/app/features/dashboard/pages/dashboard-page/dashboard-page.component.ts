@@ -473,7 +473,6 @@ export class DashboardPageComponent {
       template,
       '',
       `Usuario: ${user?.displayName || user?.email || 'Usuario Winsuite'}`,
-      `Tenant: ${this.auth.tenantId() ?? 'sin tenant'}`,
       `Ruta: ${this.router.url}`
     ].join('\n');
 

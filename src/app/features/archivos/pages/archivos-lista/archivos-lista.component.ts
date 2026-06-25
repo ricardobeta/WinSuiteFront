@@ -56,7 +56,7 @@ import { ARCHIVO_MAX_TOTAL_BYTES, ArchivoItem, ArchivosUsage } from '../../../..
           <div>
             <p class="eyebrow">Almacenamiento</p>
             <h2>Resumen de archivos</h2>
-            <p>Controla el espacio usado por el tenant y los archivos activos.</p>
+            <p>Controla el espacio usado por tu empresa y los archivos activos.</p>
           </div>
 
           <div class="summary-metrics">

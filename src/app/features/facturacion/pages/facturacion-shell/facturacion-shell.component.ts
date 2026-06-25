@@ -12,7 +12,7 @@ import { RouterOutlet } from '@angular/router';
 					<p class="eyebrow">Módulo Facturación Electrónica</p>
 					<h1>Facturación</h1>
 					<p>
-						Centraliza el ciclo operativo de firmas, configuración tributaria y emisión de facturas electrónicas por tenant.
+						Centraliza firmas, configuracion tributaria y emision de facturas electronicas para tu empresa.
 					</p>
 				</div>
 			</header>
