@@ -8,7 +8,6 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { firstValueFrom } from 'rxjs';
-import { environment } from '../../../../../environments/environment';
 
 import { VentaDetalle } from '../../models/ventas.models';
 import { VentasService } from '../../services/ventas.service';
@@ -16,6 +15,7 @@ import { FacturaService } from '../../services/factura.service';
 import { FacturacionConfigService } from '../../../../core/services/facturacion-config.service';
 import { FacturaConfirmDialogComponent } from '../factura-confirm-dialog/factura-confirm-dialog.component';
 import { IntegracionContableService } from '../../../contabilidad/services/integracion-contable.service';
+import { FacturaEmisionEstado } from '../../../../shared/models/factura.models';
 
 @Component({
   selector: 'app-venta-detalle',
@@ -42,6 +42,10 @@ import { IntegracionContableService } from '../../../contabilidad/services/integ
           }
         </div>
         <div class="header-actions">
+          @if (emision()?.documentosDisponibles) {
+            <button mat-stroked-button type="button" (click)="descargar('ride')"><mat-icon>picture_as_pdf</mat-icon> RIDE</button>
+            <button mat-stroked-button type="button" (click)="descargar('xml')"><mat-icon>code</mat-icon> XML</button>
+          }
           <button
             mat-raised-button
             color="primary"
@@ -78,6 +82,10 @@ import { IntegracionContableService } from '../../../contabilidad/services/integ
               {{ etiquetaEstadoContable() }}
             </span>
           </p>
+          @if (emision()) {
+            <p><strong>SRI:</strong> {{ emision()!.estadoSri }} · {{ emision()!.numeroAutorizacion || 'Sin autorización' }}</p>
+            <p><strong>Correo:</strong> {{ etiquetaCorreo(emision()!) }}</p>
+          }
         </section>
 
         <section>
@@ -164,7 +172,8 @@ export class VentaDetalleComponent {
   protected readonly pasoFactura = signal('');
   protected readonly puedeFacturar = signal(false);
   protected readonly estadoContable = signal<'DESACTIVADA' | 'ASIENTO_GENERADO' | 'PENDIENTE'>('DESACTIVADA');
-  protected readonly modoPruebaSoloGenerar = environment.facturacion?.soloGenerarEnPruebas ?? false;
+  protected readonly emision = signal<FacturaEmisionEstado | null>(null);
+  protected readonly modoPruebaSoloGenerar = false;
 
   constructor() {
     this.route.paramMap.subscribe((params) => {
@@ -186,6 +195,8 @@ export class VentaDetalleComponent {
       void this.ventasService.getVentaDetalle(id)
         .then(async (detalle) => {
           this.detalle.set(detalle);
+
+          void this.facturaService.getEmision(id).then((emision) => this.emision.set(emision)).catch(() => undefined);
 
           if (detalle?.documento.almacenId) {
             const firma = await firstValueFrom(this.facturacionService.getFirmaParaAlmacen(detalle.documento.almacenId));
@@ -282,6 +293,7 @@ export class VentaDetalleComponent {
           }
         }
       });
+      this.emision.set(resultado.emision ?? null);
 
       const esModoPrueba = (resultado.respuestaAutorizacion.estado ?? '').includes('MODO_PRUEBA');
       const mensaje = esModoPrueba
@@ -296,5 +308,30 @@ export class VentaDetalleComponent {
       this.facturando.set(false);
       this.pasoFactura.set('');
     }
+  }
+
+  protected etiquetaCorreo(emision: FacturaEmisionEstado): string {
+    if (emision.emailEstado === 'SENT') {
+      return `Enviado por ${emision.emailCanal === 'TENANT_SMTP' ? 'correo de la empresa' : 'WinSuite'}${emision.emailFallbackAplicado ? ' (respaldo)' : ''}`;
+    }
+    if (emision.emailEstado === 'SKIPPED_NO_RECIPIENT') return 'Sin destinatario; documentos disponibles';
+    if (emision.emailEstado === 'FAILED') return `Fallido: ${emision.emailError || 'revisa la configuración'}`;
+    return emision.emailEstado || 'Pendiente';
+  }
+
+  protected descargar(tipo: 'ride' | 'xml'): void {
+    const ventaId = this.ventaId();
+    if (!ventaId) return;
+    this.facturaService.descargarDocumento(ventaId, tipo).subscribe({
+      next: (blob) => {
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `factura-${this.emision()?.claveAcceso || ventaId}.${tipo === 'ride' ? 'pdf' : 'xml'}`;
+        link.click();
+        URL.revokeObjectURL(url);
+      },
+      error: () => this.snackBar.open('No se pudo descargar el documento.', 'Cerrar', { duration: 2800 })
+    });
   }
 }

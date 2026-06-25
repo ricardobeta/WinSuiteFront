@@ -15,6 +15,7 @@ import { MatTableModule } from '@angular/material/table';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import {
 	CatalogosFacturacion,
+	ConfiguracionCorreoFactura,
 	ConfiguracionFacturacion,
 	EstablecimientoConfig,
 	FirmaDigitalConfig,
@@ -300,6 +301,43 @@ import { Almacen } from '../../../inventario/models/inventario.models';
 						</table>
 					</mat-card-content>
 				</mat-card>
+
+				<mat-card class="surface-card fiscal-card" appearance="outlined">
+					<mat-card-header>
+						<mat-card-title>Datos tributarios del emisor</mat-card-title>
+						<mat-card-subtitle>El RUC y la razón social se toman de la firma asignada</mat-card-subtitle>
+					</mat-card-header>
+					<mat-card-content>
+						<form class="settings-form" [formGroup]="fiscalForm">
+							<mat-form-field appearance="outline"><mat-label>Dirección matriz</mat-label><input matInput formControlName="direccionMatriz" /></mat-form-field>
+							<mat-form-field appearance="outline"><mat-label>Contribuyente especial</mat-label><input matInput formControlName="contribuyenteEspecial" /></mat-form-field>
+							<mat-form-field appearance="outline"><mat-label>Agente de retención</mat-label><input matInput formControlName="agenteRetencion" maxlength="8" /></mat-form-field>
+							<mat-form-field appearance="outline"><mat-label>Logo para RIDE (URL)</mat-label><input matInput formControlName="logoUrl" /></mat-form-field>
+							<mat-slide-toggle formControlName="obligadoContabilidad">Obligado a llevar contabilidad</mat-slide-toggle>
+							<mat-slide-toggle formControlName="contribuyenteRimpe">Contribuyente Régimen RIMPE</mat-slide-toggle>
+						</form>
+					</mat-card-content>
+				</mat-card>
+
+				<mat-card class="surface-card email-card" appearance="outlined">
+					<mat-card-header><mat-card-title>Envío de facturas por correo</mat-card-title><mat-card-subtitle>Envía RIDE y XML autorizado; si falla el SMTP propio se usa WinSuite</mat-card-subtitle></mat-card-header>
+					<mat-card-content>
+						<form class="settings-form" [formGroup]="correoForm" (ngSubmit)="guardarCorreo()">
+							<mat-form-field appearance="outline"><mat-label>Remitente</mat-label><mat-select formControlName="mode"><mat-option value="SAAS_DEFAULT">Correo de WinSuite</mat-option><mat-option value="TENANT_SMTP">SMTP de la empresa</mat-option></mat-select></mat-form-field>
+							@if (correoForm.controls.mode.value === 'TENANT_SMTP') {
+								<mat-form-field appearance="outline"><mat-label>Servidor SMTP</mat-label><input matInput formControlName="host" placeholder="smtp.empresa.com" /></mat-form-field>
+								<mat-form-field appearance="outline"><mat-label>Puerto</mat-label><input matInput type="number" formControlName="port" /></mat-form-field>
+								<mat-form-field appearance="outline"><mat-label>Usuario</mat-label><input matInput formControlName="username" /></mat-form-field>
+								<mat-form-field appearance="outline"><mat-label>Clave / clave de aplicación</mat-label><input matInput type="password" formControlName="password" [placeholder]="passwordConfigured() ? 'Dejar vacío para conservar' : 'Obligatoria'" /></mat-form-field>
+								<mat-form-field appearance="outline"><mat-label>Correo remitente</mat-label><input matInput type="email" formControlName="fromAddress" /></mat-form-field>
+								<mat-form-field appearance="outline"><mat-label>Nombre remitente</mat-label><input matInput formControlName="fromName" /></mat-form-field>
+								<mat-form-field appearance="outline"><mat-label>Responder a</mat-label><input matInput type="email" formControlName="replyTo" /></mat-form-field>
+								<mat-slide-toggle formControlName="startTls">STARTTLS</mat-slide-toggle><mat-slide-toggle formControlName="ssl">SSL</mat-slide-toggle>
+							}
+							<div class="email-actions"><button mat-raised-button color="primary" type="submit" [disabled]="guardandoCorreo()">Guardar correo</button><mat-form-field appearance="outline"><mat-label>Destinatario de prueba</mat-label><input matInput type="email" formControlName="testRecipient" /></mat-form-field><button mat-stroked-button type="button" (click)="probarCorreo()" [disabled]="probandoCorreo()">Probar configuración</button></div>
+						</form>
+					</mat-card-content>
+				</mat-card>
 			</div>
 		</section>
 	`,
@@ -311,7 +349,9 @@ import { Almacen } from '../../../inventario/models/inventario.models';
 		.eyebrow { margin: 0 0 .35rem; text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; color: var(--primary); }
 		.content-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
 		.mini-table { width: 100%; }
-		.establecimientos-card, .puntos-card { grid-column: 1 / -1; }
+		.establecimientos-card, .puntos-card, .fiscal-card, .email-card { grid-column: 1 / -1; }
+		.settings-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; align-items: center; }
+		.email-actions { grid-column: 1 / -1; display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
 		.punto-form {
 			display: grid;
 			grid-template-columns: minmax(90px, 140px) minmax(180px, 1fr) minmax(200px, 1fr) auto;
@@ -326,6 +366,7 @@ import { Almacen } from '../../../inventario/models/inventario.models';
 			.hero { flex-direction: column; align-items: start; }
 			.content-grid { grid-template-columns: 1fr; }
 			.punto-form { grid-template-columns: 1fr; }
+			.settings-form { grid-template-columns: 1fr; }
 		}
 	` ]
 })
@@ -341,6 +382,9 @@ export class ConfiguracionFacturacionPageComponent {
 	protected readonly almacenes = signal<Almacen[]>([]);
 	protected readonly cargandoCatalogos = signal(true);
 	protected readonly guardando = signal(false);
+	protected readonly guardandoCorreo = signal(false);
+	protected readonly probandoCorreo = signal(false);
+	protected readonly passwordConfigured = signal(false);
 
 	protected readonly catalogos = signal<CatalogosFacturacion>({
 		formaPago: [],
@@ -356,7 +400,25 @@ export class ConfiguracionFacturacionPageComponent {
 		ambienteActivo: null,
 		codigoPorcentajeIvaActivos: [],
 		establecimientos: [],
-		puntosEmision: []
+		puntosEmision: [],
+		direccionMatriz: '',
+		obligadoContabilidad: false,
+		contribuyenteEspecial: '',
+		agenteRetencion: '',
+		contribuyenteRimpe: false,
+		logoUrl: ''
+	});
+
+	protected readonly fiscalForm = this.formBuilder.nonNullable.group({
+		direccionMatriz: ['', [Validators.required, Validators.maxLength(300)]],
+		obligadoContabilidad: [false], contribuyenteEspecial: [''], agenteRetencion: ['', [Validators.pattern(/^\d{0,8}$/)]],
+		contribuyenteRimpe: [false], logoUrl: ['']
+	});
+
+	protected readonly correoForm = this.formBuilder.nonNullable.group({
+		mode: ['SAAS_DEFAULT' as ConfiguracionCorreoFactura['mode']], host: [''], port: [587], username: [''], password: [''],
+		fromAddress: ['', [Validators.email]], fromName: [''], replyTo: ['', [Validators.email]], startTls: [true], ssl: [false],
+		testRecipient: ['', [Validators.email]]
 	});
 
 	protected readonly establecimientoForm = this.formBuilder.nonNullable.group({
@@ -392,13 +454,22 @@ export class ConfiguracionFacturacionPageComponent {
 		});
 
 		this.facturacionService.getConfiguracion().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-			next: (configuracion) => this.configuracion.set(configuracion),
+			next: (configuracion) => {
+				this.configuracion.set(configuracion);
+				this.fiscalForm.patchValue({ direccionMatriz: configuracion.direccionMatriz, obligadoContabilidad: configuracion.obligadoContabilidad,
+					contribuyenteEspecial: configuracion.contribuyenteEspecial ?? '', agenteRetencion: configuracion.agenteRetencion ?? '',
+					contribuyenteRimpe: configuracion.contribuyenteRimpe, logoUrl: configuracion.logoUrl ?? '' }, { emitEvent: false });
+			},
 			error: () => this.mostrarMensaje('No se pudo cargar la configuración guardada.', 'error')
 		});
 
 		this.facturacionService.getFirmasDisponibles().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
 			next: (firmas) => this.firmas.set(firmas),
 			error: () => this.mostrarMensaje('No se pudo cargar la lista de firmas.', 'error')
+		});
+		this.facturacionService.getConfiguracionCorreo().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+			next: (correo) => { this.passwordConfigured.set(!!correo.passwordConfigured); this.correoForm.patchValue({ ...correo, password: '' }); },
+			error: () => this.mostrarMensaje('No se pudo cargar la configuración de correo.', 'error')
 		});
 	}
 
@@ -565,13 +636,37 @@ export class ConfiguracionFacturacionPageComponent {
 	protected async guardarConfiguracion(): Promise<void> {
 		this.guardando.set(true);
 		try {
-			await this.facturacionService.guardarConfiguracion(this.configuracion());
+			if (this.fiscalForm.invalid) { this.fiscalForm.markAllAsTouched(); throw new Error('Configuración fiscal inválida'); }
+			const fiscal = this.fiscalForm.getRawValue();
+			const actualizada = { ...this.configuracion(), ...fiscal };
+			this.configuracion.set(actualizada);
+			await this.facturacionService.guardarConfiguracion(actualizada);
 			this.mostrarMensaje('Configuración de facturación guardada.', 'save');
 		} catch {
 			this.mostrarMensaje('No se pudo guardar la configuración.', 'error');
 		} finally {
 			this.guardando.set(false);
 		}
+	}
+
+	protected guardarCorreo(): void {
+		this.guardandoCorreo.set(true);
+		const raw = this.correoForm.getRawValue();
+		const { testRecipient: _testRecipient, ...payload } = raw;
+		this.facturacionService.guardarConfiguracionCorreo(payload).subscribe({
+			next: (saved) => { this.passwordConfigured.set(!!saved.passwordConfigured); this.correoForm.controls.password.setValue(''); this.guardandoCorreo.set(false); this.mostrarMensaje('Configuración de correo guardada.', 'mail'); },
+			error: (error) => { this.guardandoCorreo.set(false); this.mostrarMensaje(error?.error?.message ?? 'No se pudo guardar el correo.', 'error'); }
+		});
+	}
+
+	protected probarCorreo(): void {
+		const recipient = this.correoForm.controls.testRecipient.value.trim();
+		if (!recipient || this.correoForm.controls.testRecipient.invalid) { this.mostrarMensaje('Ingresa un destinatario de prueba válido.', 'warning'); return; }
+		this.probandoCorreo.set(true);
+		this.facturacionService.probarConfiguracionCorreo(recipient).subscribe({
+			next: (result) => { this.probandoCorreo.set(false); this.mostrarMensaje(result.status === 'SENT' ? `Correo enviado mediante ${result.channelUsed}.` : (result.error ?? 'Falló el correo.'), result.status === 'SENT' ? 'mark_email_read' : 'error'); },
+			error: () => { this.probandoCorreo.set(false); this.mostrarMensaje('No se pudo probar el correo.', 'error'); }
+		});
 	}
 
 	private mostrarMensaje(message: string, icon: string): void {

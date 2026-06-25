@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -26,6 +27,7 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
   imports: [
     CommonModule,
     MatButtonModule,
+    MatCheckboxModule,
     MatChipsModule,
     MatDialogModule,
     MatFormFieldModule,
@@ -109,6 +111,32 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
       </section>
 
       <section class="surface-card table-card">
+        @if (!cargando() && cuentasFiltradas().length > 0) {
+          <div class="selection-toolbar">
+            <div class="selection-summary">
+              <mat-icon>checklist</mat-icon>
+              <span>{{ totalSeleccionadas() }} seleccionadas</span>
+            </div>
+            <div class="selection-actions">
+              @if (totalSeleccionadas() > 0) {
+                <button mat-icon-button type="button" (click)="limpiarSeleccion()" matTooltipPosition="above" matTooltip="Limpiar seleccion" aria-label="Limpiar seleccion">
+                  <mat-icon>close</mat-icon>
+                </button>
+              }
+              <button
+                mat-stroked-button
+                type="button"
+                (click)="confirmarMarcarMovimientoNo()"
+                [disabled]="!canUpdate() || totalSeleccionadas() === 0 || aplicandoMovimiento()"
+                matTooltipPosition="above"
+                [matTooltip]="ayuda.marcarMovimientoNo">
+                <mat-icon>block</mat-icon>
+                {{ aplicandoMovimiento() ? 'Actualizando...' : 'Marcar movimiento: No' }}
+              </button>
+            </div>
+          </div>
+        }
+
         @if (cargando()) {
           <div class="empty-state">
             <mat-icon>hourglass_empty</mat-icon>
@@ -131,6 +159,24 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
         } @else {
           <div class="table-wrap">
             <table mat-table [dataSource]="cuentasFiltradas()">
+              <ng-container matColumnDef="seleccion">
+                <th mat-header-cell *matHeaderCellDef>
+                  <mat-checkbox
+                    [checked]="todasVisiblesSeleccionadas()"
+                    [indeterminate]="algunasVisiblesSeleccionadas()"
+                    (change)="alternarSeleccionVisible($event.checked)"
+                    aria-label="Seleccionar cuentas visibles">
+                  </mat-checkbox>
+                </th>
+                <td mat-cell *matCellDef="let row">
+                  <mat-checkbox
+                    [checked]="estaSeleccionada(row)"
+                    (change)="alternarSeleccion(row, $event.checked)"
+                    [attr.aria-label]="'Seleccionar cuenta ' + row.codigo">
+                  </mat-checkbox>
+                </td>
+              </ng-container>
+
               <ng-container matColumnDef="codigo">
                 <th mat-header-cell *matHeaderCellDef [matTooltip]="ayuda.codigo" matTooltipPosition="above">Codigo</th>
                 <td mat-cell *matCellDef="let row">
@@ -211,8 +257,13 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
     .stats { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: .5rem; color: var(--muted-foreground); font-size: .9rem; }
     .stats span { padding: .35rem .55rem; border-radius: .45rem; background: var(--tc-surface-container); }
     .table-card { padding: 1rem; background: var(--tc-surface-container-lowest); }
+    .selection-toolbar { display: flex; justify-content: space-between; align-items: center; gap: .75rem; padding-bottom: .75rem; }
+    .selection-summary { display: inline-flex; align-items: center; gap: .45rem; color: var(--muted-foreground); font-size: .92rem; }
+    .selection-summary mat-icon { font-size: 1.15rem; width: 1.15rem; height: 1.15rem; }
+    .selection-actions { display: inline-flex; align-items: center; gap: .45rem; }
     .table-wrap { overflow: auto; }
-    table { width: 100%; min-width: 980px; }
+    table { width: 100%; min-width: 1040px; }
+    th.mat-column-seleccion, td.mat-column-seleccion { width: 52px; padding-right: .25rem; }
     .code-cell { display: inline-flex; font-weight: 600; font-variant-numeric: tabular-nums; }
     .account-name { display: inline-flex; align-items: center; gap: .5rem; }
     .inactivo { opacity: .62; }
@@ -226,6 +277,8 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
       .page-header { flex-direction: column; align-items: flex-start; }
       .filters-card { grid-template-columns: 1fr; }
       .stats { justify-content: flex-start; }
+      .selection-toolbar { align-items: stretch; flex-direction: column; }
+      .selection-actions { justify-content: flex-start; flex-wrap: wrap; }
     }
   `]
 })
@@ -236,10 +289,12 @@ export class PlanCuentasComponent implements OnInit {
   private readonly snackBar = inject(MatSnackBar);
   private readonly destroyRef = inject(DestroyRef);
 
-  protected readonly columnas = ['codigo', 'nombre', 'tipo', 'naturaleza', 'movimiento', 'estado', 'acciones'];
+  protected readonly columnas = ['seleccion', 'codigo', 'nombre', 'tipo', 'naturaleza', 'movimiento', 'estado', 'acciones'];
   protected readonly cuentas = signal<CuentaContable[]>([]);
   protected readonly cargando = signal(true);
   protected readonly aplicandoPlantilla = signal(false);
+  protected readonly aplicandoMovimiento = signal(false);
+  protected readonly cuentasSeleccionadas = signal<Set<string>>(new Set());
   protected readonly busqueda = signal('');
   protected readonly tipoFiltro = signal<TipoCuenta | 'TODOS'>('TODOS');
   protected readonly estadoFiltro = signal<EstadoCuentaContable | 'TODOS'>('TODOS');
@@ -256,7 +311,8 @@ export class PlanCuentasComponent implements OnInit {
     estado: 'Activa permite nuevos registros; inactiva conserva saldos historicos pero evita uso operativo.',
     codigo: 'Codigo jerarquico. Los puntos indican niveles y permiten ordenar y tabular el plan de cuentas.',
     naturaleza: 'Saldo normal de la cuenta: deudora o acreedora. Ayuda a interpretar saldos y reportes.',
-    movimiento: 'Si es Si, la cuenta admite lineas de asiento. Si es No, funciona como agrupadora o totalizadora.'
+    movimiento: 'Si es Si, la cuenta admite lineas de asiento. Si es No, funciona como agrupadora o totalizadora.',
+    marcarMovimientoNo: 'Cambia a No el movimiento directo solo en las cuentas seleccionadas. No modifica asientos historicos.'
   };
 
   protected readonly cuentasHijasPorPadre = computed(() => {
@@ -285,6 +341,8 @@ export class PlanCuentasComponent implements OnInit {
     return this.cuentas().filter((cuenta) => cuenta.permiteMovimiento).length;
   });
 
+  protected readonly totalSeleccionadas = computed(() => this.cuentasSeleccionadas().size);
+
   ngOnInit(): void {
     this.planCuentasService
       .getCuentas()
@@ -292,6 +350,7 @@ export class PlanCuentasComponent implements OnInit {
       .subscribe({
         next: (cuentas) => {
           this.cuentas.set(cuentas);
+          this.sincronizarSeleccion(cuentas);
           this.cargando.set(false);
         },
         error: () => {
@@ -413,6 +472,81 @@ export class PlanCuentasComponent implements OnInit {
     this.mostrarMensaje(siguienteEstado === 'ACTIVA' ? 'Cuenta activada.' : 'Cuenta inactivada.', 'sync');
   }
 
+  protected estaSeleccionada(cuenta: CuentaContable): boolean {
+    return !!cuenta.id && this.cuentasSeleccionadas().has(cuenta.id);
+  }
+
+  protected alternarSeleccion(cuenta: CuentaContable, seleccionada: boolean): void {
+    if (!cuenta.id) {
+      return;
+    }
+
+    const cuentaId = cuenta.id;
+    this.cuentasSeleccionadas.update((seleccion) => {
+      const siguiente = new Set(seleccion);
+      if (seleccionada) {
+        siguiente.add(cuentaId);
+      } else {
+        siguiente.delete(cuentaId);
+      }
+      return siguiente;
+    });
+  }
+
+  protected alternarSeleccionVisible(seleccionada: boolean): void {
+    const visiblesConId = this.cuentasFiltradas().filter((cuenta) => !!cuenta.id);
+    this.cuentasSeleccionadas.update((seleccion) => {
+      const siguiente = new Set(seleccion);
+      for (const cuenta of visiblesConId) {
+        if (seleccionada) {
+          siguiente.add(cuenta.id!);
+        } else {
+          siguiente.delete(cuenta.id!);
+        }
+      }
+      return siguiente;
+    });
+  }
+
+  protected todasVisiblesSeleccionadas(): boolean {
+    const visiblesConId = this.cuentasFiltradas().filter((cuenta) => !!cuenta.id);
+    return visiblesConId.length > 0 && visiblesConId.every((cuenta) => this.cuentasSeleccionadas().has(cuenta.id!));
+  }
+
+  protected algunasVisiblesSeleccionadas(): boolean {
+    const visiblesConId = this.cuentasFiltradas().filter((cuenta) => !!cuenta.id);
+    const seleccionadas = visiblesConId.filter((cuenta) => this.cuentasSeleccionadas().has(cuenta.id!)).length;
+    return seleccionadas > 0 && seleccionadas < visiblesConId.length;
+  }
+
+  protected limpiarSeleccion(): void {
+    this.cuentasSeleccionadas.set(new Set());
+  }
+
+  protected confirmarMarcarMovimientoNo(): void {
+    const cuentasParaActualizar = this.cuentasSeleccionadasConMovimiento();
+    if (cuentasParaActualizar.length === 0) {
+      this.mostrarMensaje('Las cuentas seleccionadas ya tienen Movimiento en No.', 'info');
+      return;
+    }
+
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '480px',
+      data: {
+        title: 'Marcar movimiento como No',
+        message: `Se actualizaran ${cuentasParaActualizar.length} cuenta(s) seleccionada(s). No modifica asientos historicos; solo evita nuevos movimientos directos en esas cuentas.`,
+        confirmText: 'Marcar como No',
+        cancelText: 'Cancelar'
+      }
+    });
+
+    dialogRef.afterClosed().subscribe((confirmado) => {
+      if (confirmado) {
+        void this.marcarMovimientoNo(cuentasParaActualizar);
+      }
+    });
+  }
+
   protected etiquetaTipo(tipo: TipoCuenta): string {
     const etiquetas: Record<TipoCuenta, string> = {
       ACTIVO: 'Activo',
@@ -427,6 +561,35 @@ export class PlanCuentasComponent implements OnInit {
 
   protected esCuentaPadre(cuenta: CuentaContable): boolean {
     return !!cuenta.id && this.cuentasHijasPorPadre().has(cuenta.id);
+  }
+
+  private async marcarMovimientoNo(cuentasParaActualizar: CuentaContable[]): Promise<void> {
+    this.aplicandoMovimiento.set(true);
+    try {
+      await this.planCuentasService.cambiarPermiteMovimiento(
+        cuentasParaActualizar.map((cuenta) => cuenta.id!),
+        false
+      );
+      this.limpiarSeleccion();
+      this.mostrarMensaje(`${cuentasParaActualizar.length} cuenta(s) actualizada(s) a Movimiento: No.`, 'block');
+    } catch {
+      this.mostrarMensaje('No se pudo actualizar el movimiento de las cuentas seleccionadas.', 'error');
+    } finally {
+      this.aplicandoMovimiento.set(false);
+    }
+  }
+
+  private cuentasSeleccionadasConMovimiento(): CuentaContable[] {
+    const seleccion = this.cuentasSeleccionadas();
+    return this.cuentas().filter((cuenta) => !!cuenta.id && seleccion.has(cuenta.id) && cuenta.permiteMovimiento);
+  }
+
+  private sincronizarSeleccion(cuentas: CuentaContable[]): void {
+    const idsActuales = new Set(cuentas.map((cuenta) => cuenta.id).filter((id): id is string => !!id));
+    this.cuentasSeleccionadas.update((seleccion) => {
+      const siguiente = new Set([...seleccion].filter((id) => idsActuales.has(id)));
+      return siguiente.size === seleccion.size ? seleccion : siguiente;
+    });
   }
 
   private siguienteCodigoHijo(padre: CuentaContable): string {

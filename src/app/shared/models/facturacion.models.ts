@@ -15,7 +15,6 @@ export interface FirmaDigitalConfig {
   nombreArchivo: string;
   nombreComercial?: string;
   url: string;
-  contrasena?: string;
   ruc?: string;
   razonSocial?: string;
 }
@@ -63,6 +62,12 @@ export interface ConfiguracionFacturacion {
   // Nueva estructura: lista de establecimientos y puntos de emisión separados
   establecimientos: EstablecimientoConfig[];
   puntosEmision: PuntoEmisionConfig[];
+  direccionMatriz: string;
+  obligadoContabilidad: boolean;
+  contribuyenteEspecial?: string;
+  agenteRetencion?: string;
+  contribuyenteRimpe: boolean;
+  logoUrl?: string;
   // Compatibilidad: mantener el listado antiguo para migración transitoria
   puntosEmisionLegacy?: PuntoEmisionConfig[];
   actualizadoEn?: number;
@@ -73,4 +78,27 @@ export interface CatalogosFacturacion {
   tipoIdentificacion: CatalogoEntry[];
   ambiente: CatalogoEntry[];
   codigoPorcentajeIva: CatalogoEntry[];
+}
+
+export type ModoCorreoFactura = 'SAAS_DEFAULT' | 'TENANT_SMTP';
+
+export interface ConfiguracionCorreoFactura {
+  mode: ModoCorreoFactura;
+  host: string;
+  port: number;
+  username: string;
+  password?: string;
+  fromAddress: string;
+  fromName: string;
+  replyTo: string;
+  startTls: boolean;
+  ssl: boolean;
+  passwordConfigured?: boolean;
+}
+
+export interface ResultadoPruebaCorreo {
+  status: 'SENT' | 'FAILED' | 'SKIPPED_NO_RECIPIENT';
+  channelUsed: 'TENANT_SMTP' | 'SAAS_DEFAULT' | null;
+  fallbackApplied: boolean;
+  error: string | null;
 }

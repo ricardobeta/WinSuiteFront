@@ -116,6 +116,22 @@ export class PlanCuentasService {
     });
   }
 
+  async cambiarPermiteMovimiento(cuentaIds: string[], permiteMovimiento: boolean): Promise<void> {
+    const idsUnicos = [...new Set(cuentaIds)].filter(Boolean);
+    if (idsUnicos.length === 0) {
+      return;
+    }
+
+    const timestamp = Date.now();
+    const updates: Record<string, boolean | number> = {};
+    for (const cuentaId of idsUnicos) {
+      updates[`${cuentaId}/permiteMovimiento`] = permiteMovimiento;
+      updates[`${cuentaId}/actualizadoEn`] = timestamp;
+    }
+
+    await update(this.getCollectionRef(), updates);
+  }
+
   async aplicarPlantilla(plantilla: PlantillaPlanCuentas): Promise<ResultadoAplicarPlantilla> {
     const existentes = await this.getCuentasOnce();
     const codigosExistentes = new Set(existentes.map((cuenta) => this.normalizarCodigo(cuenta.codigo)));

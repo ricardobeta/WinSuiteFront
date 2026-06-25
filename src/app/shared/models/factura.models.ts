@@ -99,10 +99,27 @@ export interface SriResponse {
 export type FacturaEstadoPaso = 'armando' | 'generando' | 'firmando' | 'autorizando' | 'autorizada' | 'error';
 
 export interface FacturaEmisionResultado {
-  facturaGenerada: Factura;
+  facturaGenerada?: Factura;
   respuestaFirma: SriResponse;
   respuestaAutorizacion: SriResponse;
   claveAcceso: string;
+  emision?: FacturaEmisionEstado;
+}
+
+export interface FacturaEmisionEstado {
+  ventaId: string;
+  ventaNumero: string;
+  claveAcceso: string;
+  estadoSri: string;
+  autorizada: boolean;
+  numeroAutorizacion: string | null;
+  fechaAutorizacion: string | null;
+  documentosDisponibles: boolean;
+  emailEstado: string;
+  emailCanal: string | null;
+  emailFallbackAplicado: boolean;
+  emailError: string | null;
+  mensajes: string | null;
 }
 
 export interface FacturaSriRegistro {

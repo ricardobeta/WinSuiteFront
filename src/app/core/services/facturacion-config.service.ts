@@ -8,10 +8,12 @@ import { AuthService } from './auth.service';
 import {
   CatalogoEntry,
   CatalogosFacturacion,
+  ConfiguracionCorreoFactura,
   ConfiguracionFacturacion,
   EstablecimientoConfig,
   FirmaDigitalConfig,
-  PuntoEmisionConfig
+  PuntoEmisionConfig,
+  ResultadoPruebaCorreo
 } from '../../shared/models/facturacion.models';
 
 const EMPTY_CONFIG: ConfiguracionFacturacion = {
@@ -20,7 +22,13 @@ const EMPTY_CONFIG: ConfiguracionFacturacion = {
   ambienteActivo: null,
   codigoPorcentajeIvaActivos: [],
   establecimientos: [],
-  puntosEmision: []
+  puntosEmision: [],
+  direccionMatriz: '',
+  obligadoContabilidad: false,
+  contribuyenteEspecial: '',
+  agenteRetencion: '',
+  contribuyenteRimpe: false,
+  logoUrl: ''
 };
 
 @Injectable({
@@ -33,10 +41,6 @@ export class FacturacionConfigService {
 
   private getConfigPath(): string {
     return `Facturacion/${this.authService.getTenantId()}/configuracion`;
-  }
-
-  private getFirmasPath(): string {
-    return `firmas/${this.authService.getTenantId()}`;
   }
 
   getCatalogosFacturacion(): Observable<CatalogosFacturacion> {
@@ -78,42 +82,9 @@ export class FacturacionConfigService {
   }
 
   getFirmasDisponibles(): Observable<FirmaDigitalConfig[]> {
-    return new Observable<FirmaDigitalConfig[]>((subscriber) => {
-      const firmasRef = ref(this.database, this.getFirmasPath());
-
-      const unsubscribe = onValue(
-        firmasRef,
-        (snapshot) => {
-          const firmas: FirmaDigitalConfig[] = [];
-
-          snapshot.forEach((child) => {
-            const value = child.val() as Partial<FirmaDigitalConfig> | null;
-            if (!value) {
-              return false;
-            }
-
-            firmas.push({
-              id: child.key ?? value.id ?? '',
-              tenantId: value.tenantId,
-              nombreArchivo: value.nombreArchivo ?? 'Sin nombre',
-              nombreComercial: value.nombreComercial ?? undefined,
-              url: value.url ?? '',
-              contrasena: value.contrasena,
-              ruc: value.ruc,
-              razonSocial: value.razonSocial
-            });
-
-            return false;
-          });
-
-          firmas.sort((a, b) => a.nombreArchivo.localeCompare(b.nombreArchivo));
-          subscriber.next(firmas);
-        },
-        (error) => subscriber.error(error)
-      );
-
-      return () => unsubscribe();
-    });
+    return this.http.get<FirmaDigitalConfig[]>(`${environment.apiBaseUrl}/api/firmas`).pipe(
+      map((firmas) => [...firmas].sort((a, b) => a.nombreArchivo.localeCompare(b.nombreArchivo)))
+    );
   }
 
   uploadFirma(file: File, password: string, ruc: string, razonSocial: string, nombreComercial?: string): Observable<FirmaDigitalConfig> {
@@ -131,6 +102,18 @@ export class FacturacionConfigService {
 
   eliminarFirma(firmaId: string): Observable<void> {
     return this.http.delete<void>(`${environment.apiBaseUrl}/api/firmas/${encodeURIComponent(firmaId)}`);
+  }
+
+  getConfiguracionCorreo(): Observable<ConfiguracionCorreoFactura> {
+    return this.http.get<ConfiguracionCorreoFactura>(`${environment.apiBaseUrl}/api/invoices/email-settings`);
+  }
+
+  guardarConfiguracionCorreo(config: ConfiguracionCorreoFactura): Observable<ConfiguracionCorreoFactura> {
+    return this.http.put<ConfiguracionCorreoFactura>(`${environment.apiBaseUrl}/api/invoices/email-settings`, config);
+  }
+
+  probarConfiguracionCorreo(recipient: string): Observable<ResultadoPruebaCorreo> {
+    return this.http.post<ResultadoPruebaCorreo>(`${environment.apiBaseUrl}/api/invoices/email-settings/test`, { recipient });
   }
 
   async getConfiguracionOnce(): Promise<ConfiguracionFacturacion> {
@@ -177,6 +160,12 @@ export class FacturacionConfigService {
           : [],
       establecimientos,
       puntosEmision,
+      direccionMatriz: typeof data?.direccionMatriz === 'string' ? data.direccionMatriz : '',
+      obligadoContabilidad: data?.obligadoContabilidad === true,
+      contribuyenteEspecial: typeof data?.contribuyenteEspecial === 'string' ? data.contribuyenteEspecial : '',
+      agenteRetencion: typeof data?.agenteRetencion === 'string' ? data.agenteRetencion : '',
+      contribuyenteRimpe: data?.contribuyenteRimpe === true,
+      logoUrl: typeof data?.logoUrl === 'string' ? data.logoUrl : '',
       actualizadoEn: typeof data?.actualizadoEn === 'number' ? data.actualizadoEn : undefined
     };
   }

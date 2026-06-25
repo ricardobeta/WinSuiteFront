@@ -15,6 +15,7 @@ import {
   FacturaAmbiente,
   FacturaDetalle,
   FacturaEmisionResultado,
+  FacturaEmisionEstado,
   FacturaEstadoPaso,
   FacturaFormaPago,
   FacturaPago,
@@ -110,6 +111,8 @@ export class FacturaService {
     ventaId: string,
     options: EmitirFacturaOptions = {}
   ): Promise<FacturaEmisionResultado> {
+    return this.emitirDesdeBackend(ventaId, options);
+    /* Legacy client-orchestrated flow retained below temporarily for API rollback compatibility.
     const intervaloMs = options.intervaloMs ?? 3000;
     const intentosMaximos = options.intentosMaximos ?? 40;
     const soloGenerar = options.soloGenerar ?? environment.facturacion?.soloGenerarEnPruebas ?? false;
@@ -185,6 +188,7 @@ export class FacturaService {
       respuestaAutorizacion,
       claveAcceso
     };
+    */
   }
 
   async consultarEstado(accessKey: string): Promise<SriResponse> {
@@ -257,6 +261,56 @@ export class FacturaService {
     } catch (error) {
       console.warn('No se pudo registrar la metrica SRI de la factura.', error);
     }
+  }
+
+  private async emitirDesdeBackend(ventaId: string, options: EmitirFacturaOptions): Promise<FacturaEmisionResultado> {
+    const intervaloMs = options.intervaloMs ?? 3000;
+    const intentosMaximos = options.intentosMaximos ?? 40;
+    options.onStep?.('armando');
+    options.onStep?.('generando');
+    let emision = await firstValueFrom(
+      this.http.post<FacturaEmisionEstado>(`${environment.apiBaseUrl}/api/invoices/emissions`, { ventaId })
+    );
+    options.onStep?.('autorizando');
+    for (let intento = 0; intento < intentosMaximos && !this.esEstadoFinal(emision.estadoSri); intento++) {
+      await this.delay(intervaloMs);
+      emision = await this.getEmision(ventaId);
+    }
+    if (!this.esEstadoFinal(emision.estadoSri)) {
+      throw new Error('La factura continúa en proceso. El servidor seguirá consultando al SRI automáticamente.');
+    }
+    if (!emision.autorizada) {
+      throw new Error(emision.mensajes || `El SRI respondió ${emision.estadoSri}.`);
+    }
+    options.onStep?.('autorizada');
+    return {
+      respuestaFirma: { estado: 'FIRMADA_ENVIADA' },
+      respuestaAutorizacion: {
+        estado: emision.estadoSri,
+        numeroAutorizacion: emision.numeroAutorizacion,
+        fechaAutorizacion: emision.fechaAutorizacion,
+        mensajes: emision.mensajes
+      },
+      claveAcceso: emision.claveAcceso,
+      emision
+    };
+  }
+
+  async getEmision(ventaId: string): Promise<FacturaEmisionEstado> {
+    return firstValueFrom(
+      this.http.get<FacturaEmisionEstado>(`${environment.apiBaseUrl}/api/invoices/emissions/${encodeURIComponent(ventaId)}`)
+    );
+  }
+
+  descargarDocumento(ventaId: string, tipo: 'ride' | 'xml') {
+    return this.http.get(
+      `${environment.apiBaseUrl}/api/invoices/emissions/${encodeURIComponent(ventaId)}/documents/${tipo}`,
+      { responseType: 'blob' }
+    );
+  }
+
+  private esEstadoFinal(estado: string): boolean {
+    return ['AUTORIZADO', 'AUTORIZADA', 'RECHAZADO', 'DEVUELTA', 'ERROR'].includes((estado ?? '').trim().toUpperCase());
   }
 
   private async getDetalleVentaOrThrow(ventaId: string): Promise<VentaDetalle> {
