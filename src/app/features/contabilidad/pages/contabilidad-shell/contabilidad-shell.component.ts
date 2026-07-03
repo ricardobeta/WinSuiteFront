@@ -19,7 +19,9 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
         <a routerLink="plan-cuentas" routerLinkActive="active-link">Plan de cuentas</a>
         <a routerLink="configuracion" routerLinkActive="active-link">Configuracion</a>
         <a routerLink="asientos" routerLinkActive="active-link">Asientos contables</a>
+        <a routerLink="compras" routerLinkActive="active-link">Compras</a>
         <a routerLink="reportes" routerLinkActive="active-link">Reportes</a>
+        <a routerLink="ats" routerLinkActive="active-link">ATS</a>
       </nav>
 
       <main class="contabilidad-content">

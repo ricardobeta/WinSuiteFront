@@ -20,6 +20,8 @@ export interface ArchivoSelectorDialogData {
   subtitle?: string;
   sourceModule?: string;
   allowUpload?: boolean;
+  /** Si se define, solo muestra archivos con estas extensiones (ej. ['xml']). */
+  extensions?: string[];
 }
 
 export interface ArchivoSelectorDialogResult {
@@ -593,7 +595,15 @@ export class ArchivoSelectorDialogComponent implements OnInit {
 
   private applyFilter(): void {
     const term = this.filterForm.getRawValue().search.trim().toLowerCase();
+    const allowedExtensions = (this.data.extensions ?? []).map((ext) => ext.toLowerCase());
     const items = this.files().filter((item) => {
+      if (allowedExtensions.length > 0) {
+        const extension = (item.extension ?? item.name.split('.').pop() ?? '').toString().toLowerCase();
+        if (!allowedExtensions.includes(extension)) {
+          return false;
+        }
+      }
+
       if (!term) {
         return true;
       }

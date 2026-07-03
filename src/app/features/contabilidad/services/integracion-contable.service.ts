@@ -6,12 +6,14 @@ import { AuthService } from '../../../core/services/auth.service';
 import { OrdenCompra, OrdenCompraItem, Producto, RecepcionOC } from '../../inventario/models/inventario.models';
 import { ProductosService } from '../../inventario/services/productos.service';
 import { VentaDetalle, VentaItem } from '../../ventas/models/ventas.models';
+import { FacturaCompra, FacturaCompraItem } from '../models/compras.models';
 import {
   AsientoContable,
   AsientoContableLinea,
   ConfiguracionIntegracionContable,
   MapeoCategoriaContable,
   OrigenAsientoAutomatico,
+  OrigenModuloContable,
   PendienteContabilizacion
 } from '../models/contabilidad.models';
 import { AsientosContablesService } from './asientos-contables.service';
@@ -326,6 +328,103 @@ export class IntegracionContableService {
     });
   }
 
+  /**
+   * Contabiliza una factura de compra registrada. A diferencia de las integraciones de
+   * Ventas/Inventario, aquí registrar es una acción contable explícita del usuario, por lo
+   * que SIEMPRE se intenta el asiento (no depende del flag global de asientos automáticos)
+   * y los errores de configuración se propagan al llamador para mostrarlos en pantalla.
+   */
+  async contabilizarFacturaCompra(factura: FacturaCompra, items: FacturaCompraItem[]): Promise<void> {
+    const origenId = factura.id ?? '';
+    if (!origenId) {
+      throw new Error('La factura de compra no tiene identificador.');
+    }
+
+    // Idempotencia: si ya tiene asiento, no se duplica ni se lanza error.
+    const yaContabilizado = await get(this.getAsientoOrigenRef('FACTURA_COMPRA', origenId));
+    if (yaContabilizado.exists()) {
+      return;
+    }
+
+    const esNotaCredito = factura.tipoComprobante === '04';
+    const config = await this.getConfiguracionOnce();
+    const contexto = await this.crearContexto(config);
+    const productos = factura.alimentaInventario
+      ? await this.cargarProductos(items.map((item) => ({ productoId: item.productoId ?? '' }) as VentaItem))
+      : new Map<string, Producto>();
+    let lineas: AsientoContableLinea[] = [];
+
+    let baseItems = 0;
+    for (const item of items) {
+      const base = this.roundToTwo(item.subtotal);
+      if (base <= 0) {
+        continue;
+      }
+      baseItems += base;
+      if (factura.alimentaInventario && item.productoId) {
+        const producto = productos.get(item.productoId);
+        const cuentaInventario = this.resolverCuenta(contexto, producto, 'cuentaInventarioId', config.cuentaInventarioId, 'Cuenta de inventario');
+        lineas.push(this.crearLinea(contexto, cuentaInventario, item.descripcion, base, 0));
+      } else {
+        lineas.push(this.crearLinea(contexto, this.requerir(config.cuentaGastoComprasId, 'Cuenta de gasto/compras'), item.descripcion, base, 0));
+      }
+    }
+
+    // Fallback (típico en registro manual sin ítems): usar totalSinImpuestos como base del gasto.
+    const totalSinImp = this.roundToTwo(factura.totalSinImpuestos ?? 0);
+    if (baseItems <= 0 && totalSinImp > 0) {
+      lineas.push(this.crearLinea(contexto, this.requerir(config.cuentaGastoComprasId, 'Cuenta de gasto/compras'), 'Compra sin detalle', totalSinImp, 0));
+    }
+
+    if ((factura.montoIva ?? 0) > 0) {
+      lineas.push(this.crearLinea(contexto, this.requerir(config.cuentaIvaComprasId, 'Cuenta de IVA compras'), 'IVA compras', factura.montoIva, 0));
+    }
+
+    if (lineas.length === 0) {
+      throw new Error('El comprobante no tiene montos para contabilizar (subtotal e IVA en cero).');
+    }
+
+    const totalDebe = lineas.reduce((total, linea) => total + linea.debe, 0);
+
+    const totalRetRenta = this.roundToTwo((factura.retencionesRenta ?? []).reduce((total, ret) => total + Number(ret.valRetAir ?? 0), 0));
+    const totalRetIva = this.roundToTwo((factura.retencionesIva ?? []).reduce((total, ret) => total + Number(ret.valRetIva ?? 0), 0));
+
+    if (totalRetRenta > 0) {
+      lineas.push(this.crearLinea(contexto, this.requerir(config.cuentaRetencionFuenteXPagarId, 'Retención en la fuente por pagar'), 'Retención fuente renta', 0, totalRetRenta));
+    }
+    if (totalRetIva > 0) {
+      lineas.push(this.crearLinea(contexto, this.requerir(config.cuentaRetencionIvaXPagarId, 'Retención IVA por pagar'), 'Retención IVA', 0, totalRetIva));
+    }
+
+    const porPagar = this.roundToTwo(totalDebe - totalRetRenta - totalRetIva);
+    const documento = `${factura.establecimiento}-${factura.puntoEmision}-${factura.secuencial}`;
+    lineas.push(this.crearLinea(contexto, this.requerir(config.cuentaCuentasPorPagarId, 'Cuenta por pagar proveedores'), `Factura proveedor ${documento}`, 0, porPagar));
+
+    // Nota de crédito de compra = reversa/devolución: se invierte debe ↔ haber.
+    if (esNotaCredito) {
+      lineas = lineas.map((linea) => ({ ...linea, debe: linea.haber, haber: linea.debe }));
+    }
+
+    const etiqueta = esNotaCredito ? 'Nota de crédito compra' : 'Factura de compra';
+    await this.guardarAsiento(config, {
+      fecha: this.fechaDesdeTimestamp(factura.fechaEmision ?? factura.creadoEn),
+      periodo: '',
+      tipo: 'AJUSTE',
+      glosa: `${etiqueta} ${documento} - ${factura.razonSocialProv}`,
+      referencia: documento,
+      estado: 'BORRADOR',
+      origen: 'FACTURA_COMPRA',
+      origenTipo: 'FACTURA_COMPRA',
+      origenId,
+      origenNumero: factura.numero ?? documento,
+      origenModulo: 'COMPRAS',
+      lineas,
+      totalDebe: 0,
+      totalHaber: 0,
+      diferencia: 0
+    });
+  }
+
   async reintentarPendiente(pendiente: PendienteContabilizacion): Promise<void> {
     if (!pendiente.id) {
       return;
@@ -340,7 +439,7 @@ export class IntegracionContableService {
     origenTipo: OrigenAsientoAutomatico,
     origenId: string,
     origenNumero: string | null | undefined,
-    origenModulo: 'VENTAS' | 'INVENTARIO',
+    origenModulo: OrigenModuloContable,
     action: () => Promise<void>
   ): Promise<void> {
     if (!origenId) {
@@ -526,7 +625,10 @@ export class IntegracionContableService {
       cuentaIvaComprasId: '',
       cuentaInventarioId: '',
       cuentaCostoVentasId: '',
-      cuentaDescuentosVentasId: ''
+      cuentaDescuentosVentasId: '',
+      cuentaGastoComprasId: '',
+      cuentaRetencionFuenteXPagarId: '',
+      cuentaRetencionIvaXPagarId: ''
     };
   }
 

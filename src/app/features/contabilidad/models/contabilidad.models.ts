@@ -66,6 +66,28 @@ export interface ResultadoAplicarPlantilla {
   omitidas: number;
 }
 
+/** Cuenta portable para exportar/importar el plan de cuentas entre empresas (tenants). */
+export interface CuentaPlanExport {
+  codigo: string;
+  nombre: string;
+  descripcion?: string;
+  tipo: TipoCuenta;
+  naturaleza: NaturalezaCuenta;
+  permiteMovimiento: boolean;
+  estado: EstadoCuentaContable;
+  seccionReporte?: SeccionReporteFinanciero | null;
+  ordenReporte?: number | null;
+  incluyeEnEstadoFinanciero?: boolean;
+}
+
+export interface PlanCuentasExport {
+  formato: 'winsuite-plan-cuentas';
+  version: number;
+  exportadoEn: number;
+  totalCuentas: number;
+  cuentas: CuentaPlanExport[];
+}
+
 export interface ConfiguracionEmpresaContable {
   ruc: string;
   razonSocial: string;
@@ -112,13 +134,20 @@ export type EstadoAsiento = 'BORRADOR' | 'APROBADO' | 'REVERSADO';
 
 export type TipoAsiento = 'MANUAL' | 'APERTURA' | 'AJUSTE';
 
-export type OrigenAsiento = 'MANUAL' | 'VENTA_POS' | 'REVERSO_VENTA' | 'RECEPCION_OC' | 'REVERSO_RECEPCION_OC';
+export type OrigenAsiento =
+  | 'MANUAL'
+  | 'VENTA_POS'
+  | 'REVERSO_VENTA'
+  | 'RECEPCION_OC'
+  | 'REVERSO_RECEPCION_OC'
+  | 'FACTURA_COMPRA'
+  | 'REVERSO_FACTURA_COMPRA';
 
 export type OrigenAsientoAutomatico = Exclude<OrigenAsiento, 'MANUAL'>;
 
 export type ModoAsientoAutomatico = 'APROBADO' | 'BORRADOR';
 
-export type OrigenModuloContable = 'VENTAS' | 'INVENTARIO';
+export type OrigenModuloContable = 'VENTAS' | 'INVENTARIO' | 'COMPRAS';
 
 export interface AsientoContableLinea {
   id: string;
@@ -168,6 +197,9 @@ export interface ConfiguracionIntegracionContable {
   cuentaInventarioId: string;
   cuentaCostoVentasId: string;
   cuentaDescuentosVentasId: string;
+  cuentaGastoComprasId: string;
+  cuentaRetencionFuenteXPagarId: string;
+  cuentaRetencionIvaXPagarId: string;
   actualizadoEn?: number;
 }
 

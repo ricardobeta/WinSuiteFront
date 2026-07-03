@@ -18,6 +18,11 @@ export interface SriConfigRequest {
 export interface SriDownloadRequest {
   fechaInicio: string;
   fechaFin: string;
+  // Modo explicito hacia el worker: anio+mes con dia=null => mes completo
+  // (el webscraping selecciona "Todos" del dia = 1 solo captcha). Con dia => ese dia.
+  anio?: number;
+  mes?: number;
+  dia?: number | null;
 }
 
 export interface SriDownloadJob {

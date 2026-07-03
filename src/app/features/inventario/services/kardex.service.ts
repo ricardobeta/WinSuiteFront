@@ -192,6 +192,35 @@ export class KardexService {
     return this.registrarMovimiento(input.productoId, movimiento);
   }
 
+  /** Salida de stock por devolución (p. ej. nota de crédito de compra). Permite saldo negativo. */
+  async registrarSalidaDevolucion(input: RegistrarEntradaOCInput): Promise<string> {
+    if (input.cantidad <= 0) {
+      throw new Error('La cantidad a devolver debe ser mayor a cero.');
+    }
+
+    const resultadoStock = await this.actualizarStock(input.productoId, input.almacenId, -input.cantidad, true);
+    if (!resultadoStock.exito || resultadoStock.saldo === null) {
+      throw new Error('No fue posible actualizar el stock para la devolucion.');
+    }
+
+    const movimiento: Omit<KardexEntry, 'id'> = {
+      almacenId: input.almacenId,
+      tipo: 'SALIDA',
+      motivo: 'DEVOLUCION',
+      cantidad: input.cantidad,
+      costoUnitario: input.costoUnitario,
+      costoTotal: input.cantidad * input.costoUnitario,
+      saldoCantidad: resultadoStock.saldo,
+      referenciaId: input.ordenId,
+      referenciaTipo: 'MANUAL',
+      notas: input.notas ?? 'Devolucion por nota de credito de compra',
+      creadoPor: input.userId,
+      creadoEn: Date.now()
+    };
+
+    return this.registrarMovimiento(input.productoId, movimiento);
+  }
+
   async registrarIngresoInicial(input: RegistrarIngresoInicialInput): Promise<string> {
     if (input.cantidad <= 0) {
       throw new Error('La cantidad inicial debe ser mayor a cero.');

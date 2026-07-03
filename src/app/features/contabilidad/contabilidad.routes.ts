@@ -6,6 +6,9 @@ import { AsientosListComponent } from './pages/asientos-list/asientos-list.compo
 import { AsientoFormComponent } from './pages/asiento-form/asiento-form.component';
 import { ConfiguracionContableComponent } from './pages/configuracion-contable/configuracion-contable.component';
 import { ReportesContablesComponent } from './pages/reportes-contables/reportes-contables.component';
+import { FacturasCompraListComponent } from './pages/facturas-compra-list/facturas-compra-list.component';
+import { FacturaCompraFormComponent } from './pages/factura-compra-form/factura-compra-form.component';
+import { AtsGenerarComponent } from './pages/ats-generar/ats-generar.component';
 
 export const CONTABILIDAD_ROUTES: Routes = [
   {
@@ -67,6 +70,38 @@ export const CONTABILIDAD_ROUTES: Routes = [
         data: {
           module: 'Contabilidad',
           page: 'Reportes contables'
+        }
+      },
+      {
+        path: 'compras',
+        component: FacturasCompraListComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Facturas de compra'
+        }
+      },
+      {
+        path: 'compras/nueva',
+        component: FacturaCompraFormComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Nueva factura de compra'
+        }
+      },
+      {
+        path: 'compras/:id/editar',
+        component: FacturaCompraFormComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Editar factura de compra'
+        }
+      },
+      {
+        path: 'ats',
+        component: AtsGenerarComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Generar ATS'
         }
       },
       {

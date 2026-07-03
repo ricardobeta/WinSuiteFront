@@ -375,7 +375,9 @@ export class AsientosListComponent implements OnInit {
       VENTA_POS: 'Venta POS',
       REVERSO_VENTA: 'Reverso venta',
       RECEPCION_OC: 'Recepcion OC',
-      REVERSO_RECEPCION_OC: 'Reverso recepcion'
+      REVERSO_RECEPCION_OC: 'Reverso recepcion',
+      FACTURA_COMPRA: 'Factura de compra',
+      REVERSO_FACTURA_COMPRA: 'Reverso factura de compra'
     };
     return origen ? labels[origen] ?? origen : 'Manual';
   }

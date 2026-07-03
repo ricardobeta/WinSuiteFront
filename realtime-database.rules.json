@@ -317,6 +317,19 @@
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
+        "facturasCompra": {
+          "$facturaId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+        "facturasCompraItems": {
+          "$facturaId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+            "$itemId": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          }
+        },
         "asientosOrigen": {
           "$origenTipo": {
             "$origenId": {
@@ -341,6 +354,9 @@
             "$anio": {
               ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
             }
+          },
+          "facturasCompra": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
         "saldos": {

@@ -88,7 +88,9 @@ export class PendienteContabilizacionDialogComponent {
       VENTA_POS: 'Venta POS',
       REVERSO_VENTA: 'Reverso de venta',
       RECEPCION_OC: 'Recepcion de orden de compra',
-      REVERSO_RECEPCION_OC: 'Reverso de recepcion'
+      REVERSO_RECEPCION_OC: 'Reverso de recepcion',
+      FACTURA_COMPRA: 'Factura de compra',
+      REVERSO_FACTURA_COMPRA: 'Reverso de factura de compra'
     };
     return labels[origenTipo] ?? origenTipo;
   }

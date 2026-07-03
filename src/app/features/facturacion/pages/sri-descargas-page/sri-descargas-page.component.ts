@@ -3,6 +3,7 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -26,6 +27,7 @@ import { SriDownloadJob, SriFrecuencia } from '../../../../shared/models/sri.mod
     CommonModule,
     ReactiveFormsModule,
     MatButtonModule,
+    MatButtonToggleModule,
     MatCardModule,
     MatDatepickerModule,
     MatFormFieldModule,
@@ -99,25 +101,54 @@ import { SriDownloadJob, SriFrecuencia } from '../../../../shared/models/sri.mod
         <mat-card appearance="outlined" class="surface-card">
           <mat-card-header>
             <mat-card-title>Descarga manual</mat-card-title>
-            <mat-card-subtitle>El rango debe terminar maximo ayer</mat-card-subtitle>
+            <mat-card-subtitle>Elige un dia especifico o un mes completo (maximo hasta ayer)</mat-card-subtitle>
           </mat-card-header>
           <mat-card-content>
             <form class="form" [formGroup]="downloadForm" (ngSubmit)="startDownload()">
-              <div class="date-row">
-                <mat-form-field appearance="outline">
-                  <mat-label>Fecha inicio</mat-label>
-                  <input matInput [matDatepicker]="inicioPicker" formControlName="fechaInicio" [max]="maxDownloadDate" />
-                  <mat-datepicker-toggle matIconSuffix [for]="inicioPicker"></mat-datepicker-toggle>
-                  <mat-datepicker #inicioPicker></mat-datepicker>
-                </mat-form-field>
+              <mat-button-toggle-group
+                class="mode-toggle"
+                [value]="modo()"
+                (change)="setModo($event.value)"
+                aria-label="Modo de descarga">
+                <mat-button-toggle value="dia">
+                  <mat-icon>event</mat-icon>
+                  Dia especifico
+                </mat-button-toggle>
+                <mat-button-toggle value="mes">
+                  <mat-icon>calendar_month</mat-icon>
+                  Mes completo
+                </mat-button-toggle>
+              </mat-button-toggle-group>
 
+              @if (modo() === 'dia') {
                 <mat-form-field appearance="outline">
-                  <mat-label>Fecha fin</mat-label>
-                  <input matInput [matDatepicker]="finPicker" formControlName="fechaFin" [max]="maxDownloadDate" />
-                  <mat-datepicker-toggle matIconSuffix [for]="finPicker"></mat-datepicker-toggle>
-                  <mat-datepicker #finPicker></mat-datepicker>
+                  <mat-label>Fecha</mat-label>
+                  <input matInput [matDatepicker]="fechaPicker" formControlName="fecha" [max]="maxDownloadDate" />
+                  <mat-datepicker-toggle matIconSuffix [for]="fechaPicker"></mat-datepicker-toggle>
+                  <mat-datepicker #fechaPicker></mat-datepicker>
                 </mat-form-field>
-              </div>
+              } @else {
+                <div class="date-row">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Mes</mat-label>
+                    <mat-select formControlName="mes">
+                      @for (m of meses; track m.value) {
+                        <mat-option [value]="m.value">{{ m.label }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>Año</mat-label>
+                    <mat-select formControlName="anio">
+                      @for (y of anios; track y) {
+                        <mat-option [value]="y">{{ y }}</mat-option>
+                      }
+                    </mat-select>
+                  </mat-form-field>
+                </div>
+                <p class="mode-hint">Se descargaran todos los comprobantes del mes seleccionado.</p>
+              }
 
               @if (downloadError()) {
                 <p class="form-error">{{ downloadError() }}</p>
@@ -211,6 +242,8 @@ import { SriDownloadJob, SriFrecuencia } from '../../../../shared/models/sri.mod
     .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: start; }
     .form { display: grid; gap: .9rem; padding-top: .75rem; }
     .date-row, .schedule-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; align-items: center; }
+    .mode-toggle { align-self: start; }
+    .mode-hint { margin: 0; color: var(--muted-foreground); font-size: .82rem; }
     .actions { display: flex; justify-content: flex-end; }
     .form-error { margin: 0; color: #b42318; font-weight: 600; }
     .status-card mat-progress-bar { margin: .5rem 0 1rem; }
@@ -247,21 +280,39 @@ export class SriDescargasPageComponent {
     frecuencia: ['diaria' as SriFrecuencia]
   });
 
+  protected readonly modo = signal<'dia' | 'mes'>('dia');
+  protected readonly meses = [
+    { value: 1, label: 'Enero' }, { value: 2, label: 'Febrero' }, { value: 3, label: 'Marzo' },
+    { value: 4, label: 'Abril' }, { value: 5, label: 'Mayo' }, { value: 6, label: 'Junio' },
+    { value: 7, label: 'Julio' }, { value: 8, label: 'Agosto' }, { value: 9, label: 'Septiembre' },
+    { value: 10, label: 'Octubre' }, { value: 11, label: 'Noviembre' }, { value: 12, label: 'Diciembre' }
+  ];
+  protected readonly anios = this.buildYearOptions();
+
   protected readonly downloadForm = this.formBuilder.nonNullable.group({
-    fechaInicio: [this.addDays(new Date(), -1), [Validators.required]],
-    fechaFin: [this.addDays(new Date(), -1), [Validators.required]]
+    fecha: [this.addDays(new Date(), -1), [Validators.required]],
+    mes: [this.maxDownloadDate.getMonth() + 1, [Validators.required]],
+    anio: [this.maxDownloadDate.getFullYear(), [Validators.required]]
   });
 
+  protected setModo(modo: 'dia' | 'mes'): void {
+    this.modo.set(modo);
+  }
+
   protected downloadError(): string | null {
-    const { fechaInicio, fechaFin } = this.downloadForm.getRawValue();
-    if (!fechaInicio || !fechaFin) {
+    if (this.modo() === 'dia') {
+      const fecha = this.downloadForm.controls.fecha.value;
+      if (!fecha) {
+        return null;
+      }
+      if (fecha > this.maxDownloadDate) {
+        return 'El SRI no permite descargar comprobantes del dia actual o futuro.';
+      }
       return null;
     }
-    if (fechaFin < fechaInicio) {
-      return 'La fecha fin no puede ser anterior a la fecha inicio.';
-    }
-    if (fechaFin > this.maxDownloadDate) {
-      return 'El SRI no permite descargar comprobantes del dia actual o futuro.';
+    const primerDia = this.firstDayOfSelectedMonth();
+    if (primerDia > this.maxDownloadDate) {
+      return 'El mes seleccionado es futuro; el SRI no permite descargar comprobantes del dia actual o futuro.';
     }
     return null;
   }
@@ -298,11 +349,18 @@ export class SriDescargasPageComponent {
       this.downloadForm.markAllAsTouched();
       return;
     }
-    const raw = this.downloadForm.getRawValue();
+    const { inicio, fin } = this.resolveRange();
+    const { anio, mes } = this.downloadForm.getRawValue();
+    // Modo dia => se envia el dia concreto; modo mes => dia=null para que el worker
+    // seleccione "Todos" y descargue el mes completo con un solo captcha.
+    const periodo = this.modo() === 'dia'
+      ? { anio: inicio.getFullYear(), mes: inicio.getMonth() + 1, dia: inicio.getDate() }
+      : { anio, mes, dia: null };
     this.startingDownload.set(true);
     this.service.startDownload({
-      fechaInicio: this.toApiDate(raw.fechaInicio),
-      fechaFin: this.toApiDate(raw.fechaFin)
+      fechaInicio: this.toApiDate(inicio),
+      fechaFin: this.toApiDate(fin),
+      ...periodo
     }).pipe(finalize(() => this.startingDownload.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (job) => {
         this.activeJob.set(job);
@@ -363,6 +421,32 @@ export class SriDescargasPageComponent {
 
   private isActive(job: SriDownloadJob): boolean {
     return job.status === 'queued' || job.status === 'running';
+  }
+
+  private firstDayOfSelectedMonth(): Date {
+    const { mes, anio } = this.downloadForm.getRawValue();
+    const first = new Date(anio, mes - 1, 1);
+    first.setHours(0, 0, 0, 0);
+    return first;
+  }
+
+  private resolveRange(): { inicio: Date; fin: Date } {
+    if (this.modo() === 'dia') {
+      const fecha = this.downloadForm.controls.fecha.value;
+      return { inicio: fecha, fin: fecha };
+    }
+    const { mes, anio } = this.downloadForm.getRawValue();
+    const inicio = this.firstDayOfSelectedMonth();
+    const ultimoDia = new Date(anio, mes, 0);
+    ultimoDia.setHours(0, 0, 0, 0);
+    // El SRI no permite el dia actual ni futuros: tope el fin en maxDownloadDate.
+    const fin = ultimoDia > this.maxDownloadDate ? this.maxDownloadDate : ultimoDia;
+    return { inicio, fin };
+  }
+
+  private buildYearOptions(): number[] {
+    const currentYear = new Date().getFullYear();
+    return [currentYear, currentYear - 1, currentYear - 2];
   }
 
   private toApiDate(value: Date): string {

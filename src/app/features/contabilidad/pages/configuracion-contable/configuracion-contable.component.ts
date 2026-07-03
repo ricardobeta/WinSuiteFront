@@ -45,7 +45,10 @@ type CuentaIntegracionKey =
   | 'cuentaIvaComprasId'
   | 'cuentaInventarioId'
   | 'cuentaCostoVentasId'
-  | 'cuentaDescuentosVentasId';
+  | 'cuentaDescuentosVentasId'
+  | 'cuentaGastoComprasId'
+  | 'cuentaRetencionFuenteXPagarId'
+  | 'cuentaRetencionIvaXPagarId';
 
 type CuentaIntegracionCampo = {
   key: CuentaIntegracionKey;
@@ -702,6 +705,21 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
           key: 'cuentaIvaComprasId',
           label: 'IVA compras',
           tooltip: 'Cuenta de activo/credito tributario que registra el IVA pagado en compras cuando aplica.'
+        },
+        {
+          key: 'cuentaGastoComprasId',
+          label: 'Gasto / compras',
+          tooltip: 'Cuenta de gasto que se debita en facturas de compra cuando la factura NO alimenta inventario.'
+        },
+        {
+          key: 'cuentaRetencionFuenteXPagarId',
+          label: 'Retención fuente por pagar',
+          tooltip: 'Cuenta de pasivo que se acredita por la retención en la fuente de renta practicada al proveedor.'
+        },
+        {
+          key: 'cuentaRetencionIvaXPagarId',
+          label: 'Retención IVA por pagar',
+          tooltip: 'Cuenta de pasivo que se acredita por la retención de IVA practicada al proveedor.'
         }
       ]
     }
@@ -933,7 +951,10 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
       cuentaIvaComprasId: '',
       cuentaInventarioId: '',
       cuentaCostoVentasId: '',
-      cuentaDescuentosVentasId: ''
+      cuentaDescuentosVentasId: '',
+      cuentaGastoComprasId: '',
+      cuentaRetencionFuenteXPagarId: '',
+      cuentaRetencionIvaXPagarId: ''
     };
   }
 

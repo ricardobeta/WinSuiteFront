@@ -6,6 +6,7 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatNativeDateModule } from '@angular/material/core';
 import { MatSelectModule } from '@angular/material/select';
@@ -13,15 +14,23 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 
+import { MatDialog } from '@angular/material/dialog';
+
 import { AuthService } from '../../../../core/services/auth.service';
+import { ArchivoSelectorDialogComponent, ArchivoSelectorDialogData, ArchivoSelectorDialogResult } from '../../../../shared/components/archivo-selector-dialog/archivo-selector-dialog.component';
+import { ArchivoUploaderComponent } from '../../../../shared/components/archivo-uploader/archivo-uploader.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { TwoDecimalInputDirective } from '../../../../shared/directives/two-decimal-input.directive';
+import { ArchivoItem } from '../../../../shared/models/archivos.models';
 import { Almacen, MetodoPrecioVenta, OrdenCompra, OrdenCompraItem, Producto } from '../../models/inventario.models';
 import { AlmacenesService } from '../../services/almacenes.service';
 import { ConfiguracionInventarioService } from '../../services/configuracion-inventario.service';
 import { OrdenesCompraService } from '../../services/ordenes-compra.service';
 import { ProductosService } from '../../services/productos.service';
 import { IntegracionContableService } from '../../../contabilidad/services/integracion-contable.service';
+import { ComprasXmlService } from '../../../contabilidad/services/compras-xml.service';
+import { FacturasCompraService } from '../../../contabilidad/services/facturas-compra.service';
+import { FacturaCompra, FacturaCompraItem, FacturaCompraParsed, TipoIdProveedor } from '../../../contabilidad/models/compras.models';
 
 @Component({
   selector: 'app-orden-compra-recepcion',
@@ -33,13 +42,15 @@ import { IntegracionContableService } from '../../../contabilidad/services/integ
     MatButtonModule,
     MatDatepickerModule,
     MatFormFieldModule,
+    MatIconModule,
     MatInputModule,
     MatNativeDateModule,
     MatSelectModule,
     MatSlideToggleModule,
     MatSnackBarModule,
     MatTableModule,
-    TwoDecimalInputDirective
+    TwoDecimalInputDirective,
+    ArchivoUploaderComponent
   ],
   template: `
     <section class="page-grid">
@@ -90,6 +101,30 @@ import { IntegracionContableService } from '../../../contabilidad/services/integ
                 </div>
                 <mat-slide-toggle formControlName="contabilizarRecepcion">Contabilizar esta recepcion</mat-slide-toggle>
               </div>
+
+              @if (form.controls.contabilizarRecepcion.value) {
+                <div class="xml-uploader">
+                  @if (!facturaParseada()) {
+                    <div class="upload-options">
+                      <button mat-stroked-button type="button" (click)="seleccionarFacturaExistente()">
+                        <mat-icon>folder_open</mat-icon> Seleccionar un XML ya cargado
+                      </button>
+                      <span class="or-sep">o sube uno nuevo</span>
+                    </div>
+                    <app-archivo-uploader sourceModule="compras" (uploaded)="onXmlFacturaSubido($event)"></app-archivo-uploader>
+                    @if (parseandoXml()) {
+                      <p class="xml-hint"><mat-icon>hourglass_top</mat-icon> Analizando la factura del proveedor…</p>
+                    }
+                    <p class="xml-hint muted">Sube el XML de la factura del proveedor para autocompletar y registrar la factura de compra para el ATS.</p>
+                  } @else {
+                    <div class="parsed-chip">
+                      <mat-icon>description</mat-icon>
+                      <span>Factura {{ form.controls.documentoProveedorNumero.value }} cargada · se registrará para el ATS.</span>
+                      <button mat-button type="button" (click)="reemplazarXmlFactura()"><mat-icon>autorenew</mat-icon> Reemplazar</button>
+                    </div>
+                  }
+                </div>
+              }
 
               <div class="grid-3">
                 <mat-form-field appearance="outline">
@@ -245,6 +280,14 @@ import { IntegracionContableService } from '../../../contabilidad/services/integ
     .section-head { display: flex; justify-content: space-between; gap: 1rem; align-items: center; flex-wrap: wrap; }
     .section-head h3, .section-head p { margin: 0; }
     .section-head p { color: var(--muted-foreground); font-size: .9rem; }
+    .xml-uploader { display: grid; gap: .5rem; }
+    .upload-options { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+    .or-sep { color: var(--muted-foreground); font-size: .85rem; }
+    .xml-hint { display: flex; align-items: center; gap: .4rem; margin: 0; }
+    .xml-hint.muted { color: var(--muted-foreground); font-size: .85rem; }
+    .parsed-chip { display: flex; align-items: center; gap: .6rem; padding: .6rem .85rem; border-radius: .75rem; background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
+    .parsed-chip > mat-icon { color: var(--primary); }
+    .parsed-chip span { flex: 1; }
     .table-wrap { overflow: auto; }
     .items-table { width: 100%; min-width: 820px; background: transparent; }
     .cantidad-field { width: 130px; margin-bottom: -1.25em; }
@@ -277,9 +320,17 @@ export class OrdenCompraRecepcionComponent implements OnInit {
   private readonly productosService = inject(ProductosService);
   private readonly configService = inject(ConfiguracionInventarioService);
   private readonly integracionContable = inject(IntegracionContableService);
+  private readonly comprasXml = inject(ComprasXmlService);
+  private readonly facturasCompra = inject(FacturasCompraService);
+  private readonly dialog = inject(MatDialog);
 
   protected readonly guardando = signal(false);
   protected readonly integracionContableActiva = signal(false);
+  protected readonly parseandoXml = signal(false);
+  protected readonly facturaParseada = signal(false);
+  private facturaXml: FacturaCompraParsed | null = null;
+  private facturaArchivoId: string | null = null;
+  private facturaXmlStoragePath: string | null = null;
   protected readonly orden = signal<OrdenCompra | null>(null);
   protected readonly itemRows = signal<OrdenCompraItem[]>([]);
   protected readonly columnasItemsRecepcion = ['producto', 'cantidadOc', 'yaRecibido', 'pendiente', 'ahora'];
@@ -498,6 +549,10 @@ export class OrdenCompraRecepcionComponent implements OnInit {
         userId: this.authService.currentUser()?.uid ?? 'sistema'
       });
 
+      if (this.form.controls.contabilizarRecepcion.value && this.facturaXml) {
+        await this.registrarFacturaCompraDesdeRecepcion(orden);
+      }
+
       this.snackBar.openFromComponent(SuccessSnackbarComponent, {
         data: { message: 'Recepcion registrada correctamente.', icon: 'inventory' },
         duration: 2400,
@@ -516,6 +571,133 @@ export class OrdenCompraRecepcionComponent implements OnInit {
     } finally {
       this.guardando.set(false);
     }
+  }
+
+  protected seleccionarFacturaExistente(): void {
+    const dialogRef = this.dialog.open<ArchivoSelectorDialogComponent, ArchivoSelectorDialogData, ArchivoSelectorDialogResult | null>(
+      ArchivoSelectorDialogComponent,
+      {
+        maxWidth: '96vw',
+        data: {
+          title: 'Selecciona el XML de la factura del proveedor',
+          subtitle: 'Reutiliza un comprobante ya cargado (por ejemplo, los descargados del SRI) o sube uno nuevo.',
+          sourceModule: 'compras',
+          allowUpload: true,
+          extensions: ['xml']
+        }
+      }
+    );
+    dialogRef.afterClosed().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((result) => {
+      if (result?.archivo) {
+        this.onXmlFacturaSubido(result.archivo);
+      }
+    });
+  }
+
+  protected onXmlFacturaSubido(item: ArchivoItem): void {
+    this.facturaArchivoId = item.id;
+    this.facturaXmlStoragePath = item.storagePath ?? null;
+    if (!item.storagePath) {
+      return;
+    }
+    this.parseandoXml.set(true);
+    this.comprasXml.parseXml(item.storagePath).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (parsed) => {
+        this.facturaXml = parsed;
+        this.parseandoXml.set(false);
+        this.facturaParseada.set(true);
+        this.form.patchValue({
+          documentoProveedorNumero: parsed.secuencialCompleto || `${parsed.establecimiento}-${parsed.puntoEmision}-${parsed.secuencial}`,
+          documentoProveedorFecha: parsed.fechaEmision ? new Date(parsed.fechaEmision) : new Date(),
+          documentoProveedorSubtotal: Number(parsed.totalSinImpuestos ?? 0),
+          documentoProveedorIva: Number(parsed.montoIva ?? 0),
+          documentoProveedorTotal: Number(parsed.importeTotal ?? 0),
+          documentoProveedorAutorizacion: parsed.claveAcceso ?? ''
+        });
+      },
+      error: () => {
+        this.parseandoXml.set(false);
+        this.facturaParseada.set(false);
+        this.snackBar.openFromComponent(SuccessSnackbarComponent, {
+          data: { message: 'No se pudo analizar el XML. Puedes ingresar los datos manualmente.', icon: 'error' },
+          duration: 2800,
+          horizontalPosition: 'end',
+          verticalPosition: 'top'
+        });
+      }
+    });
+  }
+
+  protected reemplazarXmlFactura(): void {
+    this.facturaParseada.set(false);
+    this.facturaXml = null;
+  }
+
+  /** Crea una factura de compra (para el ATS) a partir del XML parseado en la recepción. */
+  private async registrarFacturaCompraDesdeRecepcion(orden: OrdenCompra): Promise<void> {
+    const parsed = this.facturaXml;
+    if (!parsed) {
+      return;
+    }
+    const userId = this.authService.currentUser()?.uid ?? 'sistema';
+    const fechaEmision = parsed.fechaEmision ? new Date(parsed.fechaEmision).getTime() : Date.now();
+    const importeTotal = Number(parsed.importeTotal ?? 0);
+
+    const factura: Omit<FacturaCompra, 'id' | 'numero' | 'creadoEn' | 'actualizadoEn'> = {
+      estado: 'REGISTRADA',
+      tpIdProv: (parsed.tpIdProv as TipoIdProveedor) ?? '01',
+      idProv: parsed.idProv ?? '',
+      razonSocialProv: parsed.razonSocialProv ?? '',
+      parteRel: 'NO',
+      codSustento: '01',
+      tipoComprobante: parsed.tipoComprobante ?? '01',
+      establecimiento: parsed.establecimiento ?? '',
+      puntoEmision: parsed.puntoEmision ?? '',
+      secuencial: parsed.secuencial ?? '',
+      autorizacion: parsed.claveAcceso ?? '',
+      claveAcceso: parsed.claveAcceso ?? '',
+      fechaEmision,
+      fechaRegistro: Date.now(),
+      baseNoGraIva: Number(parsed.baseNoGraIva ?? 0),
+      baseImponible: Number(parsed.baseImponible ?? 0),
+      baseImpGrav: Number(parsed.baseImpGrav ?? 0),
+      baseImpExe: Number(parsed.baseImpExe ?? 0),
+      montoIce: Number(parsed.montoIce ?? 0),
+      montoIva: Number(parsed.montoIva ?? 0),
+      totalSinImpuestos: Number(parsed.totalSinImpuestos ?? 0),
+      importeTotal,
+      formasDePago: importeTotal >= 500 ? ['20'] : [],
+      pagoExterior: { pagoLocExt: '01' },
+      retencionesRenta: [],
+      retencionesIva: [],
+      totalRetencion: 0,
+      // El inventario ya lo alimentó la recepción; esta factura es solo el registro tributario/ATS.
+      alimentaInventario: false,
+      almacenId: null,
+      ordenCompraId: orden.id ?? null,
+      archivoId: this.facturaArchivoId,
+      xmlStoragePath: this.facturaXmlStoragePath,
+      creadoPor: userId
+    };
+
+    const items: Omit<FacturaCompraItem, 'id'>[] = (parsed.items ?? []).map((item) => {
+      const subtotal = this.redondear2(Number(item.cantidad ?? 0) * Number(item.precioUnitario ?? 0));
+      const iva = this.redondear2(subtotal * Number(item.ivaPorcentaje ?? 0) / 100);
+      return {
+        productoId: null,
+        codigoPrincipal: item.codigoPrincipal ?? '',
+        descripcion: item.descripcion ?? '',
+        cantidad: Number(item.cantidad ?? 0),
+        costoUnitario: Number(item.precioUnitario ?? 0),
+        descuento: Number(item.descuento ?? 0),
+        ivaPorcentaje: Number(item.ivaPorcentaje ?? 0),
+        subtotal,
+        iva,
+        total: this.redondear2(subtotal + iva)
+      };
+    });
+
+    await this.facturasCompra.crearFacturaCompra({ factura, items });
   }
 
   private toTimestamp(value: unknown): number {

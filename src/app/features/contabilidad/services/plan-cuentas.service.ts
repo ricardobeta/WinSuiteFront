@@ -5,7 +5,9 @@ import { Observable } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import {
   CuentaContable,
+  CuentaPlanExport,
   NaturalezaCuenta,
+  PlanCuentasExport,
   PlantillaPlanCuentas,
   ResultadoAplicarPlantilla,
   TipoCuenta
@@ -162,6 +164,86 @@ export class PlanCuentasService {
         seccionReporte: cuentaPlantilla.seccionReporte ?? this.sugerirSeccionReporte(codigo),
         ordenReporte: cuentaPlantilla.ordenReporte ?? this.sugerirOrdenReporte(codigo),
         incluyeEnEstadoFinanciero: cuentaPlantilla.incluyeEnEstadoFinanciero ?? true,
+        creadoEn: Date.now(),
+        actualizadoEn: Date.now()
+      };
+
+      await set(cuentaRef, cuenta);
+      codigosExistentes.add(codigo);
+      idsPorCodigo.set(codigo, cuentaRef.key!);
+      insertadas += 1;
+    }
+
+    return { insertadas, omitidas };
+  }
+
+  /** Exporta el plan de cuentas del tenant activo a un JSON portable (sin ids ni jerarquía). */
+  async exportarPlanCuentas(): Promise<PlanCuentasExport> {
+    const cuentas = await this.getCuentasOnce();
+    return {
+      formato: 'winsuite-plan-cuentas',
+      version: 1,
+      exportadoEn: Date.now(),
+      totalCuentas: cuentas.length,
+      cuentas: cuentas.map((cuenta) => ({
+        codigo: this.normalizarCodigo(cuenta.codigo),
+        nombre: cuenta.nombre,
+        descripcion: cuenta.descripcion ?? '',
+        tipo: cuenta.tipo,
+        naturaleza: cuenta.naturaleza,
+        permiteMovimiento: cuenta.permiteMovimiento,
+        estado: cuenta.estado,
+        seccionReporte: cuenta.seccionReporte ?? null,
+        ordenReporte: cuenta.ordenReporte ?? null,
+        incluyeEnEstadoFinanciero: cuenta.incluyeEnEstadoFinanciero ?? true
+      }))
+    };
+  }
+
+  /**
+   * Importa un plan de cuentas exportado en el tenant activo. Salta códigos ya existentes,
+   * inserta en orden de código y reconstruye `cuentaPadreId` desde el código padre,
+   * preservando los atributos explícitos de cada cuenta. Idempotente.
+   */
+  async importarPlanCuentas(data: PlanCuentasExport): Promise<ResultadoAplicarPlantilla> {
+    if (!data || data.formato !== 'winsuite-plan-cuentas' || !Array.isArray(data.cuentas)) {
+      throw new Error('El archivo no es un plan de cuentas válido de WinSuite.');
+    }
+
+    const existentes = await this.getCuentasOnce();
+    const codigosExistentes = new Set(existentes.map((cuenta) => this.normalizarCodigo(cuenta.codigo)));
+    const idsPorCodigo = new Map(existentes.map((cuenta) => [this.normalizarCodigo(cuenta.codigo), cuenta.id!]));
+    let insertadas = 0;
+    let omitidas = 0;
+
+    const ordenadas = [...data.cuentas].sort((a, b) => this.compararCodigos(a.codigo, b.codigo));
+    for (const cuentaExport of ordenadas) {
+      const codigo = this.normalizarCodigo(cuentaExport.codigo);
+      if (!codigo || !cuentaExport.nombre) {
+        omitidas += 1;
+        continue;
+      }
+      if (codigosExistentes.has(codigo)) {
+        omitidas += 1;
+        continue;
+      }
+
+      const parentCode = this.obtenerCodigoPadre(codigo);
+      const cuentaRef = push(this.getCollectionRef());
+      const cuenta: Omit<CuentaContable, 'id'> = {
+        codigo,
+        nombre: cuentaExport.nombre.trim(),
+        descripcion: cuentaExport.descripcion?.trim() || '',
+        cuentaPadreId: parentCode ? idsPorCodigo.get(parentCode) ?? null : null,
+        nivel: this.calcularNivel(codigo),
+        tipo: cuentaExport.tipo ?? this.sugerirTipo(codigo),
+        naturaleza: cuentaExport.naturaleza ?? this.sugerirNaturaleza(codigo),
+        permiteMovimiento: cuentaExport.permiteMovimiento ?? false,
+        estado: cuentaExport.estado ?? 'ACTIVA',
+        origen: 'MANUAL',
+        seccionReporte: cuentaExport.seccionReporte ?? this.sugerirSeccionReporte(codigo),
+        ordenReporte: cuentaExport.ordenReporte ?? this.sugerirOrdenReporte(codigo),
+        incluyeEnEstadoFinanciero: cuentaExport.incluyeEnEstadoFinanciero ?? true,
         creadoEn: Date.now(),
         actualizadoEn: Date.now()
       };

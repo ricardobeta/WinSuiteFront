@@ -252,10 +252,26 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
         requiredAction: 'read'
       },
       {
+        id: 'accounting-purchases',
+        label: 'Compras',
+        icon: 'shopping_cart',
+        route: '/workspace/contabilidad/compras',
+        requiredModule: 'contabilidad',
+        requiredAction: 'read'
+      },
+      {
         id: 'accounting-reports',
         label: 'Reportes',
         icon: 'insert_chart',
         route: '/workspace/contabilidad/reportes',
+        requiredModule: 'contabilidad',
+        requiredAction: 'read'
+      },
+      {
+        id: 'accounting-ats',
+        label: 'ATS',
+        icon: 'summarize',
+        route: '/workspace/contabilidad/ats',
         requiredModule: 'contabilidad',
         requiredAction: 'read'
       }

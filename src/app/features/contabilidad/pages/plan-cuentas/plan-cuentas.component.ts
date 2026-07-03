@@ -16,7 +16,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { AuthorizationService } from '../../../../core/services/authorization.service';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
-import { CuentaContable, EstadoCuentaContable, TipoCuenta } from '../../models/contabilidad.models';
+import { CuentaContable, EstadoCuentaContable, PlanCuentasExport, TipoCuenta } from '../../models/contabilidad.models';
 import { PLANTILLA_ESF_CONSTRUCTORA, PLANTILLA_PLAN_COMPLETO_ECUADOR } from '../../data/plan-cuentas-templates';
 import { CuentaContableDialogComponent } from '../../components/cuenta-contable-dialog/cuenta-contable-dialog.component';
 import { PlanCuentasService } from '../../services/plan-cuentas.service';
@@ -60,6 +60,15 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
             <mat-icon>library_add</mat-icon>
             Plan completo Ecuador
           </button>
+          <button mat-stroked-button type="button" (click)="exportarPlan()" [disabled]="cargando() || cuentas().length === 0" matTooltipPosition="above" matTooltip="Descarga el plan de cuentas en JSON para migrarlo a otra empresa">
+            <mat-icon>download</mat-icon>
+            Exportar JSON
+          </button>
+          <button mat-stroked-button type="button" (click)="importInput.click()" [disabled]="importando() || !canCreate()" matTooltipPosition="above" matTooltip="Carga un plan de cuentas JSON exportado de otra empresa">
+            <mat-icon>upload</mat-icon>
+            {{ importando() ? 'Importando...' : 'Importar JSON' }}
+          </button>
+          <input #importInput type="file" accept=".json,application/json" hidden (change)="onArchivoImport($event)" />
           <button mat-raised-button color="primary" type="button" (click)="abrirDialogo()" [disabled]="!canCreate()" matTooltipPosition="above" [matTooltip]="ayuda.nuevaCuenta">
             <mat-icon>add</mat-icon>
             Nueva cuenta
@@ -294,6 +303,7 @@ export class PlanCuentasComponent implements OnInit {
   protected readonly cargando = signal(true);
   protected readonly aplicandoPlantilla = signal(false);
   protected readonly aplicandoMovimiento = signal(false);
+  protected readonly importando = signal(false);
   protected readonly cuentasSeleccionadas = signal<Set<string>>(new Set());
   protected readonly busqueda = signal('');
   protected readonly tipoFiltro = signal<TipoCuenta | 'TODOS'>('TODOS');
@@ -627,6 +637,81 @@ export class PlanCuentasComponent implements OnInit {
       this.mostrarMensaje('No se pudo cargar la plantilla.', 'error');
     } finally {
       this.aplicandoPlantilla.set(false);
+    }
+  }
+
+  protected async exportarPlan(): Promise<void> {
+    try {
+      const data = await this.planCuentasService.exportarPlanCuentas();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `plan-cuentas-${new Date().toISOString().slice(0, 10)}.json`;
+      link.click();
+      URL.revokeObjectURL(url);
+      this.mostrarMensaje(`Plan de cuentas exportado (${data.totalCuentas} cuentas).`, 'download');
+    } catch {
+      this.mostrarMensaje('No se pudo exportar el plan de cuentas.', 'error');
+    }
+  }
+
+  protected onArchivoImport(event: Event): void {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.[0];
+    if (input) {
+      input.value = '';
+    }
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      let data: PlanCuentasExport;
+      try {
+        data = JSON.parse(String(reader.result)) as PlanCuentasExport;
+      } catch {
+        this.mostrarMensaje('El archivo no es un JSON válido.', 'error');
+        return;
+      }
+      if (!data || data.formato !== 'winsuite-plan-cuentas' || !Array.isArray(data.cuentas)) {
+        this.mostrarMensaje('El archivo no es un plan de cuentas de WinSuite.', 'error');
+        return;
+      }
+      this.confirmarImport(data);
+    };
+    reader.onerror = () => this.mostrarMensaje('No se pudo leer el archivo.', 'error');
+    reader.readAsText(file);
+  }
+
+  private confirmarImport(data: PlanCuentasExport): void {
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '440px',
+      data: {
+        title: 'Importar plan de cuentas',
+        message: `Se importaran hasta ${data.cuentas.length} cuentas. Las que ya existan por codigo se omiten.`,
+        confirmText: 'Importar',
+        cancelText: 'Cancelar'
+      }
+    });
+
+    dialogRef.afterClosed().subscribe((confirmado) => {
+      if (confirmado) {
+        void this.ejecutarImport(data);
+      }
+    });
+  }
+
+  private async ejecutarImport(data: PlanCuentasExport): Promise<void> {
+    this.importando.set(true);
+    try {
+      const resultado = await this.planCuentasService.importarPlanCuentas(data);
+      this.mostrarMensaje(`Importadas ${resultado.insertadas} cuentas, ${resultado.omitidas} omitidas.`, 'upload');
+    } catch (error) {
+      this.mostrarMensaje(error instanceof Error ? error.message : 'No se pudo importar el plan de cuentas.', 'error');
+    } finally {
+      this.importando.set(false);
     }
   }
 
