@@ -441,6 +441,60 @@
           }
         }
       }
+    },
+
+    "sitios": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+      }
+    },
+
+    "sitios_catalogo": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+      }
+    },
+
+    "publicaciones": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+      }
+    },
+
+    "pedidos_web": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".indexOn": ["creadoEn", "estado"],
+        "$pedidoId": {
+          ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+        }
+      }
+    },
+
+    "form_submissions": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".write": false
+      }
+    },
+
+    "subdominios": {
+      ".read": "auth != null",
+      "$subdominio": {
+        ".write": "auth != null && ((!data.exists() && root.child('tenant_users').child(newData.child('tenantId').val()).child(auth.uid).child('active').val() === true) || (!newData.exists() && root.child('tenant_users').child(data.child('tenantId').val()).child(auth.uid).child('active').val() === true))",
+        ".validate": "$subdominio.matches(/^[a-z0-9][a-z0-9-]{2,30}$/) && newData.hasChildren(['tenantId', 'sitioId', 'creadoEn'])"
+      }
+    },
+
+    "dominios_custom": {
+      ".read": "auth != null",
+      "$dominioEscapado": {
+        ".write": "auth != null && ((!data.exists() && root.child('tenant_users').child(newData.child('tenantId').val()).child(auth.uid).child('active').val() === true) || (!newData.exists() && root.child('tenant_users').child(data.child('tenantId').val()).child(auth.uid).child('active').val() === true))",
+        ".validate": "newData.hasChildren(['tenantId', 'sitioId', 'dominio', 'tokenVerificacion', 'creadoEn']) && newData.child('verificado').val() === false"
+      }
     }
   }
 }

@@ -1,0 +1,3 @@
+[submodule "libs/bloques"]
+	path = libs/bloques
+	url = https://github.com/ricardobeta/winsuite-bloques.git
