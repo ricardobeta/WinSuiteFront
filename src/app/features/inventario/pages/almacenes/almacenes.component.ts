@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -158,6 +158,13 @@ export class AlmacenesComponent implements OnInit {
   protected readonly almacenes = signal<Almacen[]>([]);
   protected readonly almacenSeleccionado = signal<Almacen | null>(null);
   protected readonly stockRows = signal<AlmacenStockRow[]>([]);
+  protected readonly stockKpi = computed(() => {
+    const rows = this.stockRows();
+    return {
+      skus: rows.filter((row) => row.cantidad > 0).length,
+      valor: rows.reduce((sum, row) => sum + row.valorTotal, 0)
+    };
+  });
   protected readonly stockColumns = ['sku', 'nombre', 'cantidad', 'reservado', 'disponible', 'stockMinimo', 'valorTotal'];
   private stockSub?: Subscription;
 
@@ -286,7 +293,7 @@ export class AlmacenesComponent implements OnInit {
       return 0;
     }
 
-    return this.stockRows().filter((r) => r.cantidad > 0).length;
+    return this.stockKpi().skus;
   }
 
   protected kpiValor(almacenId: string): number {
@@ -294,7 +301,7 @@ export class AlmacenesComponent implements OnInit {
       return 0;
     }
 
-    return this.stockRows().reduce((sum, r) => sum + r.valorTotal, 0);
+    return this.stockKpi().valor;
   }
 
   private toast(message: string, icon: string): void {

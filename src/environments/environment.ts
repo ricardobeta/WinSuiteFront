@@ -4,6 +4,8 @@ export interface AppEnvironment {
   production: boolean;
   firebase: FirebaseOptions;
   apiBaseUrl: string;
+  // URL del worker SRI local (agente) en la maquina del cliente.
+  sriWorkerBaseUrl: string;
   support?: {
     whatsappPhone: string;
     whatsappMessage: string;
@@ -16,6 +18,7 @@ export interface AppEnvironment {
 export const environment: AppEnvironment = {
   production: false,
   apiBaseUrl: 'http://localhost:8080',
+  sriWorkerBaseUrl: 'http://127.0.0.1:8010',
   support: {
     whatsappPhone: '',
     whatsappMessage: 'Hola, necesito ayuda con Winsuite.'

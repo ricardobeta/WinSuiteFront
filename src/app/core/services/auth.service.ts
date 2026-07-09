@@ -115,7 +115,8 @@ export class AuthService {
 
   async register(
     user: RegisterUserPayload,
-    business: RegisterBusinessPayload
+    business: RegisterBusinessPayload,
+    activeModules: string[]
   ): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
@@ -139,7 +140,8 @@ export class AuthService {
           ownerId: credential.user.uid,
           plan: 'free',
           country: business.country,
-          mobilePhone: business.mobilePhone
+          mobilePhone: business.mobilePhone,
+          activeModules
         })
       );
 

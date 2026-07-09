@@ -1,0 +1,150 @@
+<section class="plantillas">
+  <!-- Lista -->
+  <aside class="panel surface-card list">
+    <div class="header-row">
+      <div><p class="eyebrow">Plantillas</p><h2>Mensajes</h2></div>
+      <button mat-raised-button color="primary" type="button" (click)="newTemplate()"><mat-icon>add</mat-icon> Nueva</button>
+    </div>
+    @if (!templates().length) { <p class="muted">Aún no hay plantillas. Crea la primera.</p> }
+    <div class="tpl-list">
+      @for (tpl of templates(); track tpl.id) {
+        <button mat-button type="button" class="tpl-row" [class.active]="draft().id === tpl.id" (click)="edit(tpl)">
+          <strong>{{ tpl.name }}</strong>
+          <span class="badge" [class]="statusClass(tpl.status)">{{ tpl.status }}</span>
+        </button>
+      }
+    </div>
+  </aside>
+
+  <!-- Editor -->
+  <main class="panel surface-card editor">
+    <div class="grid2">
+      <mat-form-field appearance="outline">
+        <mat-label>Instancia</mat-label>
+        <mat-select [ngModel]="draft().instanceId" (ngModelChange)="draft.set({ ...draft(), instanceId: $event })">
+          @for (i of connectedInstances(); track i.id) { <mat-option [value]="i.id">{{ i.displayName }}</mat-option> }
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Nombre (a-z, _)</mat-label>
+        <input matInput [ngModel]="draft().name" (ngModelChange)="normalizeName($event)" placeholder="promo_bienvenida" />
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Categoría</mat-label>
+        <mat-select [ngModel]="draft().category" (ngModelChange)="draft.set({ ...draft(), category: $event })">
+          <mat-option value="MARKETING">Marketing</mat-option>
+          <mat-option value="UTILITY">Utilidad</mat-option>
+          <mat-option value="AUTHENTICATION">Autenticación</mat-option>
+        </mat-select>
+      </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>Idioma</mat-label>
+        <input matInput [ngModel]="draft().language" (ngModelChange)="draft.set({ ...draft(), language: $event })" placeholder="es" />
+      </mat-form-field>
+    </div>
+
+    <div class="grid2">
+      <mat-form-field appearance="outline">
+        <mat-label>Cabecera</mat-label>
+        <mat-select [ngModel]="draft().headerType" (ngModelChange)="draft.set({ ...draft(), headerType: $event })">
+          <mat-option value="NONE">Sin cabecera</mat-option>
+          <mat-option value="TEXT">Texto</mat-option>
+          <mat-option value="IMAGE">Imagen</mat-option>
+        </mat-select>
+      </mat-form-field>
+      @if (draft().headerType === 'TEXT') {
+        <mat-form-field appearance="outline">
+          <mat-label>Texto de cabecera</mat-label>
+          <input matInput [ngModel]="draft().headerText" (ngModelChange)="draft.set({ ...draft(), headerText: $event })" />
+        </mat-form-field>
+      }
+    </div>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Cuerpo (usa {{ '{{1}}' }}, {{ '{{2}}' }} para variables)</mat-label>
+      <textarea matInput rows="4" [ngModel]="draft().body" (ngModelChange)="draft.set({ ...draft(), body: $event }); syncExamples()"></textarea>
+    </mat-form-field>
+
+    @if (variableCount() > 0) {
+      <div class="examples">
+        <p class="eyebrow">Ejemplos de variables</p>
+        <div class="grid2">
+          @for (ex of draft().examples; track $index) {
+            <mat-form-field appearance="outline">
+              <mat-label>{{ '{{' + ($index + 1) + '}}' }}</mat-label>
+              <input matInput [ngModel]="draft().examples[$index]" (ngModelChange)="draft().examples[$index] = $event" />
+            </mat-form-field>
+          }
+        </div>
+      </div>
+    }
+
+    <mat-form-field appearance="outline">
+      <mat-label>Pie (footer)</mat-label>
+      <input matInput [ngModel]="draft().footerText" (ngModelChange)="draft.set({ ...draft(), footerText: $event })" maxlength="60" />
+    </mat-form-field>
+
+    <div class="buttons-block">
+      <div class="header-row"><p class="eyebrow">Botones</p><button mat-stroked-button type="button" (click)="addButton()"><mat-icon>add</mat-icon> Botón</button></div>
+      @for (btn of draft().buttons; track $index) {
+        <div class="btn-row">
+          <mat-form-field appearance="outline">
+            <mat-label>Tipo</mat-label>
+            <mat-select [(ngModel)]="btn.type"><mat-option value="QUICK_REPLY">Respuesta rápida</mat-option><mat-option value="URL">URL</mat-option><mat-option value="PHONE_NUMBER">Teléfono</mat-option></mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline"><mat-label>Texto</mat-label><input matInput [(ngModel)]="btn.text" /></mat-form-field>
+          @if (btn.type !== 'QUICK_REPLY') {
+            <mat-form-field appearance="outline"><mat-label>{{ btn.type === 'URL' ? 'URL' : 'Teléfono' }}</mat-label><input matInput [(ngModel)]="btn.value" /></mat-form-field>
+          }
+          <button mat-icon-button type="button" (click)="removeButton($index)"><mat-icon>close</mat-icon></button>
+        </div>
+      }
+    </div>
+
+    <div class="actions">
+      <button mat-stroked-button type="button" [disabled]="saving()" (click)="save()"><mat-icon>save</mat-icon> Guardar</button>
+      <button mat-stroked-button type="button" [disabled]="saving()" (click)="submit()"><mat-icon>send</mat-icon> Enviar a aprobación</button>
+      <button mat-raised-button color="primary" type="button" [disabled]="saving() || !draft().id" (click)="openSend()"><mat-icon>forward_to_inbox</mat-icon> Enviar como mensaje</button>
+    </div>
+
+    @if (errorMessage()) { <p class="msg error">{{ errorMessage() }}</p> }
+    @if (successMessage()) { <p class="msg success">{{ successMessage() }}</p> }
+  </main>
+
+  <!-- Vista previa -->
+  <aside class="panel surface-card preview-panel">
+    <p class="eyebrow">Vista previa</p>
+    <div class="phone">
+      <div class="bubble">
+        @if (draft().headerType === 'TEXT' && draft().headerText) { <p class="hdr">{{ draft().headerText }}</p> }
+        @if (draft().headerType === 'IMAGE') { <div class="img-ph"><mat-icon>image</mat-icon></div> }
+        <p class="body">{{ previewBody() }}</p>
+        @if (draft().footerText) { <p class="ftr">{{ draft().footerText }}</p> }
+      </div>
+      @if (draft().buttons.length) {
+        <div class="btns">
+          @for (btn of draft().buttons; track $index) {
+            <div class="pv-btn"><mat-icon>{{ btn.type === 'URL' ? 'open_in_new' : btn.type === 'PHONE_NUMBER' ? 'call' : 'reply' }}</mat-icon>{{ btn.text }}</div>
+          }
+        </div>
+      }
+    </div>
+    <p class="hint muted">Así se verá aproximadamente en WhatsApp. La aprobación de Meta puede tardar minutos.</p>
+  </aside>
+
+  <!-- Diálogo enviar -->
+  @if (sendOpen()) {
+    <div class="dlg-backdrop" (click)="sendOpen.set(false)"></div>
+    <div class="dlg surface-card">
+      <h3>Enviar "{{ draft().name }}"</h3>
+      <mat-form-field appearance="outline"><mat-label>Teléfono (con código país)</mat-label><input matInput [(ngModel)]="sendPhone" placeholder="593999999999" /></mat-form-field>
+      @for (v of sendVariables; track $index) {
+        <mat-form-field appearance="outline"><mat-label>Valor {{ '{{' + ($index + 1) + '}}' }}</mat-label><input matInput [ngModel]="sendVariables[$index]" (ngModelChange)="sendVariables[$index] = $event" /></mat-form-field>
+      }
+      <div class="actions">
+        <button mat-stroked-button type="button" (click)="sendOpen.set(false)">Cancelar</button>
+        <button mat-raised-button color="primary" type="button" [disabled]="saving()" (click)="sendAsMessage()">Enviar</button>
+      </div>
+    </div>
+  }
+</section>

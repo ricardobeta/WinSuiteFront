@@ -273,6 +273,10 @@ type GrupoEstadoFinanciero = {
                     <th mat-header-cell *matHeaderCellDef>Asiento</th>
                     <td mat-cell *matCellDef="let row">{{ row.numero }}</td>
                   </ng-container>
+                  <ng-container matColumnDef="numeroFactura">
+                    <th mat-header-cell *matHeaderCellDef># Factura</th>
+                    <td mat-cell *matCellDef="let row">{{ row.numeroFactura || '—' }}</td>
+                  </ng-container>
                   <ng-container matColumnDef="cuenta">
                     <th mat-header-cell *matHeaderCellDef>Cuenta</th>
                     <td mat-cell *matCellDef="let row">{{ row.codigoCuenta }} - {{ row.nombreCuenta }}</td>
@@ -620,7 +624,7 @@ export class ReportesContablesComponent implements OnInit {
 
   protected readonly tiposCuenta: TipoCuenta[] = ['ACTIVO', 'PASIVO', 'PATRIMONIO', 'INGRESO', 'GASTO', 'COSTO'];
   protected readonly columnasDiario = ['fecha', 'numero', 'glosa', 'cuenta', 'debe', 'haber', 'estado', 'acciones'];
-  protected readonly columnasMayor = ['fecha', 'numero', 'cuenta', 'concepto', 'debe', 'haber', 'saldo'];
+  protected readonly columnasMayor = ['fecha', 'numero', 'numeroFactura', 'cuenta', 'concepto', 'debe', 'haber', 'saldo'];
   protected readonly columnasBalance = ['codigoCuenta', 'nombreCuenta', 'tipo', 'totalDebe', 'totalHaber', 'saldoDeudor', 'saldoAcreedor'];
   protected readonly ayudaReportes = {
     submodulo: 'Reportes calculados desde asientos aprobados y reversados. Los borradores no afectan saldos ni estados financieros.',
@@ -834,6 +838,7 @@ export class ReportesContablesComponent implements OnInit {
       fecha: fila.fecha,
       periodo: fila.periodo,
       asiento: fila.numero,
+      numeroFactura: fila.numeroFactura ?? '',
       codigoCuenta: fila.codigoCuenta,
       cuenta: fila.nombreCuenta,
       concepto: fila.concepto,

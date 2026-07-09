@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
@@ -13,6 +13,15 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { TenantRoleDefinition } from '../../../../core/models/auth.models';
 import { ColaboradoresService } from '../../services/colaboradores.service';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
+
+interface RolePermissionEntry {
+  moduleKey: string;
+  summary: string;
+}
+
+type RoleCard = TenantRoleDefinition & {
+  permissionEntries: RolePermissionEntry[];
+};
 
 @Component({
   selector: 'app-roles-colaboradores',
@@ -35,9 +44,9 @@ import { ConfirmDialogComponent } from '../../../../shared/components/confirm-di
         </button>
       </div>
 
-      @if (roles().length > 0) {
+      @if (roleCards().length > 0) {
         <div class="roles-grid">
-          @for (role of roles(); track role.id) {
+          @for (role of roleCards(); track role.id) {
             <article class="surface-card role-card">
               <div class="card-header">
                 <div class="role-info">
@@ -88,7 +97,7 @@ import { ConfirmDialogComponent } from '../../../../shared/components/confirm-di
               </p>
 
               <div class="permissions">
-                @for (permission of permissionEntries(role); track permission.moduleKey) {
+                @for (permission of role.permissionEntries; track permission.moduleKey) {
                   <div class="permission-row">
                     <strong>{{ permission.moduleKey }}</strong>
                     <span class="actions-summary">
@@ -271,6 +280,12 @@ export class RolesColaboradoresComponent implements OnInit {
 
   protected readonly roles = signal<TenantRoleDefinition[]>([]);
   protected readonly isDeleting = signal(false);
+  protected readonly roleCards = computed<RoleCard[]>(() =>
+    this.roles().map((role) => ({
+      ...role,
+      permissionEntries: this.buildPermissionEntries(role)
+    }))
+  );
 
   ngOnInit(): void {
     this.loadRoles();
@@ -356,7 +371,7 @@ export class RolesColaboradoresComponent implements OnInit {
       });
   }
 
-  protected permissionEntries(role: TenantRoleDefinition): { moduleKey: string; summary: string }[] {
+  private buildPermissionEntries(role: TenantRoleDefinition): RolePermissionEntry[] {
     return Object.entries(role.permissions ?? {}).map(([moduleKey, permission]) => {
       const actions = [
         permission.canCreate ? 'crear' : null,

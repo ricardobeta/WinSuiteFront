@@ -1,0 +1,40 @@
+<section class="page-grid">
+  <div class="hero surface-card">
+    <div>
+      <p class="eyebrow">Configuracion</p>
+      <h2>Modulos de tu negocio</h2>
+      <p>
+        Elige que modulos quieres tener visibles. Por ahora este ajuste es solo organizativo:
+        no bloquea el acceso de tu equipo, solo te ayuda a mantener el espacio de trabajo mas
+        ordenado. Dashboard y Clientes estan siempre incluidos.
+      </p>
+    </div>
+    <button
+      mat-raised-button
+      color="primary"
+      type="button"
+      (click)="guardarCambios()"
+      [disabled]="loading() || saving()"
+    >
+      <mat-icon>save</mat-icon>
+      {{ saving() ? 'Guardando...' : 'Guardar cambios' }}
+    </button>
+  </div>
+
+  @if (loading()) {
+    <div class="loading-state">
+      <mat-spinner diameter="32" />
+    </div>
+  } @else {
+    <div class="module-grid">
+      @for (module of moduleCatalog; track module.id) {
+        <app-module-card
+          [module]="module"
+          [selected]="isModuleSelected(module.id)"
+          variant="toggle"
+          (toggle)="toggleModule(module.id)"
+        />
+      }
+    </div>
+  }
+</section>

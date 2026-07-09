@@ -243,6 +243,16 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
                   <button mat-button type="button" (click)="alternarEstado(row)" [disabled]="!canUpdate()">
                     {{ row.estado === 'ACTIVA' ? 'Inactivar' : 'Activar' }}
                   </button>
+                  <button
+                    mat-button
+                    color="warn"
+                    type="button"
+                    (click)="confirmarEliminarCuenta(row)"
+                    [disabled]="!canDelete() || !puedeEliminarCuenta(row) || eliminandoCuentaId() === row.id"
+                    matTooltipPosition="above"
+                    [matTooltip]="ayuda.eliminarCuenta">
+                    {{ eliminandoCuentaId() === row.id ? 'Eliminando...' : 'Eliminar' }}
+                  </button>
                 </td>
               </ng-container>
 
@@ -303,6 +313,7 @@ export class PlanCuentasComponent implements OnInit {
   protected readonly cargando = signal(true);
   protected readonly aplicandoPlantilla = signal(false);
   protected readonly aplicandoMovimiento = signal(false);
+  protected readonly eliminandoCuentaId = signal<string | null>(null);
   protected readonly importando = signal(false);
   protected readonly cuentasSeleccionadas = signal<Set<string>>(new Set());
   protected readonly busqueda = signal('');
@@ -310,6 +321,7 @@ export class PlanCuentasComponent implements OnInit {
   protected readonly estadoFiltro = signal<EstadoCuentaContable | 'TODOS'>('TODOS');
   protected readonly canCreate = computed(() => this.authorization.canAccess('contabilidad', 'create'));
   protected readonly canUpdate = computed(() => this.authorization.canAccess('contabilidad', 'update'));
+  protected readonly canDelete = computed(() => this.authorization.canAccess('contabilidad', 'delete'));
   protected readonly ayuda = {
     submodulo: 'Catalogo contable de la empresa. Define jerarquia, naturaleza y cuentas que se usaran en asientos, reportes y balances.',
     plantillaEsf: 'Carga una estructura base de Activo, Pasivo y Patrimonio para Estado de Situacion Financiera.',
@@ -322,7 +334,8 @@ export class PlanCuentasComponent implements OnInit {
     codigo: 'Codigo jerarquico. Los puntos indican niveles y permiten ordenar y tabular el plan de cuentas.',
     naturaleza: 'Saldo normal de la cuenta: deudora o acreedora. Ayuda a interpretar saldos y reportes.',
     movimiento: 'Si es Si, la cuenta admite lineas de asiento. Si es No, funciona como agrupadora o totalizadora.',
-    marcarMovimientoNo: 'Cambia a No el movimiento directo solo en las cuentas seleccionadas. No modifica asientos historicos.'
+    marcarMovimientoNo: 'Cambia a No el movimiento directo solo en las cuentas seleccionadas. No modifica asientos historicos.',
+    eliminarCuenta: 'Elimina solo cuentas hijas sin subcuentas, asientos, saldos ni configuraciones asociadas.'
   };
 
   protected readonly cuentasHijasPorPadre = computed(() => {
@@ -573,6 +586,32 @@ export class PlanCuentasComponent implements OnInit {
     return !!cuenta.id && this.cuentasHijasPorPadre().has(cuenta.id);
   }
 
+  protected puedeEliminarCuenta(cuenta: CuentaContable): boolean {
+    return !!cuenta.id && !!cuenta.cuentaPadreId && !this.esCuentaPadre(cuenta);
+  }
+
+  protected confirmarEliminarCuenta(cuenta: CuentaContable): void {
+    if (!this.puedeEliminarCuenta(cuenta)) {
+      return;
+    }
+
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '460px',
+      data: {
+        title: 'Eliminar cuenta',
+        message: `Deseas eliminar ${cuenta.codigo} - ${cuenta.nombre}? Solo se eliminara si no tiene asientos, saldos ni configuraciones asociadas.`,
+        confirmText: 'Eliminar',
+        cancelText: 'Cancelar'
+      }
+    });
+
+    dialogRef.afterClosed().subscribe((confirmado) => {
+      if (confirmado) {
+        void this.eliminarCuenta(cuenta);
+      }
+    });
+  }
+
   private async marcarMovimientoNo(cuentasParaActualizar: CuentaContable[]): Promise<void> {
     this.aplicandoMovimiento.set(true);
     try {
@@ -586,6 +625,22 @@ export class PlanCuentasComponent implements OnInit {
       this.mostrarMensaje('No se pudo actualizar el movimiento de las cuentas seleccionadas.', 'error');
     } finally {
       this.aplicandoMovimiento.set(false);
+    }
+  }
+
+  private async eliminarCuenta(cuenta: CuentaContable): Promise<void> {
+    if (!cuenta.id) {
+      return;
+    }
+
+    this.eliminandoCuentaId.set(cuenta.id);
+    try {
+      await this.planCuentasService.eliminarCuenta(cuenta);
+      this.mostrarMensaje('Cuenta eliminada.', 'delete');
+    } catch (error) {
+      this.mostrarMensaje(error instanceof Error ? error.message : 'No se pudo eliminar la cuenta.', 'error');
+    } finally {
+      this.eliminandoCuentaId.set(null);
     }
   }
 

@@ -30,6 +30,7 @@
               }
             ],
             "styles": [
+              "node_modules/@foblex/flow/styles/default.scss",
               "src/styles.scss"
             ]
           },
@@ -44,8 +45,8 @@
               "budgets": [
                 {
                   "type": "initial",
-                  "maximumWarning": "1.1MB",
-                  "maximumError": "1.4MB"
+                  "maximumWarning": "1.5MB",
+                  "maximumError": "1.7MB"
                 },
                 {
                   "type": "anyComponentStyle",

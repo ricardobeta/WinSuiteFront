@@ -110,7 +110,7 @@ export class CuentaContableAutocompleteComponent implements OnInit, OnChanges {
 
           if (value.trim() === '') {
             this.limpiarSeleccion();
-          } else if (this.cuentaActual) {
+          } else if (this.cuentaActual && value.trim() !== this.displayCuenta(this.cuentaActual)) {
             this.limpiarSeleccion();
           }
         }
@@ -174,10 +174,12 @@ export class CuentaContableAutocompleteComponent implements OnInit, OnChanges {
 
   private sincronizarCuentaSeleccionada(): void {
     if (!this.cuentaId) {
+      this.limpiarSeleccion(false);
       return;
     }
 
-    const cuenta = this.cuentasDisponibles().find((item) => item.id === this.cuentaId);
+    const cuenta = this.cuentasDisponibles().find((item) => item.id === this.cuentaId)
+      ?? this.todasLasCuentas().find((item) => item.id === this.cuentaId);
     if (!cuenta || this.cuentaActual?.id === cuenta.id) {
       return;
     }
@@ -205,13 +207,16 @@ export class CuentaContableAutocompleteComponent implements OnInit, OnChanges {
     );
   }
 
-  private limpiarSeleccion(): void {
+  private limpiarSeleccion(emitir = true): void {
     if (!this.cuentaActual && !this.codigoCuenta()) {
       return;
     }
 
     this.cuentaActual = null;
     this.codigoCuenta.set('');
-    this.cuentaSeleccionada.emit(null);
+    this.busquedaControl.setValue('', { emitEvent: false });
+    if (emitir) {
+      this.cuentaSeleccionada.emit(null);
+    }
   }
 }

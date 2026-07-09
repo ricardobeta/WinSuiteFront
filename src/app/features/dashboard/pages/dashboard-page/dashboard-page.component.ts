@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, Injector, afterNextRender, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { Router } from '@angular/router';
 import { Gridster, GridsterConfig, GridsterItem as GridsterItemComponent, GridsterItemConfig } from 'angular-gridster2';
@@ -11,7 +11,10 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { AuthService } from '../../../../core/services/auth.service';
 import { AuthorizationService } from '../../../../core/services/authorization.service';
+import { GuidedTourService } from '../../../../core/services/guided-tour.service';
+import { loadTourSteps } from '../../../../core/config/tour-steps/tour-steps.registry';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { TourTriggerButtonComponent } from '../../../../shared/components/tour-trigger-button/tour-trigger-button.component';
 import { environment } from '../../../../../environments/environment';
 import { DASHBOARD_WIDGETS, findWidgetDefinition } from '../../config/dashboard-defaults';
 import { ChartWidgetComponent } from '../../components/chart-widget/chart-widget.component';
@@ -40,15 +43,17 @@ import { DashboardDataMap, DashboardLayoutItem, DashboardWidgetData, DashboardWi
     DashboardEditToolbarComponent,
     DashboardWidgetShellComponent,
     MetricCardWidgetComponent,
-    TableWidgetComponent
+    TableWidgetComponent,
+    TourTriggerButtonComponent
   ],
   template: `
     <section class="dashboard-page">
-      <header class="dashboard-header">
+      <header class="dashboard-header" id="tour-dashboard-header">
         <div class="dashboard-title-group">
           <div class="dashboard-kicker">
             <span class="material-symbols-outlined">space_dashboard</span>
             <span>Inicio operativo</span>
+            <app-tour-trigger-button (open)="startTourManually()" />
           </div>
           <h1>Dashboard</h1>
           <p>Metricas operativas del negocio en tiempo real.</p>
@@ -92,7 +97,7 @@ import { DashboardDataMap, DashboardLayoutItem, DashboardWidgetData, DashboardWi
           <p>Cargando dashboard...</p>
         </section>
       } @else {
-        <gridster [options]="gridOptions()" class="dashboard-grid" [class.editing]="editing()">
+        <gridster [options]="gridOptions()" id="tour-dashboard-grid" class="dashboard-grid" [class.editing]="editing()">
           @for (item of visibleItems(); track item.instanceId) {
             <gridster-item [item]="item">
               @if (definitionFor(item.widgetId); as definition) {
@@ -127,6 +132,7 @@ import { DashboardDataMap, DashboardLayoutItem, DashboardWidgetData, DashboardWi
         mat-fab
         color="primary"
         type="button"
+        id="tour-dashboard-help"
         class="help-fab"
         matTooltip="Contactar ayuda"
         aria-label="Contactar ayuda por WhatsApp"
@@ -191,6 +197,7 @@ import { DashboardDataMap, DashboardLayoutItem, DashboardWidgetData, DashboardWi
       font-size: 18px;
       letter-spacing: 0;
     }
+
 
     .dashboard-header h1 {
       margin: 0;
@@ -336,6 +343,8 @@ export class DashboardPageComponent {
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   private readonly router = inject(Router);
+  private readonly guidedTour = inject(GuidedTourService);
+  private readonly injector = inject(Injector);
 
   protected readonly loading = signal(true);
   protected readonly editing = signal(false);
@@ -479,13 +488,31 @@ export class DashboardPageComponent {
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
   }
 
+  protected startTourManually(): void {
+    void loadTourSteps('dashboard').then((steps) => this.guidedTour.startTour('dashboard', steps));
+  }
+
   private async loadLayout(): Promise<void> {
     try {
       const layout = await this.configService.getResolvedLayout();
       this.items.set(this.cloneItems(layout.items));
     } finally {
       this.loading.set(false);
+      this.maybeStartTour();
     }
+  }
+
+  private maybeStartTour(): void {
+    if (this.guidedTour.hasSeenTour('dashboard')) {
+      return;
+    }
+
+    afterNextRender(
+      () => {
+        void loadTourSteps('dashboard').then((steps) => this.guidedTour.startTour('dashboard', steps));
+      },
+      { injector: this.injector }
+    );
   }
 
   private addWidget(widgetId: DashboardWidgetId): void {

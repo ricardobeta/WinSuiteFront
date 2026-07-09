@@ -1,0 +1,123 @@
+:host { display: block; }
+
+.builder {
+  height: calc(100vh - 200px);
+  min-height: 600px;
+  display: grid;
+  grid-template-columns: 272px minmax(0, 1fr) 340px;
+  gap: var(--space-3);
+}
+
+.panel { padding: var(--space-4); border-radius: var(--radius-md); overflow: auto; }
+.eyebrow { text-transform: uppercase; letter-spacing: .08em; color: var(--primary); font-size: .7rem; margin: 0 0 .4rem; font-weight: 600; }
+mat-form-field { width: 100%; }
+.full { width: 100%; }
+h2 { margin: 0; }
+
+/* ---------------- Sidebar ---------------- */
+.sidebar { display: grid; gap: var(--space-4); align-content: start; }
+.field { display: grid; gap: .4rem; }
+.block { display: grid; gap: .5rem; }
+.palette { display: grid; grid-template-columns: 1fr 1fr; gap: .5rem; }
+.palette-item {
+  display: flex; flex-direction: column; align-items: center; gap: .25rem;
+  padding: .6rem .4rem; border: 1px solid var(--border); border-radius: var(--radius-md);
+  cursor: grab; user-select: none; background: var(--mat-sys-surface-container-lowest);
+  border-left: 3px solid var(--node-color, var(--primary)); font-size: .78rem; text-align: center;
+}
+.palette-item:hover { border-color: var(--node-color, var(--primary)); }
+.palette-item mat-icon { color: var(--node-color, var(--primary)); }
+.flows-list { display: grid; gap: .4rem; }
+.flow-row { height: auto; min-height: 50px; text-align: left; display: grid; justify-items: start; gap: .15rem; border: 1px solid var(--border); border-radius: var(--radius-md); padding: .55rem; }
+.flow-row.active { border-color: var(--primary); }
+.flow-row span { color: var(--muted-foreground); font-size: .75rem; }
+
+/* ---------------- Stage ---------------- */
+.stage { display: flex; flex-direction: column; padding: 0; overflow: hidden; position: relative; }
+.toolbar { display: flex; justify-content: space-between; align-items: center; padding: .5rem .75rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; gap: .5rem; }
+.tools, .status { display: flex; align-items: center; gap: .25rem; }
+.sep { width: 1px; height: 24px; background: var(--border); margin: 0 .25rem; }
+.chip { display: inline-flex; align-items: center; gap: .3rem; font-size: .8rem; border-radius: 999px; padding: 0 .6rem; }
+.chip mat-icon { font-size: 18px; height: 18px; width: 18px; }
+.chip.error { color: var(--destructive); }
+.chip.warn { color: #b45309; }
+.chip.ok { color: var(--success); }
+
+.canvas-wrap { position: relative; flex: 1; min-height: 0; }
+f-flow { display: block; width: 100%; height: 100%; }
+
+/* ---------------- Node ---------------- */
+.fnode {
+  position: absolute; width: 210px; border-radius: var(--radius-md);
+  background: var(--mat-sys-surface-container-lowest); border: 1px solid var(--border);
+  border-top: 3px solid var(--node-color, var(--primary)); box-shadow: var(--tc-elevation-1);
+  cursor: grab; padding: .6rem .7rem; display: grid; gap: .45rem;
+  touch-action: none; user-select: none;
+}
+.fnode.selected { outline: 2px solid var(--primary); border-color: var(--primary); }
+.fnode.has-error { border-color: var(--destructive); }
+.fnode.has-warning { border-color: #d97706; }
+.fnode-head { display: grid; grid-template-columns: auto 1fr auto; gap: .5rem; align-items: center; }
+.fnode-head > mat-icon { color: var(--node-color, var(--primary)); }
+.fnode-titles { display: grid; line-height: 1.2; overflow: hidden; }
+.fnode-titles .type { font-size: .65rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-foreground); }
+.fnode-titles strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.badge { font-size: 18px; height: 18px; width: 18px; }
+.badge.err { color: var(--destructive); }
+.badge.wrn { color: #d97706; }
+.fnode-body { display: flex; flex-wrap: wrap; gap: .3rem; }
+.preview { margin: 0; font-size: .8rem; color: var(--foreground); display: -webkit-box; -webkit-line-clamp: 3; line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.muted { color: var(--muted-foreground); font-size: .78rem; }
+.tag { background: color-mix(in srgb, var(--node-color, var(--primary)) 14%, transparent); color: var(--node-color, var(--primary)); border-radius: 999px; padding: .1rem .5rem; font-size: .72rem; }
+.handles { flex-direction: column; gap: .3rem; }
+.handle-row { position: relative; display: flex; justify-content: space-between; align-items: center; background: var(--muted); border-radius: var(--radius-sm); padding: .25rem .5rem; font-size: .78rem; }
+.handle-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* connectors */
+.conn { width: 13px; height: 13px; border-radius: 50%; background: var(--node-color, var(--primary)); border: 2px solid var(--card); cursor: crosshair; touch-action: none; }
+.conn.in { position: absolute; left: -8px; top: 16px; background: var(--muted-foreground); }
+.conn.out.single { position: absolute; right: -8px; top: 16px; }
+.handle-row .conn.out { position: absolute; right: -14px; top: 50%; transform: translateY(-50%); }
+
+/* ---------------- Problems ---------------- */
+.problems { position: absolute; bottom: 12px; left: 12px; width: 380px; max-height: 40%; display: flex; flex-direction: column; padding: .5rem .75rem; }
+.problems-head { display: flex; justify-content: space-between; align-items: center; }
+.problems-list { overflow: auto; display: grid; gap: .2rem; }
+.problem { justify-content: flex-start; text-align: left; height: auto; padding: .35rem .5rem; gap: .4rem; }
+.problem mat-icon { color: #d97706; font-size: 18px; height: 18px; width: 18px; }
+.problem.error mat-icon { color: var(--destructive); }
+
+.floating-msg { position: absolute; bottom: 14px; right: 14px; margin: 0; padding: .5rem .9rem; border-radius: var(--radius-md); box-shadow: var(--tc-elevation-2); background: var(--card); }
+.floating-msg.error { color: var(--destructive); }
+.floating-msg.success { color: var(--success); }
+
+/* ---------------- Inspector ---------------- */
+.inspector { display: grid; gap: var(--space-3); align-content: start; }
+.header-row { display: flex; justify-content: space-between; align-items: start; }
+.options, .cond-row { display: grid; gap: .4rem; }
+.option-row { display: grid; grid-template-columns: 1fr 42px; gap: .35rem; align-items: center; }
+.cond-row { grid-template-columns: 1fr 1fr; }
+.switch-row { display: flex; align-items: center; gap: .5rem; font-size: .85rem; }
+.node-issues { display: grid; gap: .25rem; }
+.node-issues p { display: flex; gap: .35rem; align-items: center; margin: 0; font-size: .78rem; color: #b45309; }
+.node-issues p.error { color: var(--destructive); }
+.node-issues mat-icon { font-size: 18px; height: 18px; width: 18px; }
+
+/* ---------------- Simulator ---------------- */
+.sim-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 40; }
+.sim-drawer { position: fixed; top: 0; right: 0; height: 100vh; width: 380px; max-width: 92vw; z-index: 41; display: flex; flex-direction: column; padding: 0; border-radius: 0; }
+.sim-head { display: flex; justify-content: space-between; align-items: center; padding: .75rem 1rem; border-bottom: 1px solid var(--border); }
+.sim-head div { display: flex; align-items: center; gap: .4rem; }
+.sim-chat { flex: 1; overflow: auto; padding: 1rem; display: flex; flex-direction: column; gap: .5rem; background: var(--muted); }
+.sim-hint { color: var(--muted-foreground); font-size: .85rem; text-align: center; margin: auto; }
+.sim-msg { max-width: 85%; padding: .5rem .75rem; border-radius: var(--radius-md); font-size: .85rem; }
+.sim-msg.bot { align-self: flex-start; background: var(--card); border: 1px solid var(--border); }
+.sim-msg.user { align-self: flex-end; background: var(--primary); color: var(--primary-foreground); }
+.sim-options { display: flex; flex-wrap: wrap; gap: .3rem; margin-top: .4rem; }
+.sim-input { display: flex; gap: .4rem; padding: .6rem; border-top: 1px solid var(--border); align-items: center; }
+.sim-input input { flex: 1; border: 1px solid var(--border); border-radius: var(--radius-md); padding: .5rem .75rem; background: var(--card); color: inherit; }
+
+@media (max-width: 1180px) {
+  .builder { grid-template-columns: 1fr; height: auto; }
+  .canvas-wrap { min-height: 480px; }
+}

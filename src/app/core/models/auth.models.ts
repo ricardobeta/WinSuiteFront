@@ -25,6 +25,7 @@ export interface CreateTenantPayload {
   businessName?: string;
   country?: string;
   mobilePhone?: string;
+  activeModules?: string[];
 }
 
 export interface TenantApiResponse {
@@ -34,6 +35,11 @@ export interface TenantApiResponse {
   plan: string;
   status?: string;
   createdAt?: number;
+  activeModules?: string[];
+}
+
+export interface UpdateActiveModulesPayload {
+  activeModules: string[];
 }
 
 export interface AppUserProfile {

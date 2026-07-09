@@ -2,11 +2,13 @@ import { CommonModule, DecimalPipe } from '@angular/common';
 import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatSelectModule } from '@angular/material/select';
 
+import { dateAIso } from '../../../../shared/utils/fecha-input.util';
 import { MetodoPagoVenta, VentaDocumento, VentaPago } from '../../models/ventas.models';
 import { VentasService } from '../../services/ventas.service';
 
@@ -32,7 +34,7 @@ interface IngresoVendedorRow {
 @Component({
   selector: 'app-ventas-informes',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatFormFieldModule, MatInputModule, MatPaginatorModule, MatSelectModule, DecimalPipe],
+  imports: [CommonModule, FormsModule, MatDatepickerModule, MatFormFieldModule, MatInputModule, MatPaginatorModule, MatSelectModule, DecimalPipe],
   template: `
     <section class="surface-card informes-card">
       <header>
@@ -91,12 +93,16 @@ interface IngresoVendedorRow {
             @if (cajaModo() === 'rango') {
               <mat-form-field appearance="outline">
                 <mat-label>Desde</mat-label>
-                <input matInput type="date" [ngModel]="cajaDesde()" (ngModelChange)="onCajaDesdeChange($event)" />
+                <input matInput [matDatepicker]="pickerCajaDesde" [ngModel]="cajaDesdeDate()" (ngModelChange)="onCajaDesdeChange($event)" />
+                <mat-datepicker-toggle matSuffix [for]="pickerCajaDesde"></mat-datepicker-toggle>
+                <mat-datepicker #pickerCajaDesde></mat-datepicker>
               </mat-form-field>
 
               <mat-form-field appearance="outline">
                 <mat-label>Hasta</mat-label>
-                <input matInput type="date" [ngModel]="cajaHasta()" (ngModelChange)="onCajaHastaChange($event)" />
+                <input matInput [matDatepicker]="pickerCajaHasta" [ngModel]="cajaHastaDate()" (ngModelChange)="onCajaHastaChange($event)" />
+                <mat-datepicker-toggle matSuffix [for]="pickerCajaHasta"></mat-datepicker-toggle>
+                <mat-datepicker #pickerCajaHasta></mat-datepicker>
               </mat-form-field>
             }
 
@@ -177,12 +183,16 @@ interface IngresoVendedorRow {
             @if (vendedorModo() === 'rango') {
               <mat-form-field appearance="outline">
                 <mat-label>Desde</mat-label>
-                <input matInput type="date" [ngModel]="vendedorDesde()" (ngModelChange)="onVendedorDesdeChange($event)" />
+                <input matInput [matDatepicker]="pickerVendDesde" [ngModel]="vendedorDesdeDate()" (ngModelChange)="onVendedorDesdeChange($event)" />
+                <mat-datepicker-toggle matSuffix [for]="pickerVendDesde"></mat-datepicker-toggle>
+                <mat-datepicker #pickerVendDesde></mat-datepicker>
               </mat-form-field>
 
               <mat-form-field appearance="outline">
                 <mat-label>Hasta</mat-label>
-                <input matInput type="date" [ngModel]="vendedorHasta()" (ngModelChange)="onVendedorHastaChange($event)" />
+                <input matInput [matDatepicker]="pickerVendHasta" [ngModel]="vendedorHastaDate()" (ngModelChange)="onVendedorHastaChange($event)" />
+                <mat-datepicker-toggle matSuffix [for]="pickerVendHasta"></mat-datepicker-toggle>
+                <mat-datepicker #pickerVendHasta></mat-datepicker>
               </mat-form-field>
             }
 
@@ -260,15 +270,20 @@ export class VentasInformesComponent {
   private readonly ventasService = inject(VentasService);
   private readonly destroyRef = inject(DestroyRef);
 
+  // Adaptadores Date↔ISO para los datepickers (los rangos se guardan como string ISO).
   protected readonly ventas = signal<VentaDocumento[]>([]);
   protected readonly pagosPorVenta = signal<Record<string, VentaPago[]>>({});
 
   protected readonly cajaModo = signal<RangoModo>('hoy');
   protected readonly cajaDesde = signal('');
   protected readonly cajaHasta = signal('');
+  protected readonly cajaDesdeDate = signal<Date | null>(null);
+  protected readonly cajaHastaDate = signal<Date | null>(null);
   protected readonly vendedorModo = signal<RangoModo>('hoy');
   protected readonly vendedorDesde = signal('');
   protected readonly vendedorHasta = signal('');
+  protected readonly vendedorDesdeDate = signal<Date | null>(null);
+  protected readonly vendedorHastaDate = signal<Date | null>(null);
   protected readonly pageSizeOptions = [5, 10, 20];
   protected readonly cajaPageIndex = signal(0);
   protected readonly cajaPageSize = signal(10);
@@ -448,6 +463,10 @@ export class VentasInformesComponent {
     this.cajaHasta.set(hoy);
     this.vendedorDesde.set(hoy);
     this.vendedorHasta.set(hoy);
+    this.cajaDesdeDate.set(new Date());
+    this.cajaHastaDate.set(new Date());
+    this.vendedorDesdeDate.set(new Date());
+    this.vendedorHastaDate.set(new Date());
   }
 
   protected onCajaModoChange(modo: RangoModo): void {
@@ -455,13 +474,15 @@ export class VentasInformesComponent {
     this.cajaPageIndex.set(0);
   }
 
-  protected onCajaDesdeChange(valor: string): void {
-    this.cajaDesde.set(valor);
+  protected onCajaDesdeChange(valor: Date | null): void {
+    this.cajaDesdeDate.set(valor);
+    this.cajaDesde.set(dateAIso(valor));
     this.cajaPageIndex.set(0);
   }
 
-  protected onCajaHastaChange(valor: string): void {
-    this.cajaHasta.set(valor);
+  protected onCajaHastaChange(valor: Date | null): void {
+    this.cajaHastaDate.set(valor);
+    this.cajaHasta.set(dateAIso(valor));
     this.cajaPageIndex.set(0);
   }
 
@@ -475,13 +496,15 @@ export class VentasInformesComponent {
     this.vendedorPageIndex.set(0);
   }
 
-  protected onVendedorDesdeChange(valor: string): void {
-    this.vendedorDesde.set(valor);
+  protected onVendedorDesdeChange(valor: Date | null): void {
+    this.vendedorDesdeDate.set(valor);
+    this.vendedorDesde.set(dateAIso(valor));
     this.vendedorPageIndex.set(0);
   }
 
-  protected onVendedorHastaChange(valor: string): void {
-    this.vendedorHasta.set(valor);
+  protected onVendedorHastaChange(valor: Date | null): void {
+    this.vendedorHastaDate.set(valor);
+    this.vendedorHasta.set(dateAIso(valor));
     this.vendedorPageIndex.set(0);
   }
 

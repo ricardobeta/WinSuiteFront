@@ -50,19 +50,20 @@ import { OrdenesCompraService } from '../../services/ordenes-compra.service';
       <section class="kanban-grid">
         @for (estado of estados; track estado) {
           <article class="surface-card lane-card">
+            @let ordenesEstado = ordenesPorEstado()[estado];
             <header class="lane-head">
               <h3>{{ estado }}</h3>
-              <span>{{ porEstado(estado).length }}</span>
+              <span>{{ ordenesEstado.length }}</span>
             </header>
 
             <div
               class="lane-body"
               cdkDropList
-              [cdkDropListData]="porEstado(estado)"
+              [cdkDropListData]="ordenesEstado"
               [cdkDropListConnectedTo]="dropListIds"
               [id]="dropId(estado)"
               (cdkDropListDropped)="soltar($event, estado)">
-              @for (oc of porEstado(estado); track oc.id) {
+              @for (oc of ordenesEstado; track oc.id) {
                 <div class="oc-card" cdkDrag [cdkDragData]="oc">
                   <p class="numero">{{ oc.numero }}</p>
                   <p>Total: {{ oc.total | number:'1.2-2' }}</p>
@@ -124,6 +125,18 @@ export class OrdenesCompraKanbanComponent {
       oc.proveedorId.toLowerCase().includes(term)
     );
   });
+  protected readonly ordenesPorEstado = computed<Record<EstadoOrdenCompra, OrdenCompra[]>>(() => {
+    const grouped = this.estados.reduce((acc, estado) => {
+      acc[estado] = [];
+      return acc;
+    }, {} as Record<EstadoOrdenCompra, OrdenCompra[]>);
+
+    for (const orden of this.ordenesFiltradas()) {
+      grouped[orden.estado]?.push(orden);
+    }
+
+    return grouped;
+  });
 
   constructor() {
     this.service
@@ -132,10 +145,6 @@ export class OrdenesCompraKanbanComponent {
       .subscribe((ordenes) => {
         this.ordenes.set(ordenes);
       });
-  }
-
-  protected porEstado(estado: EstadoOrdenCompra): OrdenCompra[] {
-    return this.ordenesFiltradas().filter((oc) => oc.estado === estado);
   }
 
   protected async soltar(event: CdkDragDrop<OrdenCompra[]>, estadoDestino: EstadoOrdenCompra): Promise<void> {

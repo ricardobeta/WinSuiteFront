@@ -121,6 +121,9 @@ export class ReportesContablesService {
           fecha: asiento.fecha,
           periodo: asiento.periodo,
           numero: asiento.numero ?? '',
+          // Nº de factura/documento origen: la referencia guarda el número del comprobante
+          // (factura del proveedor, venta, recepción). En asientos manuales queda vacío.
+          numeroFactura: asiento.origen !== 'MANUAL' ? (asiento.referencia ?? '') : '',
           concepto: linea.descripcion || asiento.glosa,
           cuentaId: linea.cuentaId,
           codigoCuenta: linea.codigoCuenta,

@@ -13,9 +13,12 @@ import {
   RegisterUserPayload
 } from '../../../../core/models/auth.models';
 import { AuthService } from '../../../../core/services/auth.service';
+import { PasswordVisibilityToggleComponent } from '../../../../shared/components/password-visibility-toggle/password-visibility-toggle.component';
+import { ModuleCardComponent } from '../../../../shared/components/module-card/module-card.component';
+import { DEFAULT_ACTIVE_MODULES, MANDATORY_MODULES, MODULE_CATALOG } from '../../../../core/config/module-catalog';
 
 interface RegisterStep {
-  id: 1 | 2;
+  id: 1 | 2 | 3;
   title: string;
   description: string;
 }
@@ -30,7 +33,9 @@ interface RegisterStep {
     MatInputModule,
     MatButtonModule,
     MatSelectModule,
-    MatProgressSpinnerModule
+    MatProgressSpinnerModule,
+    PasswordVisibilityToggleComponent,
+    ModuleCardComponent
   ],
   templateUrl: './register-page.component.html',
   styleUrl: './register-page.component.scss'
@@ -42,11 +47,16 @@ export class RegisterPageComponent {
   private readonly TEST_MODE = false;
 
   protected readonly auth = inject(AuthService);
-  protected readonly currentStep = signal<1 | 2>(1);
+  protected readonly currentStep = signal<1 | 2 | 3>(1);
   protected readonly steps: RegisterStep[] = [
     { id: 1, title: 'Usuario', description: 'Datos de acceso y perfil' },
-    { id: 2, title: 'Negocio', description: 'Datos de la empresa y contacto' }
+    { id: 2, title: 'Negocio', description: 'Datos de la empresa y contacto' },
+    { id: 3, title: 'Modulos', description: 'Elige lo que necesita tu negocio' }
   ];
+
+  protected readonly moduleCatalog = MODULE_CATALOG;
+  protected readonly mandatoryModules = MANDATORY_MODULES;
+  protected readonly selectedModules = signal<Set<string>>(new Set(DEFAULT_ACTIVE_MODULES));
 
   protected readonly countries = [
     'Ecuador',
@@ -74,15 +84,46 @@ export class RegisterPageComponent {
   });
 
   protected nextStep(): void {
-    this.userForm.markAllAsTouched();
+    if (this.currentStep() === 1) {
+      this.userForm.markAllAsTouched();
+      if (this.userForm.valid) {
+        this.currentStep.set(2);
+      }
+      return;
+    }
 
-    if (this.userForm.valid) {
-      this.currentStep.set(2);
+    this.businessForm.markAllAsTouched();
+    if (this.businessForm.valid) {
+      this.currentStep.set(3);
     }
   }
 
   protected prevStep(): void {
-    this.currentStep.set(1);
+    this.currentStep.set(this.currentStep() === 3 ? 2 : 1);
+  }
+
+  protected isModuleSelected(moduleId: string): boolean {
+    return this.selectedModules().has(moduleId);
+  }
+
+  protected isModuleLocked(moduleId: string): boolean {
+    return this.mandatoryModules.includes(moduleId);
+  }
+
+  protected toggleModule(moduleId: string): void {
+    if (this.isModuleLocked(moduleId)) {
+      return;
+    }
+
+    this.selectedModules.update((current) => {
+      const next = new Set(current);
+      if (next.has(moduleId)) {
+        next.delete(moduleId);
+      } else {
+        next.add(moduleId);
+      }
+      return next;
+    });
   }
 
   protected async submit(): Promise<void> {
@@ -96,7 +137,8 @@ export class RegisterPageComponent {
     if (!this.TEST_MODE) {
       await this.auth.register(
         this.userForm.getRawValue() as RegisterUserPayload,
-        this.businessForm.getRawValue() as RegisterBusinessPayload
+        this.businessForm.getRawValue() as RegisterBusinessPayload,
+        Array.from(this.selectedModules())
       );
     }
     await this.router.navigateByUrl('/workspace');

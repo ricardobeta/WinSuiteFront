@@ -1,15 +1,22 @@
-import { Component } from '@angular/core';
+import { Component, Injector, afterNextRender, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+
+import { loadTourSteps } from '../../../../core/config/tour-steps/tour-steps.registry';
+import { GuidedTourService } from '../../../../core/services/guided-tour.service';
+import { TourTriggerButtonComponent } from '../../../../shared/components/tour-trigger-button/tour-trigger-button.component';
 
 @Component({
   selector: 'app-archivos-shell',
   standalone: true,
-  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, TourTriggerButtonComponent],
   template: `
     <section class="archivos-shell">
-      <header class="archivos-hero surface-card">
+      <header class="archivos-hero surface-card" id="tour-archivos-header">
         <div>
-          <p class="eyebrow">Administrador de archivos</p>
+          <p class="eyebrow">
+            Administrador de archivos
+            <app-tour-trigger-button (open)="startTourManually()" />
+          </p>
           <h1>Archivos de la empresa</h1>
           <p>
             Centraliza la carga de excels e imagenes para compartirlas con todo el equipo.
@@ -17,11 +24,11 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
         </div>
       </header>
 
-      <nav class="subnav surface-card" aria-label="Navegacion de archivos">
+      <nav class="subnav surface-card" id="tour-archivos-subnav" aria-label="Navegacion de archivos">
         <a routerLink="lista" routerLinkActive="active-link">Listado</a>
       </nav>
 
-      <main class="archivos-content">
+      <main class="archivos-content" id="tour-archivos-content">
         <router-outlet />
       </main>
     </section>
@@ -92,4 +99,28 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
     `
   ]
 })
-export class ArchivosShellComponent {}
+export class ArchivosShellComponent {
+  private static readonly MODULE_ID = 'archivos';
+
+  private readonly guidedTour = inject(GuidedTourService);
+  private readonly injector = inject(Injector);
+
+  constructor() {
+    if (!this.guidedTour.hasSeenTour(ArchivosShellComponent.MODULE_ID)) {
+      afterNextRender(
+        () => {
+          void loadTourSteps(ArchivosShellComponent.MODULE_ID).then((steps) =>
+            this.guidedTour.startTour(ArchivosShellComponent.MODULE_ID, steps)
+          );
+        },
+        { injector: this.injector }
+      );
+    }
+  }
+
+  protected startTourManually(): void {
+    void loadTourSteps(ArchivosShellComponent.MODULE_ID).then((steps) =>
+      this.guidedTour.startTour(ArchivosShellComponent.MODULE_ID, steps)
+    );
+  }
+}

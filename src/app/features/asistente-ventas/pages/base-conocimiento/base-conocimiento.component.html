@@ -1,0 +1,344 @@
+<section class="kb-page">
+  <header class="kb-header surface-card">
+    <div>
+      <p class="eyebrow">Asistente de ventas</p>
+      <h1>Base de conocimiento</h1>
+      <p class="muted">Organiza la informacion que usara la IA para responder a tus clientes.</p>
+    </div>
+    <div class="summary-grid" aria-label="Resumen de conocimiento">
+      <article class="summary-item">
+        <span>{{ config()?.chunkCount || knowledge().length }}</span>
+        <small>fragmentos</small>
+      </article>
+      <article class="summary-item">
+        <span>{{ sourceTypes().length }}</span>
+        <small>tipos de fuente</small>
+      </article>
+      <article class="summary-item">
+        <span>{{ enabled ? 'Activa' : 'Pausada' }}</span>
+        <small>respuesta IA</small>
+      </article>
+    </div>
+  </header>
+
+  @if (notice(); as n) {
+    <section class="notice" [class.success]="n.type === 'success'" [class.error]="n.type === 'error'" role="status">
+      <mat-icon>{{ n.type === 'success' ? 'check_circle' : 'error' }}</mat-icon>
+      <span>{{ n.text }}</span>
+    </section>
+  }
+
+  <mat-tab-group class="kb-tabs surface-card" animationDuration="200ms" mat-stretch-tabs="false">
+    <!-- ============ TAB 1: Cargar contenido ============ -->
+    <mat-tab>
+      <ng-template mat-tab-label><mat-icon>upload_file</mat-icon> Cargar contenido</ng-template>
+      <div class="tab-body">
+        <section class="panel upload-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Nueva fuente</p>
+              <h2>Agregar contenido</h2>
+            </div>
+          </div>
+
+          @if (sourceTypes().length) {
+            <div class="form-grid">
+              <mat-form-field appearance="outline">
+                <mat-label>Tipo de fuente</mat-label>
+                <mat-select [(ngModel)]="kbSourceType">
+                  @for (type of sourceTypes(); track type.value) {
+                    <mat-option [value]="type.value">
+                      <mat-icon class="opt-icon">{{ type.icon }}</mat-icon> {{ type.label }}
+                    </mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Nombre de fuente</mat-label>
+                <input matInput [(ngModel)]="kbSource" placeholder="Catalogo mayorista, FAQ envios..." />
+              </mat-form-field>
+            </div>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Contenido</mat-label>
+              <textarea matInput rows="8" [(ngModel)]="kbContent" placeholder="Pega aqui productos, precios, politicas, preguntas frecuentes o instrucciones comerciales."></textarea>
+              @if (selectedTypeHint) { <mat-hint>{{ selectedTypeHint }}</mat-hint> }
+            </mat-form-field>
+
+            <div class="actions-row">
+              <button mat-raised-button color="primary" type="button" [disabled]="saving() || !kbContent.trim()" (click)="indexKnowledge()">
+                <mat-icon>upload_file</mat-icon>
+                Indexar contenido
+              </button>
+              <span class="muted">Se guardara clasificado por tipo y nombre de fuente.</span>
+            </div>
+          } @else {
+            <div class="empty-state">
+              <mat-icon>category</mat-icon>
+              <h3>No hay tipos de fuente</h3>
+              <p>Crea al menos un tipo en la pestana "Tipos de fuente" para poder cargar contenido.</p>
+            </div>
+          }
+        </section>
+
+        <section class="panel source-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Fuentes clasificadas</p>
+              <h2>Biblioteca</h2>
+            </div>
+            @if (knowledge().length) {
+              <button mat-stroked-button color="warn" type="button" (click)="clearAll()">
+                <mat-icon>delete_sweep</mat-icon>
+                Vaciar
+              </button>
+            }
+          </div>
+
+          @if (sourceGroups().length) {
+            <div class="source-groups">
+              @for (group of sourceGroups(); track group.type.value) {
+                <article class="source-group">
+                  <div class="source-icon"><mat-icon>{{ group.type.icon }}</mat-icon></div>
+                  <div>
+                    <h3>{{ group.type.label }}</h3>
+                    <p>{{ group.items.length }} fragmento(s) de {{ group.sourceNames.length }} fuente(s)</p>
+                    <div class="source-tags">
+                      @for (name of group.sourceNames; track name) {
+                        <span>{{ name }}</span>
+                      }
+                    </div>
+                  </div>
+                </article>
+              }
+            </div>
+          } @else {
+            <div class="empty-state">
+              <mat-icon>library_books</mat-icon>
+              <h3>Aun no hay conocimiento cargado</h3>
+              <p>Agrega catalogos, politicas o preguntas frecuentes para que la IA responda con contexto de tu negocio.</p>
+            </div>
+          }
+        </section>
+
+        <section class="panel chunks-panel">
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Fragmentos</p>
+              <h2>Contenido indexado</h2>
+            </div>
+          </div>
+
+          <div class="chunks">
+            @for (item of knowledge(); track item.id) {
+              <article class="chunk">
+                <div class="chunk-type"><mat-icon>{{ classifySource(item.source).icon }}</mat-icon></div>
+                <div class="chunk-body">
+                  <div class="chunk-title">
+                    <span class="src">{{ classifySource(item.source).label }}</span>
+                    <strong>{{ cleanSourceName(item.source) }}</strong>
+                  </div>
+                  <p>{{ item.text }}</p>
+                </div>
+                <button mat-icon-button type="button" matTooltip="Eliminar fragmento" (click)="remove(item)">
+                  <mat-icon>close</mat-icon>
+                </button>
+              </article>
+            }
+            @if (!knowledge().length) {
+              <p class="muted pad">Cuando cargues contenido, aqui veras cada fragmento que la IA puede consultar.</p>
+            }
+          </div>
+        </section>
+      </div>
+    </mat-tab>
+
+    <!-- ============ TAB 2: Tipos de fuente ============ -->
+    <mat-tab>
+      <ng-template mat-tab-label><mat-icon>category</mat-icon> Tipos de fuente</ng-template>
+      <div class="tab-body two-col">
+        <section class="panel type-form-panel">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Personalizacion</p>
+              <h2>Nuevo tipo de fuente</h2>
+            </div>
+          </div>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Nombre del tipo</mat-label>
+            <input matInput [(ngModel)]="newTypeLabel" placeholder="Ej. Recetas, Contratos, Tarifario"
+                   (keyup.enter)="addSourceType()" />
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Icono</mat-label>
+            <mat-select [(ngModel)]="newTypeIcon">
+              @for (icon of iconOptions; track icon) {
+                <mat-option [value]="icon"><mat-icon class="opt-icon">{{ icon }}</mat-icon> {{ icon }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Descripcion (opcional)</mat-label>
+            <input matInput [(ngModel)]="newTypeHint" placeholder="Que contiene este tipo de fuente" />
+          </mat-form-field>
+
+          <div class="type-preview">
+            <div class="source-icon"><mat-icon>{{ newTypeIcon }}</mat-icon></div>
+            <div>
+              <strong>{{ newTypeLabel.trim() || 'Vista previa' }}</strong>
+              <p class="muted">{{ newTypeHint.trim() || 'Asi se vera en el selector de carga.' }}</p>
+            </div>
+          </div>
+
+          <button mat-raised-button color="primary" type="button" [disabled]="!newTypeLabel.trim()" (click)="addSourceType()">
+            <mat-icon>add</mat-icon>
+            Agregar tipo
+          </button>
+        </section>
+
+        <section class="panel type-list-panel">
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Gestion</p>
+              <h2>Tipos disponibles ({{ sourceTypes().length }})</h2>
+            </div>
+          </div>
+
+          @if (sourceTypes().length) {
+            <div class="type-list">
+              @for (type of sourceTypes(); track type.value) {
+                <article class="type-row">
+                  <div class="source-icon"><mat-icon>{{ type.icon }}</mat-icon></div>
+                  <div class="type-info">
+                    <strong>{{ type.label }}</strong>
+                    @if (type.hint) { <p class="muted">{{ type.hint }}</p> }
+                  </div>
+                  @if (isDefault(type.value)) {
+                    <span class="default-badge" matTooltip="Tipo por defecto (no se elimina)">Por defecto</span>
+                  } @else {
+                    <button mat-icon-button color="warn" type="button" matTooltip="Eliminar tipo" (click)="removeSourceType(type.value)">
+                      <mat-icon>delete_outline</mat-icon>
+                    </button>
+                  }
+                </article>
+              }
+            </div>
+          } @else {
+            <div class="empty-state">
+              <mat-icon>category</mat-icon>
+              <h3>Sin tipos de fuente</h3>
+              <p>Agrega uno con el formulario o restaura los tipos por defecto.</p>
+            </div>
+          }
+          <p class="hint muted">Los tipos personalizados se guardan por empresa en Firebase; los "Por defecto" siempre estan disponibles y alimentan el selector de "Cargar contenido".</p>
+        </section>
+      </div>
+    </mat-tab>
+
+    <!-- ============ TAB 3: Configuracion IA ============ -->
+    <mat-tab>
+      <ng-template mat-tab-label><mat-icon>smart_toy</mat-icon> Configuracion IA</ng-template>
+      <div class="tab-body">
+        <section class="panel config-panel narrow">
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Configuracion IA</p>
+              <h2>Motor de respuesta</h2>
+            </div>
+          </div>
+
+          <label class="switch-row">
+            <input type="checkbox" [(ngModel)]="enabled" />
+            <span>Responder con IA cuando ningun flujo coincida</span>
+          </label>
+
+          <div class="form-grid">
+            <mat-form-field appearance="outline">
+              <mat-label>Proveedor</mat-label>
+              <mat-select [(ngModel)]="provider" (selectionChange)="onProviderChange()">
+                <mat-option value="anthropic">Anthropic (Claude)</mat-option>
+                <mat-option value="gemini">Google Gemini (AI Studio)</mat-option>
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Modelo</mat-label>
+              <mat-select [(ngModel)]="model">
+                @for (m of availableModels; track m.value) {
+                  <mat-option [value]="m.value">{{ m.label }}</mat-option>
+                }
+              </mat-select>
+              @if (selectedModelHint) { <mat-hint>{{ selectedModelHint }}</mat-hint> }
+            </mat-form-field>
+          </div>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Personalidad e instrucciones</mat-label>
+            <textarea matInput rows="4" [(ngModel)]="systemPrompt" placeholder="Eres un asesor de ventas amable..."></textarea>
+          </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>{{ config()?.hasApiKey ? 'API key guardada; escribe para cambiar' : 'API key' }}</mat-label>
+            <input matInput type="password" [(ngModel)]="apiKey" autocomplete="off" />
+            <mat-hint>{{ provider === 'gemini' ? 'Obten tu API key en Google AI Studio.' : 'Obten tu API key en console.anthropic.com.' }}</mat-hint>
+          </mat-form-field>
+
+          <button mat-raised-button color="primary" type="button" [disabled]="saving()" (click)="saveConfig()">
+            <mat-icon>save</mat-icon>
+            Guardar configuracion
+          </button>
+          <p class="hint muted">La API key se guarda cifrada. Los embeddings se generan localmente; solo el chat consume tokens.</p>
+        </section>
+      </div>
+    </mat-tab>
+
+    <!-- ============ TAB 4: Pruebas ============ -->
+    <mat-tab>
+      <ng-template mat-tab-label><mat-icon>forum</mat-icon> Pruebas</ng-template>
+      <div class="tab-body">
+        <section class="panel test-panel narrow">
+          <div class="section-heading compact">
+            <div>
+              <p class="eyebrow">Prueba de chat</p>
+              <h2>Pregunta como cliente</h2>
+            </div>
+          </div>
+
+          <div class="chat-preview">
+            <div class="bubble customer">{{ testQuery || 'Cuanto cuesta el envio?' }}</div>
+            @if (testing()) {
+              <div class="bubble bot muted">Consultando...</div>
+            } @else if (answer(); as a) {
+              <div class="bubble bot">{{ a.text }}</div>
+            } @else {
+              <div class="bubble bot muted">La respuesta aparecera aqui.</div>
+            }
+          </div>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Mensaje del cliente</mat-label>
+            <input matInput [(ngModel)]="testQuery" (keyup.enter)="runTest()" placeholder="Cuanto cuesta el envio?" />
+          </mat-form-field>
+          <label class="switch-row">
+            <input type="checkbox" [(ngModel)]="testUseRag" />
+            <span>Usar base de conocimiento</span>
+          </label>
+          <button mat-raised-button color="primary" type="button" [disabled]="testing() || !testQuery.trim()" (click)="runTest()">
+            <mat-icon>send</mat-icon>
+            Consultar
+          </button>
+
+          @if (answer(); as a) {
+            <div class="answer-meta">
+              <span><mat-icon>token</mat-icon> {{ a.inputTokens }} -> {{ a.outputTokens }} tokens</span>
+              @if (a.usedSources.length) {
+                <span><mat-icon>menu_book</mat-icon> {{ a.usedSources.join(', ') }}</span>
+              }
+            </div>
+          }
+        </section>
+      </div>
+    </mat-tab>
+  </mat-tab-group>
+</section>

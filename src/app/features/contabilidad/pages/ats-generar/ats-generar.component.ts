@@ -7,6 +7,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
@@ -32,6 +33,7 @@ interface ChecklistItem {
     MatFormFieldModule,
     MatIconModule,
     MatSelectModule,
+    MatSlideToggleModule,
     MatSnackBarModule
   ],
   template: `
@@ -63,6 +65,12 @@ interface ChecklistItem {
         <div class="period-count">
           <mat-icon>fact_check</mat-icon>
           <span>{{ facturasPeriodo().length }} factura(s) en el período</span>
+        </div>
+        <div class="borradores-toggle">
+          <mat-slide-toggle [checked]="incluirBorradores()" (change)="setIncluirBorradores($event.checked)">
+            Incluir borradores
+          </mat-slide-toggle>
+          <span class="toggle-hint">{{ incluirBorradores() ? 'Se incluyen BORRADOR + REGISTRADA' : 'Solo facturas REGISTRADA' }}</span>
         </div>
       </section>
 
@@ -126,6 +134,8 @@ interface ChecklistItem {
 
     .period-card { padding: 1rem 1.25rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
     .period-count { display: flex; align-items: center; gap: .4rem; color: var(--muted-foreground); }
+    .borradores-toggle { display: flex; flex-direction: column; gap: .1rem; margin-left: auto; }
+    .toggle-hint { font-size: .78rem; color: var(--muted-foreground); }
 
     .kpi-row { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 1rem; }
     .kpi-card { padding: 1.1rem 1.25rem; border-radius: 1rem; display: grid; gap: .35rem; }
@@ -172,16 +182,26 @@ export class AtsGenerarComponent {
 
   protected readonly generando = signal(false);
   protected readonly resultado = signal<AtsResult | null>(null);
+  // Por defecto solo se incluyen las REGISTRADA; el usuario puede activar los borradores.
+  protected readonly incluirBorradores = signal(false);
 
   protected readonly facturasPeriodo = computed(() =>
     this.facturas().filter((f) => {
       if (f.estado === 'ANULADA') {
         return false;
       }
+      if (!this.incluirBorradores() && f.estado === 'BORRADOR') {
+        return false;
+      }
       const fecha = f.fechaEmision ? new Date(f.fechaEmision) : null;
       return !!fecha && fecha.getFullYear() === this.anioSignal() && fecha.getMonth() + 1 === this.mesSignal();
     })
   );
+
+  protected setIncluirBorradores(value: boolean): void {
+    this.incluirBorradores.set(value);
+    this.resultado.set(null);
+  }
 
   protected readonly totalBase = computed(() => this.facturasPeriodo().reduce((t, f) => t + Number(f.baseImpGrav ?? 0) + Number(f.baseImponible ?? 0), 0));
   protected readonly totalIva = computed(() => this.facturasPeriodo().reduce((t, f) => t + Number(f.montoIva ?? 0), 0));
@@ -211,7 +231,9 @@ export class AtsGenerarComponent {
       {
         ok: borradores.length === 0,
         label: 'Facturas registradas (no en borrador)',
-        detalle: borradores.length ? `${borradores.length} en borrador — se incluirán igualmente` : undefined
+        detalle: borradores.length
+          ? `${borradores.length} en borrador — se incluirán (bandera activa)`
+          : (this.incluirBorradores() ? undefined : 'Los borradores quedan excluidos')
       }
     ];
   });
@@ -225,7 +247,7 @@ export class AtsGenerarComponent {
 
   protected generar(): void {
     this.generando.set(true);
-    this.atsService.generar(this.anio.value, this.mes.value).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+    this.atsService.generar(this.anio.value, this.mes.value, this.incluirBorradores()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (res) => {
         this.resultado.set(res);
         this.generando.set(false);

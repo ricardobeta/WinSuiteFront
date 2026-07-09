@@ -1,15 +1,22 @@
-import { Component } from '@angular/core';
+import { Component, Injector, afterNextRender, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+
+import { loadTourSteps } from '../../../../core/config/tour-steps/tour-steps.registry';
+import { GuidedTourService } from '../../../../core/services/guided-tour.service';
+import { TourTriggerButtonComponent } from '../../../../shared/components/tour-trigger-button/tour-trigger-button.component';
 
 @Component({
   selector: 'app-inventario-shell',
   standalone: true,
-  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, TourTriggerButtonComponent],
   template: `
     <section class="inventario-shell">
-      <header class="inventario-hero surface-card">
+      <header class="inventario-hero surface-card" id="tour-inventario-header">
         <div>
-          <p class="eyebrow">Modulo Inventario</p>
+          <p class="eyebrow">
+            Modulo Inventario
+            <app-tour-trigger-button (open)="startTourManually()" />
+          </p>
           <h1>Inventario</h1>
           <p>
             Gestiona productos, proveedores, ordenes de compra, stock y configuracion del inventario.
@@ -17,7 +24,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
         </div>
       </header>
 
-      <nav class="subnav surface-card" aria-label="Navegacion de inventario">
+      <nav class="subnav surface-card" id="tour-inventario-subnav" aria-label="Navegacion de inventario">
         <a routerLink="productos" routerLinkActive="active-link">Productos</a>
         <a routerLink="recetas" routerLinkActive="active-link">Recetas</a>
         <a routerLink="proveedores" routerLinkActive="active-link">Proveedores</a>
@@ -27,7 +34,7 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
         <a routerLink="configuracion" routerLinkActive="active-link">Configuracion</a>
       </nav>
 
-      <main class="inventario-content">
+      <main class="inventario-content" id="tour-inventario-content">
         <router-outlet />
       </main>
     </section>
@@ -44,4 +51,28 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
     .inventario-content { min-width: 0; }
   `]
 })
-export class InventarioShellComponent {}
+export class InventarioShellComponent {
+  private static readonly MODULE_ID = 'inventario';
+
+  private readonly guidedTour = inject(GuidedTourService);
+  private readonly injector = inject(Injector);
+
+  constructor() {
+    if (!this.guidedTour.hasSeenTour(InventarioShellComponent.MODULE_ID)) {
+      afterNextRender(
+        () => {
+          void loadTourSteps(InventarioShellComponent.MODULE_ID).then((steps) =>
+            this.guidedTour.startTour(InventarioShellComponent.MODULE_ID, steps)
+          );
+        },
+        { injector: this.injector }
+      );
+    }
+  }
+
+  protected startTourManually(): void {
+    void loadTourSteps(InventarioShellComponent.MODULE_ID).then((steps) =>
+      this.guidedTour.startTour(InventarioShellComponent.MODULE_ID, steps)
+    );
+  }
+}

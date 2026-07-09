@@ -58,6 +58,10 @@ export const routes: Routes = [
 				loadChildren: () => import('./features/contabilidad/contabilidad.routes').then((routes) => routes.CONTABILIDAD_ROUTES)
 			},
 			{
+				path: 'nomina',
+				loadChildren: () => import('./features/nomina/nomina.routes').then((routes) => routes.NOMINA_ROUTES)
+			},
+			{
 				path: 'ventas',
 				canMatch: [moduleAccessGuard('ventas', 'read')],
 				loadChildren: () => import('./features/ventas/ventas.routes').then((routes) => routes.VENTAS_ROUTES)
@@ -101,6 +105,10 @@ export const routes: Routes = [
 					module: 'Proyectos',
 					page: 'Kanban'
 				}
+			},
+			{
+				path: 'configuracion',
+				loadChildren: () => import('./features/settings/settings.routes').then((routes) => routes.SETTINGS_ROUTES)
 			}
 		]
 	},

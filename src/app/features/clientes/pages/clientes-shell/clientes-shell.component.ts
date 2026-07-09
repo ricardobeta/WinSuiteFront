@@ -1,17 +1,24 @@
-import { Component } from '@angular/core';
+import { Component, Injector, afterNextRender, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 
+import { loadTourSteps } from '../../../../core/config/tour-steps/tour-steps.registry';
+import { GuidedTourService } from '../../../../core/services/guided-tour.service';
+import { TourTriggerButtonComponent } from '../../../../shared/components/tour-trigger-button/tour-trigger-button.component';
+
 @Component({
   selector: 'app-clientes-shell',
   standalone: true,
-  imports: [RouterLink, RouterLinkActive, RouterOutlet, MatButtonModule, MatIconModule],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, MatButtonModule, MatIconModule, TourTriggerButtonComponent],
   template: `
     <section class="clientes-shell">
-      <header class="clientes-hero surface-card">
+      <header class="clientes-hero surface-card" id="tour-clientes-header">
         <div>
-          <p class="eyebrow">Módulo Clientes</p>
+          <p class="eyebrow">
+            Módulo Clientes
+            <app-tour-trigger-button (open)="startTourManually()" />
+          </p>
           <h1>Clientes</h1>
           <p>
             Administra la lista de clientes, la configuración de campos personalizados y el flujo
@@ -19,7 +26,7 @@ import { MatIconModule } from '@angular/material/icon';
           </p>
         </div>
 
-        <div class="clientes-actions">
+        <div class="clientes-actions" id="tour-clientes-actions">
           <a mat-raised-button color="primary" routerLink="lista" routerLinkActive="active-link">
             <mat-icon>group</mat-icon>
             Lista de clientes
@@ -31,12 +38,12 @@ import { MatIconModule } from '@angular/material/icon';
         </div>
       </header>
 
-      <nav class="subnav surface-card" aria-label="Navegación de clientes">
+      <nav class="subnav surface-card" id="tour-clientes-subnav" aria-label="Navegación de clientes">
         <a routerLink="lista" routerLinkActive="active-link">Lista</a>
         <a routerLink="configuracion" routerLinkActive="active-link">Configuración</a>
       </nav>
 
-      <main class="clientes-content">
+      <main class="clientes-content" id="tour-clientes-content">
         <router-outlet />
       </main>
     </section>
@@ -67,4 +74,28 @@ import { MatIconModule } from '@angular/material/icon';
     }
   `]
 })
-export class ClientesShellComponent {}
+export class ClientesShellComponent {
+  private static readonly MODULE_ID = 'clientes';
+
+  private readonly guidedTour = inject(GuidedTourService);
+  private readonly injector = inject(Injector);
+
+  constructor() {
+    if (!this.guidedTour.hasSeenTour(ClientesShellComponent.MODULE_ID)) {
+      afterNextRender(
+        () => {
+          void loadTourSteps(ClientesShellComponent.MODULE_ID).then((steps) =>
+            this.guidedTour.startTour(ClientesShellComponent.MODULE_ID, steps)
+          );
+        },
+        { injector: this.injector }
+      );
+    }
+  }
+
+  protected startTourManually(): void {
+    void loadTourSteps(ClientesShellComponent.MODULE_ID).then((steps) =>
+      this.guidedTour.startTour(ClientesShellComponent.MODULE_ID, steps)
+    );
+  }
+}

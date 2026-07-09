@@ -88,6 +88,8 @@ import { IntegracionContableService } from '../../services/integracion-contable.
             <mat-option value="REVERSO_VENTA">Reverso venta</mat-option>
             <mat-option value="RECEPCION_OC">Recepcion OC</mat-option>
             <mat-option value="REVERSO_RECEPCION_OC">Reverso recepcion</mat-option>
+            <mat-option value="FACTURA_COMPRA">Factura de compra</mat-option>
+            <mat-option value="ROL_PAGO">Rol de pago</mat-option>
           </mat-select>
         </mat-form-field>
       </section>
@@ -159,7 +161,7 @@ import { IntegracionContableService } from '../../services/integracion-contable.
               <ng-container matColumnDef="acciones">
                 <th mat-header-cell *matHeaderCellDef>Acciones</th>
                 <td mat-cell *matCellDef="let row">
-                  <button mat-button type="button" (click)="editar(row)" matTooltipPosition="above" [matTooltip]="ayuda.editar">Editar</button>
+                  <button mat-button type="button" (click)="editar(row)" matTooltipPosition="above" [matTooltip]="ayuda.editar">{{ row.estado === 'BORRADOR' ? 'Editar' : 'Ver' }}</button>
                   <button mat-button type="button" (click)="duplicar(row)" [disabled]="!canCreate()" matTooltipPosition="above" [matTooltip]="ayuda.duplicar">Duplicar</button>
                   <button mat-button type="button" (click)="reversar(row)" [disabled]="row.estado !== 'APROBADO' || !canCreate()" matTooltipPosition="above" [matTooltip]="ayuda.reversar">Reversar</button>
                   <button mat-button color="warn" type="button" (click)="eliminar(row)" [disabled]="row.estado !== 'BORRADOR' || !canDelete()" matTooltipPosition="above" [matTooltip]="ayuda.eliminar">Eliminar</button>
@@ -377,7 +379,13 @@ export class AsientosListComponent implements OnInit {
       RECEPCION_OC: 'Recepcion OC',
       REVERSO_RECEPCION_OC: 'Reverso recepcion',
       FACTURA_COMPRA: 'Factura de compra',
-      REVERSO_FACTURA_COMPRA: 'Reverso factura de compra'
+      REVERSO_FACTURA_COMPRA: 'Reverso factura de compra',
+      ROL_PAGO: 'Rol de pago',
+      REVERSO_ROL_PAGO: 'Reverso rol de pago',
+      CXP_MANUAL: 'Cuenta por pagar manual',
+      REVERSO_CXP_MANUAL: 'Reverso CxP manual',
+      PAGO_PROVEEDOR: 'Pago a proveedor',
+      REVERSO_PAGO_PROVEEDOR: 'Reverso pago a proveedor'
     };
     return origen ? labels[origen] ?? origen : 'Manual';
   }

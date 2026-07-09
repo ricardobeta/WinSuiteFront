@@ -1,16 +1,23 @@
-import { Component } from '@angular/core';
+import { Component, Injector, afterNextRender, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 
+import { loadTourSteps } from '../../../../core/config/tour-steps/tour-steps.registry';
+import { GuidedTourService } from '../../../../core/services/guided-tour.service';
+import { TourTriggerButtonComponent } from '../../../../shared/components/tour-trigger-button/tour-trigger-button.component';
+
 @Component({
   selector: 'app-colaboradores-shell',
   standalone: true,
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, MatButtonModule, MatIconModule],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, MatButtonModule, MatIconModule, TourTriggerButtonComponent],
   template: `
-    <section class="surface-card hero-card">
+    <section class="surface-card hero-card" id="tour-colaboradores-header">
       <div>
-        <p class="eyebrow">Colaboradores</p>
+        <p class="eyebrow">
+          Colaboradores
+          <app-tour-trigger-button (open)="startTourManually()" />
+        </p>
         <h2>Gestión de colaboradores y roles</h2>
         <p>Administra colaboradores, roles y accesos segun las responsabilidades de cada equipo.</p>
       </div>
@@ -22,12 +29,14 @@ import { MatIconModule } from '@angular/material/icon';
       </div>
     </section>
 
-    <nav class="surface-card tabs" aria-label="Submódulos colaboradores">
+    <nav class="surface-card tabs" id="tour-colaboradores-subnav" aria-label="Submódulos colaboradores">
       <a routerLink="/workspace/colaboradores/lista" routerLinkActive="active">Lista</a>
       <a routerLink="/workspace/colaboradores/roles" routerLinkActive="active">Roles</a>
     </nav>
 
-    <router-outlet />
+    <div id="tour-colaboradores-content">
+      <router-outlet />
+    </div>
   `,
   styles: [
     `
@@ -81,4 +90,28 @@ import { MatIconModule } from '@angular/material/icon';
     `
   ]
 })
-export class ColaboradoresShellComponent {}
+export class ColaboradoresShellComponent {
+  private static readonly MODULE_ID = 'colaboradores';
+
+  private readonly guidedTour = inject(GuidedTourService);
+  private readonly injector = inject(Injector);
+
+  constructor() {
+    if (!this.guidedTour.hasSeenTour(ColaboradoresShellComponent.MODULE_ID)) {
+      afterNextRender(
+        () => {
+          void loadTourSteps(ColaboradoresShellComponent.MODULE_ID).then((steps) =>
+            this.guidedTour.startTour(ColaboradoresShellComponent.MODULE_ID, steps)
+          );
+        },
+        { injector: this.injector }
+      );
+    }
+  }
+
+  protected startTourManually(): void {
+    void loadTourSteps(ColaboradoresShellComponent.MODULE_ID).then((steps) =>
+      this.guidedTour.startTour(ColaboradoresShellComponent.MODULE_ID, steps)
+    );
+  }
+}

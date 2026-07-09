@@ -1,15 +1,22 @@
-import { Component } from '@angular/core';
+import { Component, Injector, afterNextRender, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+
+import { loadTourSteps } from '../../../../core/config/tour-steps/tour-steps.registry';
+import { GuidedTourService } from '../../../../core/services/guided-tour.service';
+import { TourTriggerButtonComponent } from '../../../../shared/components/tour-trigger-button/tour-trigger-button.component';
 
 @Component({
   selector: 'app-ventas-shell',
   standalone: true,
-  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, TourTriggerButtonComponent],
   template: `
     <section class="ventas-shell">
-      <header class="ventas-hero surface-card">
+      <header class="ventas-hero surface-card" id="tour-ventas-header">
         <div>
-          <p class="eyebrow">Modulo Ventas</p>
+          <p class="eyebrow">
+            Modulo Ventas
+            <app-tour-trigger-button (open)="startTourManually()" />
+          </p>
           <h1>Punto de Venta</h1>
           <p>
             Gestiona cobros de mostrador, historial de ventas, reversos e indicadores comerciales en tiempo real.
@@ -17,14 +24,14 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
         </div>
       </header>
 
-      <nav class="subnav surface-card" aria-label="Navegacion de ventas">
+      <nav class="subnav surface-card" id="tour-ventas-subnav" aria-label="Navegacion de ventas">
         <a routerLink="pos" routerLinkActive="active-link">POS</a>
         <a routerLink="resumen" routerLinkActive="active-link">Resumen</a>
         <a routerLink="informes" routerLinkActive="active-link">Informes</a>
         <a routerLink="configuracion" routerLinkActive="active-link">Configuración</a>
       </nav>
 
-      <main class="ventas-content">
+      <main class="ventas-content" id="tour-ventas-content">
         <router-outlet />
       </main>
     </section>
@@ -41,4 +48,28 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
     .ventas-content { min-width: 0; }
   `]
 })
-export class VentasShellComponent {}
+export class VentasShellComponent {
+  private static readonly MODULE_ID = 'ventas';
+
+  private readonly guidedTour = inject(GuidedTourService);
+  private readonly injector = inject(Injector);
+
+  constructor() {
+    if (!this.guidedTour.hasSeenTour(VentasShellComponent.MODULE_ID)) {
+      afterNextRender(
+        () => {
+          void loadTourSteps(VentasShellComponent.MODULE_ID).then((steps) =>
+            this.guidedTour.startTour(VentasShellComponent.MODULE_ID, steps)
+          );
+        },
+        { injector: this.injector }
+      );
+    }
+  }
+
+  protected startTourManually(): void {
+    void loadTourSteps(VentasShellComponent.MODULE_ID).then((steps) =>
+      this.guidedTour.startTour(VentasShellComponent.MODULE_ID, steps)
+    );
+  }
+}

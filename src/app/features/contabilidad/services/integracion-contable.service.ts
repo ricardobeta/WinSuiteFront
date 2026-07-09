@@ -12,12 +12,15 @@ import {
   AsientoContableLinea,
   ConfiguracionIntegracionContable,
   MapeoCategoriaContable,
+  MapeoProveedorContable,
   OrigenAsientoAutomatico,
   OrigenModuloContable,
-  PendienteContabilizacion
+  PendienteContabilizacion,
+  TipoGastoCompra
 } from '../models/contabilidad.models';
 import { AsientosContablesService } from './asientos-contables.service';
 import { PlanCuentasService } from './plan-cuentas.service';
+import { TiposGastoCompraService } from './tipos-gasto-compra.service';
 
 type EstadoOrigenContable = 'DESACTIVADA' | 'ASIENTO_GENERADO' | 'PENDIENTE';
 
@@ -30,6 +33,7 @@ export class IntegracionContableService {
   private readonly asientosService = inject(AsientosContablesService);
   private readonly planCuentasService = inject(PlanCuentasService);
   private readonly productosService = inject(ProductosService);
+  private readonly tiposGastoService = inject(TiposGastoCompraService);
 
   private getTenantPath(): string {
     return `contabilidad/${this.authService.getTenantId()}`;
@@ -45,6 +49,14 @@ export class IntegracionContableService {
 
   private getMapeoCategoriaRef(categoriaId: string) {
     return ref(this.database, `${this.getTenantPath()}/mapeosAutomaticos/categorias/${categoriaId}`);
+  }
+
+  private getMapeosProveedoresRef() {
+    return ref(this.database, `${this.getTenantPath()}/mapeosAutomaticos/proveedores`);
+  }
+
+  private getMapeoProveedorRef(proveedorId: string) {
+    return ref(this.database, `${this.getTenantPath()}/mapeosAutomaticos/proveedores/${proveedorId}`);
   }
 
   private getAsientoOrigenRef(origenTipo: OrigenAsientoAutomatico, origenId: string) {
@@ -74,6 +86,15 @@ export class IntegracionContableService {
   async getConfiguracionOnce(): Promise<ConfiguracionIntegracionContable> {
     const snapshot = await get(this.getIntegracionesRef());
     return snapshot.exists() ? this.normalizarConfiguracion(snapshot.val()) : this.getDefaultConfiguracion();
+  }
+
+  /**
+   * Indica si la contabilidad está activada (toggle "Generar asientos automáticos"). Es el gate
+   * único que decide si cualquier módulo debe generar asientos contables.
+   */
+  async contabilidadActiva(): Promise<boolean> {
+    const config = await this.getConfiguracionOnce();
+    return config.habilitarAsientosAutomaticos;
   }
 
   async guardarConfiguracion(configuracion: ConfiguracionIntegracionContable): Promise<void> {
@@ -109,6 +130,58 @@ export class IntegracionContableService {
       ...mapeo,
       actualizadoEn: Date.now()
     });
+  }
+
+  getMapeosProveedores(): Observable<MapeoProveedorContable[]> {
+    return new Observable<MapeoProveedorContable[]>((subscriber) => {
+      const unsubscribe = onValue(
+        this.getMapeosProveedoresRef(),
+        (snapshot) => {
+          if (!snapshot.exists()) {
+            subscriber.next([]);
+            return;
+          }
+          const raw = snapshot.val() as Record<string, MapeoProveedorContable>;
+          subscriber.next(Object.entries(raw).map(([proveedorId, mapeo]) => ({ ...mapeo, proveedorId })));
+        },
+        (error) => subscriber.error(error)
+      );
+
+      return () => unsubscribe();
+    });
+  }
+
+  async guardarMapeoProveedor(mapeo: MapeoProveedorContable): Promise<void> {
+    await set(this.getMapeoProveedorRef(mapeo.proveedorId), {
+      ...mapeo,
+      actualizadoEn: Date.now()
+    });
+  }
+
+  async eliminarMapeoProveedor(proveedorId: string): Promise<void> {
+    await remove(this.getMapeoProveedorRef(proveedorId));
+  }
+
+  private async getMapeosProveedoresOnce(): Promise<Map<string, MapeoProveedorContable>> {
+    const snapshot = await get(this.getMapeosProveedoresRef());
+    if (!snapshot.exists()) {
+      return new Map();
+    }
+    const raw = snapshot.val() as Record<string, MapeoProveedorContable>;
+    return new Map(Object.entries(raw).map(([proveedorId, mapeo]) => [proveedorId, { ...mapeo, proveedorId }]));
+  }
+
+  /** Devuelve la cuenta override de un proveedor para el campo dado, o '' si no está configurada. */
+  private cuentaOverrideProveedor(
+    contexto: { mapeosProveedores: Map<string, MapeoProveedorContable> },
+    proveedorId: string | null | undefined,
+    campo: 'cuentaInventarioId' | 'cuentaCuentasPorPagarId'
+  ): string {
+    if (!proveedorId) {
+      return '';
+    }
+    const valor = contexto.mapeosProveedores.get(proveedorId)?.[campo];
+    return typeof valor === 'string' ? valor : '';
   }
 
   getPendientes(): Observable<PendienteContabilizacion[]> {
@@ -297,7 +370,11 @@ export class IntegracionContableService {
         }
         const producto = productos.get(item.productoId);
         const monto = this.roundToTwo(cantidad * item.costoUnitario);
-        const cuentaDebe = this.resolverCuenta(contexto, producto, 'cuentaInventarioId', config.cuentaInventarioId, 'Cuenta de inventario');
+        // Prioridad de cuenta de inventario: override por proveedor → mapeo por categoría → global.
+        const overrideProv = this.cuentaOverrideProveedor(contexto, orden.proveedorId, 'cuentaInventarioId');
+        const cuentaDebe = overrideProv
+          ? this.requerir(overrideProv, 'Cuenta de inventario')
+          : this.resolverCuenta(contexto, producto, 'cuentaInventarioId', config.cuentaInventarioId, 'Cuenta de inventario');
         lineas.push(this.crearLinea(contexto, cuentaDebe, item.descripcion, monto, 0));
       }
 
@@ -306,7 +383,9 @@ export class IntegracionContableService {
       }
 
       const totalHaber = lineas.reduce((total, linea) => total + linea.debe, 0);
-      lineas.push(this.crearLinea(contexto, this.requerir(config.cuentaCuentasPorPagarId, 'Cuenta por pagar proveedores'), `Factura proveedor ${recepcion.documentoProveedorNumero}`, 0, totalHaber));
+      // Cuenta por pagar: override por proveedor → global.
+      const cuentaPorPagarId = this.cuentaOverrideProveedor(contexto, orden.proveedorId, 'cuentaCuentasPorPagarId') || config.cuentaCuentasPorPagarId;
+      lineas.push(this.crearLinea(contexto, this.requerir(cuentaPorPagarId, 'Cuenta por pagar proveedores'), `Factura proveedor ${recepcion.documentoProveedorNumero}`, 0, totalHaber));
 
       await this.guardarAsiento(config, {
         fecha: this.fechaDesdeTimestamp(recepcion.documentoProveedorFecha ?? recepcion.creadoEn),
@@ -329,10 +408,9 @@ export class IntegracionContableService {
   }
 
   /**
-   * Contabiliza una factura de compra registrada. A diferencia de las integraciones de
-   * Ventas/Inventario, aquí registrar es una acción contable explícita del usuario, por lo
-   * que SIEMPRE se intenta el asiento (no depende del flag global de asientos automáticos)
-   * y los errores de configuración se propagan al llamador para mostrarlos en pantalla.
+   * Contabiliza una factura de compra registrada. Respeta el gate global de contabilidad
+   * (`habilitarAsientosAutomaticos`): si está desactivado no se genera asiento. Cuando está
+   * activo, los errores de configuración se propagan al llamador para mostrarlos en pantalla.
    */
   async contabilizarFacturaCompra(factura: FacturaCompra, items: FacturaCompraItem[]): Promise<void> {
     const origenId = factura.id ?? '';
@@ -346,15 +424,39 @@ export class IntegracionContableService {
       return;
     }
 
+    const tipoGasto = factura.tipoGastoId ? await this.tiposGastoService.getTipoGastoById(factura.tipoGastoId) : null;
+    const lineas = await this.construirLineasAsientoCompra(factura, items, tipoGasto);
+    await this.guardarAsientoCompra(factura, lineas);
+  }
+
+  /**
+   * Construye (sin guardar) las líneas del asiento de una factura de compra. El DEBE de gasto
+   * se determina por el Tipo de Gasto (plantilla de cuentas); si no hay tipo de gasto se usa la
+   * cuenta global de compras como fallback. IVA, retenciones y cuenta por pagar se derivan de la
+   * factura. Con varias cuentas de gasto, la primera recibe la base y el resto quedan en 0 para
+   * que el usuario reparta en el formulario de revisión.
+   */
+  async construirLineasAsientoCompra(
+    factura: FacturaCompra,
+    items: FacturaCompraItem[],
+    tipoGasto: TipoGastoCompra | null,
+    opciones: { lenient?: boolean } = {}
+  ): Promise<AsientoContableLinea[]> {
+    // En modo lenient (borrador para el formulario de revisión) las cuentas que falten en la
+    // configuración global no lanzan error: la línea se crea SIN cuenta para que el usuario la
+    // elija en el popup. En modo estricto (contabilización directa) sí se exige cada cuenta.
+    const lenient = opciones.lenient === true;
     const esNotaCredito = factura.tipoComprobante === '04';
     const config = await this.getConfiguracionOnce();
     const contexto = await this.crearContexto(config);
+    const documento = this.documentoFacturaCompra(factura);
     const productos = factura.alimentaInventario
       ? await this.cargarProductos(items.map((item) => ({ productoId: item.productoId ?? '' }) as VentaItem))
       : new Map<string, Producto>();
     let lineas: AsientoContableLinea[] = [];
 
     let baseItems = 0;
+    let baseGasto = 0;
     for (const item of items) {
       const base = this.roundToTwo(item.subtotal);
       if (base <= 0) {
@@ -363,21 +465,43 @@ export class IntegracionContableService {
       baseItems += base;
       if (factura.alimentaInventario && item.productoId) {
         const producto = productos.get(item.productoId);
-        const cuentaInventario = this.resolverCuenta(contexto, producto, 'cuentaInventarioId', config.cuentaInventarioId, 'Cuenta de inventario');
-        lineas.push(this.crearLinea(contexto, cuentaInventario, item.descripcion, base, 0));
+        // Prioridad de cuenta de inventario: override por proveedor → mapeo por categoría → global.
+        const overrideProv = this.cuentaOverrideProveedor(contexto, factura.proveedorId, 'cuentaInventarioId');
+        const cuentaInventario = overrideProv
+          ? this.resolverCuentaRequerida(contexto, overrideProv, 'Cuenta de inventario', lenient)
+          : this.resolverCuenta(contexto, producto, 'cuentaInventarioId', config.cuentaInventarioId, 'Cuenta de inventario', lenient);
+        lineas.push(this.crearLineaFlexible(contexto, cuentaInventario, this.descripcionCompra(item.descripcion, documento), base, 0));
       } else {
-        lineas.push(this.crearLinea(contexto, this.requerir(config.cuentaGastoComprasId, 'Cuenta de gasto/compras'), item.descripcion, base, 0));
+        baseGasto += base;
       }
     }
 
     // Fallback (típico en registro manual sin ítems): usar totalSinImpuestos como base del gasto.
     const totalSinImp = this.roundToTwo(factura.totalSinImpuestos ?? 0);
     if (baseItems <= 0 && totalSinImp > 0) {
-      lineas.push(this.crearLinea(contexto, this.requerir(config.cuentaGastoComprasId, 'Cuenta de gasto/compras'), 'Compra sin detalle', totalSinImp, 0));
+      baseGasto += totalSinImp;
+    }
+
+    // DEBE de gasto/costo: distribuido por las cuentas del tipo de gasto (o cuenta global).
+    if (baseGasto > 0) {
+      const cuentasGasto = tipoGasto?.cuentasGasto ?? [];
+      if (cuentasGasto.length > 0) {
+        cuentasGasto.forEach((cuenta, index) => {
+          lineas.push(this.crearLineaFlexible(
+            contexto,
+            this.resolverCuentaRequerida(contexto, cuenta.cuentaId, `Cuenta de gasto ${cuenta.nombreCuenta}`, lenient),
+            this.descripcionCompra(cuenta.nombreCuenta, documento),
+            index === 0 ? this.roundToTwo(baseGasto) : 0,
+            0
+          ));
+        });
+      } else {
+        lineas.push(this.crearLineaFlexible(contexto, this.resolverCuentaRequerida(contexto, config.cuentaGastoComprasId, 'Cuenta de gasto/compras', lenient), this.descripcionCompra('Compra', documento), this.roundToTwo(baseGasto), 0));
+      }
     }
 
     if ((factura.montoIva ?? 0) > 0) {
-      lineas.push(this.crearLinea(contexto, this.requerir(config.cuentaIvaComprasId, 'Cuenta de IVA compras'), 'IVA compras', factura.montoIva, 0));
+      lineas.push(this.crearLineaFlexible(contexto, this.resolverCuentaRequerida(contexto, config.cuentaIvaComprasId, 'Cuenta de IVA compras', lenient), this.descripcionCompra('IVA compras', documento), factura.montoIva, 0));
     }
 
     if (lineas.length === 0) {
@@ -390,21 +514,54 @@ export class IntegracionContableService {
     const totalRetIva = this.roundToTwo((factura.retencionesIva ?? []).reduce((total, ret) => total + Number(ret.valRetIva ?? 0), 0));
 
     if (totalRetRenta > 0) {
-      lineas.push(this.crearLinea(contexto, this.requerir(config.cuentaRetencionFuenteXPagarId, 'Retención en la fuente por pagar'), 'Retención fuente renta', 0, totalRetRenta));
+      lineas.push(this.crearLineaFlexible(contexto, this.resolverCuentaRequerida(contexto, config.cuentaRetencionFuenteXPagarId, 'Retención en la fuente por pagar', lenient), 'Retención fuente renta', 0, totalRetRenta));
     }
     if (totalRetIva > 0) {
-      lineas.push(this.crearLinea(contexto, this.requerir(config.cuentaRetencionIvaXPagarId, 'Retención IVA por pagar'), 'Retención IVA', 0, totalRetIva));
+      lineas.push(this.crearLineaFlexible(contexto, this.resolverCuentaRequerida(contexto, config.cuentaRetencionIvaXPagarId, 'Retención IVA por pagar', lenient), 'Retención IVA', 0, totalRetIva));
     }
 
     const porPagar = this.roundToTwo(totalDebe - totalRetRenta - totalRetIva);
-    const documento = `${factura.establecimiento}-${factura.puntoEmision}-${factura.secuencial}`;
-    lineas.push(this.crearLinea(contexto, this.requerir(config.cuentaCuentasPorPagarId, 'Cuenta por pagar proveedores'), `Factura proveedor ${documento}`, 0, porPagar));
+    // Cuenta por pagar: override por proveedor → global.
+    const cuentaPorPagarId = this.cuentaOverrideProveedor(contexto, factura.proveedorId, 'cuentaCuentasPorPagarId') || config.cuentaCuentasPorPagarId;
+    lineas.push(this.crearLineaFlexible(contexto, this.resolverCuentaRequerida(contexto, cuentaPorPagarId, 'Cuenta por pagar proveedores', lenient), this.descripcionCompra('Factura proveedor', documento), 0, porPagar));
+    lineas = lineas.map((linea) => ({
+      ...linea,
+      descripcion: this.descripcionCompra(linea.descripcion, documento)
+    }));
 
     // Nota de crédito de compra = reversa/devolución: se invierte debe ↔ haber.
     if (esNotaCredito) {
       lineas = lineas.map((linea) => ({ ...linea, debe: linea.haber, haber: linea.debe }));
     }
 
+    return lineas;
+  }
+
+  /**
+   * Persiste el asiento de una factura de compra a partir de las líneas ya definidas/revisadas
+   * por el usuario. Es idempotente: si la factura ya tiene asiento, no hace nada.
+   */
+  async guardarAsientoCompra(factura: FacturaCompra, lineas: AsientoContableLinea[]): Promise<void> {
+    const origenId = factura.id ?? '';
+    if (!origenId) {
+      throw new Error('La factura de compra no tiene identificador.');
+    }
+    if (!lineas || lineas.length === 0) {
+      throw new Error('El asiento no tiene líneas para contabilizar.');
+    }
+
+    const yaContabilizado = await get(this.getAsientoOrigenRef('FACTURA_COMPRA', origenId));
+    if (yaContabilizado.exists()) {
+      return;
+    }
+
+    const config = await this.getConfiguracionOnce();
+    // Gate de contabilidad: si está desactivada, no se genera asiento (la factura igual se registra).
+    if (!config.habilitarAsientosAutomaticos) {
+      return;
+    }
+    const esNotaCredito = factura.tipoComprobante === '04';
+    const documento = `${factura.establecimiento}-${factura.puntoEmision}-${factura.secuencial}`;
     const etiqueta = esNotaCredito ? 'Nota de crédito compra' : 'Factura de compra';
     await this.guardarAsiento(config, {
       fecha: this.fechaDesdeTimestamp(factura.fechaEmision ?? factura.creadoEn),
@@ -423,6 +580,180 @@ export class IntegracionContableService {
       totalHaber: 0,
       diferencia: 0
     });
+  }
+
+  // ===== Cuentas por Pagar (subledger) =====
+
+  /**
+   * Construye (sin guardar) las líneas del asiento de un pago a proveedor: un DEBE por cada
+   * documento aplicado contra la cuenta por pagar (override por proveedor → cuenta indicada) y un
+   * HABER total contra la cuenta de caja/banco de origen. En modo lenient las cuentas faltantes
+   * quedan vacías para que el usuario las complete en la revisión.
+   */
+  async construirLineasPagoProveedor(
+    input: {
+      cuentaPorPagarId: string;
+      cuentaOrigenId: string;
+      proveedorId?: string | null;
+      glosa: string;
+      aplicaciones: { documentoNumero: string; monto: number }[];
+    },
+    opciones: { lenient?: boolean } = {}
+  ): Promise<AsientoContableLinea[]> {
+    const lenient = opciones.lenient === true;
+    const config = await this.getConfiguracionOnce();
+    const contexto = await this.crearContexto(config);
+    const cuentaPorPagarId = this.cuentaOverrideProveedor(contexto, input.proveedorId, 'cuentaCuentasPorPagarId') || input.cuentaPorPagarId;
+    const lineas: AsientoContableLinea[] = [];
+    for (const aplicacion of input.aplicaciones) {
+      const monto = this.roundToTwo(aplicacion.monto);
+      if (monto <= 0) {
+        continue;
+      }
+      lineas.push(this.crearLineaFlexible(
+        contexto,
+        this.resolverCuentaRequerida(contexto, cuentaPorPagarId, 'Cuenta por pagar proveedores', lenient),
+        `Pago ${input.glosa} · ${aplicacion.documentoNumero}`.trim(),
+        monto,
+        0
+      ));
+    }
+    const total = this.roundToTwo(lineas.reduce((suma, linea) => suma + linea.debe, 0));
+    lineas.push(this.crearLineaFlexible(
+      contexto,
+      this.resolverCuentaRequerida(contexto, input.cuentaOrigenId, 'Cuenta caja/banco', lenient),
+      `Pago a proveedor ${input.glosa}`.trim(),
+      0,
+      total
+    ));
+    return lineas;
+  }
+
+  async guardarAsientoPagoProveedor(
+    pago: { id?: string; numero?: string; fecha: number; glosa: string },
+    lineas: AsientoContableLinea[]
+  ): Promise<string | null> {
+    return this.guardarAsientoSubledger('PAGO_PROVEEDOR', pago.id ?? '', pago.numero ?? null, pago.fecha, `Pago a proveedor ${pago.glosa}`.trim(), lineas);
+  }
+
+  /**
+   * Construye (sin guardar) el asiento de una cuenta por pagar manual (préstamo, servicio sin
+   * factura, provisión, etc.): DEBE cuenta contrapartida (gasto/activo) / HABER cuenta por pagar.
+   */
+  async construirLineasCxPManual(
+    input: {
+      cuentaContrapartidaId: string;
+      cuentaPorPagarId: string;
+      proveedorId?: string | null;
+      monto: number;
+      glosa: string;
+    },
+    opciones: { lenient?: boolean } = {}
+  ): Promise<AsientoContableLinea[]> {
+    const lenient = opciones.lenient === true;
+    const config = await this.getConfiguracionOnce();
+    const contexto = await this.crearContexto(config);
+    const cuentaPorPagarId = this.cuentaOverrideProveedor(contexto, input.proveedorId, 'cuentaCuentasPorPagarId') || input.cuentaPorPagarId;
+    const monto = this.roundToTwo(input.monto);
+    return [
+      this.crearLineaFlexible(contexto, this.resolverCuentaRequerida(contexto, input.cuentaContrapartidaId, 'Cuenta contrapartida (gasto/activo)', lenient), input.glosa, monto, 0),
+      this.crearLineaFlexible(contexto, this.resolverCuentaRequerida(contexto, cuentaPorPagarId, 'Cuenta por pagar proveedores', lenient), input.glosa, 0, monto)
+    ];
+  }
+
+  async guardarAsientoCxPManual(
+    documento: { id?: string; numero?: string; fecha: number; glosa: string },
+    lineas: AsientoContableLinea[]
+  ): Promise<string | null> {
+    return this.guardarAsientoSubledger('CXP_MANUAL', documento.id ?? '', documento.numero ?? null, documento.fecha, documento.glosa, lineas);
+  }
+
+  /**
+   * Genera el asiento de reverso de un documento/pago del subledger (para anulaciones), invirtiendo
+   * debe↔haber del asiento original. Es idempotente y respeta el gate global de contabilidad.
+   */
+  async reversarAsientoSubledger(
+    origenTipoOriginal: OrigenAsientoAutomatico,
+    origenId: string,
+    origenTipoReverso: OrigenAsientoAutomatico,
+    numero: string | null,
+    glosa: string
+  ): Promise<void> {
+    if (!origenId) {
+      return;
+    }
+    const config = await this.getConfiguracionOnce();
+    if (!config.habilitarAsientosAutomaticos) {
+      return;
+    }
+    const snapshot = await get(this.getAsientoOrigenRef(origenTipoOriginal, origenId));
+    if (!snapshot.exists()) {
+      return;
+    }
+    const yaReversado = await get(this.getAsientoOrigenRef(origenTipoReverso, origenId));
+    if (yaReversado.exists()) {
+      return;
+    }
+    const asientoOriginal = await this.asientosService.getAsientoById(String(snapshot.val()?.asientoId ?? ''));
+    if (!asientoOriginal) {
+      return;
+    }
+    const reverso: AsientoContable = {
+      ...this.asientosService.crearReverso(asientoOriginal),
+      fecha: this.fechaDesdeTimestamp(Date.now()),
+      glosa,
+      referencia: numero ?? '',
+      origen: origenTipoReverso,
+      origenTipo: origenTipoReverso,
+      origenId,
+      origenNumero: numero,
+      origenModulo: 'CUENTAS_POR_PAGAR'
+    };
+    await this.guardarAsiento(config, reverso);
+  }
+
+  /** Persiste un asiento del subledger e informa el id del asiento resultante (o null si no aplica). */
+  private async guardarAsientoSubledger(
+    origenTipo: OrigenAsientoAutomatico,
+    origenId: string,
+    origenNumero: string | null,
+    fechaTimestamp: number,
+    glosa: string,
+    lineas: AsientoContableLinea[]
+  ): Promise<string | null> {
+    if (!origenId) {
+      throw new Error('El documento no tiene identificador.');
+    }
+    if (!lineas || lineas.length === 0) {
+      throw new Error('El asiento no tiene líneas para contabilizar.');
+    }
+    const yaContabilizado = await get(this.getAsientoOrigenRef(origenTipo, origenId));
+    if (yaContabilizado.exists()) {
+      return String(yaContabilizado.val()?.asientoId ?? '') || null;
+    }
+    const config = await this.getConfiguracionOnce();
+    if (!config.habilitarAsientosAutomaticos) {
+      return null;
+    }
+    await this.guardarAsiento(config, {
+      fecha: this.fechaDesdeTimestamp(fechaTimestamp),
+      periodo: '',
+      tipo: 'AJUSTE',
+      glosa,
+      referencia: origenNumero ?? '',
+      estado: 'BORRADOR',
+      origen: origenTipo,
+      origenTipo,
+      origenId,
+      origenNumero,
+      origenModulo: 'CUENTAS_POR_PAGAR',
+      lineas,
+      totalDebe: 0,
+      totalHaber: 0,
+      diferencia: 0
+    });
+    const snapshot = await get(this.getAsientoOrigenRef(origenTipo, origenId));
+    return snapshot.exists() ? String(snapshot.val()?.asientoId ?? '') || null : null;
   }
 
   async reintentarPendiente(pendiente: PendienteContabilizacion): Promise<void> {
@@ -490,7 +821,8 @@ export class IntegracionContableService {
     const cuentas = await this.planCuentasService.getCuentasOnce();
     const cuentasPorId = new Map(cuentas.map((cuenta) => [cuenta.id ?? '', cuenta]));
     const mapeos = await this.getMapeosCategoriasOnce();
-    return { config, cuentasPorId, mapeos };
+    const mapeosProveedores = await this.getMapeosProveedoresOnce();
+    return { config, cuentasPorId, mapeos, mapeosProveedores };
   }
 
   private async getMapeosCategoriasOnce(): Promise<Map<string, MapeoCategoriaContable>> {
@@ -524,11 +856,37 @@ export class IntegracionContableService {
     producto: Producto | undefined,
     campoCategoria: keyof MapeoCategoriaContable,
     cuentaGlobalId: string,
-    nombreCuenta: string
+    nombreCuenta: string,
+    lenient = false
   ): string {
     const categoriaId = producto?.categoriaId ?? '';
     const desdeCategoria = contexto.mapeos.get(categoriaId)?.[campoCategoria];
-    return this.requerir(typeof desdeCategoria === 'string' && desdeCategoria ? desdeCategoria : cuentaGlobalId, nombreCuenta, contexto.cuentasPorId);
+    const candidato = typeof desdeCategoria === 'string' && desdeCategoria ? desdeCategoria : cuentaGlobalId;
+    return this.resolverCuentaRequerida(contexto, candidato, nombreCuenta, lenient);
+  }
+
+  /**
+   * Resuelve una cuenta obligatoria. En modo estricto exige que exista y sea válida (lanza si no).
+   * En modo lenient devuelve '' cuando la cuenta falta o no es válida, para dejar que el usuario la
+   * complete en el formulario de revisión.
+   */
+  private resolverCuentaRequerida(
+    contexto: { cuentasPorId: Map<string, { estado: string; permiteMovimiento: boolean }> },
+    cuentaId: string | undefined,
+    nombre: string,
+    lenient: boolean
+  ): string {
+    if (!lenient) {
+      return this.requerir(cuentaId, nombre, contexto.cuentasPorId);
+    }
+    if (!cuentaId) {
+      return '';
+    }
+    const cuenta = contexto.cuentasPorId.get(cuentaId);
+    if (!cuenta || cuenta.estado !== 'ACTIVA' || !cuenta.permiteMovimiento) {
+      return '';
+    }
+    return cuentaId;
   }
 
   private requerir(cuentaId: string | undefined, nombre: string, cuentasPorId?: Map<string, { estado: string; permiteMovimiento: boolean }>): string {
@@ -563,6 +921,44 @@ export class IntegracionContableService {
       debe: this.roundToTwo(debe),
       haber: this.roundToTwo(haber)
     };
+  }
+
+  /**
+   * Crea una línea de asiento tolerante: si la cuenta es vacía o no existe, la línea queda SIN
+   * cuenta (campos en blanco) para que el usuario la seleccione en el formulario de revisión.
+   */
+  private crearLineaFlexible(
+    contexto: { cuentasPorId: Map<string, { codigo: string; nombre: string; estado: string; permiteMovimiento: boolean }> },
+    cuentaId: string,
+    descripcion: string,
+    debe: number,
+    haber: number
+  ): AsientoContableLinea {
+    const cuenta = cuentaId ? contexto.cuentasPorId.get(cuentaId) : undefined;
+    return {
+      id: `lin_${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+      cuentaId: cuenta ? cuentaId : '',
+      codigoCuenta: cuenta?.codigo ?? '',
+      nombreCuenta: cuenta?.nombre ?? '',
+      descripcion,
+      debe: this.roundToTwo(debe),
+      haber: this.roundToTwo(haber)
+    };
+  }
+
+  private documentoFacturaCompra(factura: FacturaCompra): string {
+    return [factura.establecimiento, factura.puntoEmision, factura.secuencial]
+      .map((parte) => String(parte ?? '').trim())
+      .filter(Boolean)
+      .join('-');
+  }
+
+  private descripcionCompra(descripcion: string, documento: string): string {
+    const base = descripcion.trim() || 'Compra';
+    if (!documento || base.includes(documento)) {
+      return base;
+    }
+    return `${base} - Factura #${documento}`;
   }
 
   private async registrarPendiente(pendiente: Omit<PendienteContabilizacion, 'id'>): Promise<void> {

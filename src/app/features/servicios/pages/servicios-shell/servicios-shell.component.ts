@@ -1,15 +1,22 @@
-import { Component } from '@angular/core';
+import { Component, Injector, afterNextRender, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+
+import { loadTourSteps } from '../../../../core/config/tour-steps/tour-steps.registry';
+import { GuidedTourService } from '../../../../core/services/guided-tour.service';
+import { TourTriggerButtonComponent } from '../../../../shared/components/tour-trigger-button/tour-trigger-button.component';
 
 @Component({
   selector: 'app-servicios-shell',
   standalone: true,
-  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, TourTriggerButtonComponent],
   template: `
     <section class="servicios-shell">
-      <header class="servicios-hero surface-card">
+      <header class="servicios-hero surface-card" id="tour-servicios-header">
         <div>
-          <p class="eyebrow">Modulo Servicios</p>
+          <p class="eyebrow">
+            Modulo Servicios
+            <app-tour-trigger-button (open)="startTourManually()" />
+          </p>
           <h1>Servicios</h1>
           <p>
             Gestiona el catalogo de servicios, precios y configuraciones que usa tu operacion comercial.
@@ -17,12 +24,12 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
         </div>
       </header>
 
-      <nav class="subnav surface-card" aria-label="Navegacion de servicios">
+      <nav class="subnav surface-card" id="tour-servicios-subnav" aria-label="Navegacion de servicios">
         <a routerLink="lista" routerLinkActive="active-link">Lista</a>
         <a routerLink="configuracion" routerLinkActive="active-link">Configuracion</a>
       </nav>
 
-      <main class="servicios-content">
+      <main class="servicios-content" id="tour-servicios-content">
         <router-outlet />
       </main>
     </section>
@@ -39,4 +46,28 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
     .servicios-content { min-width: 0; }
   `]
 })
-export class ServiciosShellComponent {}
+export class ServiciosShellComponent {
+  private static readonly MODULE_ID = 'servicios';
+
+  private readonly guidedTour = inject(GuidedTourService);
+  private readonly injector = inject(Injector);
+
+  constructor() {
+    if (!this.guidedTour.hasSeenTour(ServiciosShellComponent.MODULE_ID)) {
+      afterNextRender(
+        () => {
+          void loadTourSteps(ServiciosShellComponent.MODULE_ID).then((steps) =>
+            this.guidedTour.startTour(ServiciosShellComponent.MODULE_ID, steps)
+          );
+        },
+        { injector: this.injector }
+      );
+    }
+  }
+
+  protected startTourManually(): void {
+    void loadTourSteps(ServiciosShellComponent.MODULE_ID).then((steps) =>
+      this.guidedTour.startTour(ServiciosShellComponent.MODULE_ID, steps)
+    );
+  }
+}

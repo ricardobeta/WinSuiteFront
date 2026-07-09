@@ -1,15 +1,22 @@
-import { Component } from '@angular/core';
+import { Component, Injector, afterNextRender, inject } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
+
+import { loadTourSteps } from '../../../../core/config/tour-steps/tour-steps.registry';
+import { GuidedTourService } from '../../../../core/services/guided-tour.service';
+import { TourTriggerButtonComponent } from '../../../../shared/components/tour-trigger-button/tour-trigger-button.component';
 
 @Component({
 	selector: 'app-facturacion-shell',
 	standalone: true,
-	imports: [RouterOutlet],
+	imports: [RouterOutlet, TourTriggerButtonComponent],
 	template: `
 		<section class="facturacion-shell">
-			<header class="facturacion-hero surface-card">
+			<header class="facturacion-hero surface-card" id="tour-facturacion-header">
 				<div>
-					<p class="eyebrow">Módulo Facturación Electrónica</p>
+					<p class="eyebrow">
+						Módulo Facturación Electrónica
+						<app-tour-trigger-button (open)="startTourManually()" />
+					</p>
 					<h1>Facturación</h1>
 					<p>
 						Centraliza firmas, configuracion tributaria y emision de facturas electronicas para tu empresa.
@@ -17,7 +24,7 @@ import { RouterOutlet } from '@angular/router';
 				</div>
 			</header>
 
-			<main class="facturacion-content">
+			<main class="facturacion-content" id="tour-facturacion-content">
 				<router-outlet />
 			</main>
 		</section>
@@ -31,4 +38,28 @@ import { RouterOutlet } from '@angular/router';
 			.facturacion-content { min-width: 0; }
 		` ]
 })
-export class FacturacionShellComponent {}
+export class FacturacionShellComponent {
+	private static readonly MODULE_ID = 'facturacion';
+
+	private readonly guidedTour = inject(GuidedTourService);
+	private readonly injector = inject(Injector);
+
+	constructor() {
+		if (!this.guidedTour.hasSeenTour(FacturacionShellComponent.MODULE_ID)) {
+			afterNextRender(
+				() => {
+					void loadTourSteps(FacturacionShellComponent.MODULE_ID).then((steps) =>
+						this.guidedTour.startTour(FacturacionShellComponent.MODULE_ID, steps)
+					);
+				},
+				{ injector: this.injector }
+			);
+		}
+	}
+
+	protected startTourManually(): void {
+		void loadTourSteps(FacturacionShellComponent.MODULE_ID).then((steps) =>
+			this.guidedTour.startTour(FacturacionShellComponent.MODULE_ID, steps)
+		);
+	}
+}

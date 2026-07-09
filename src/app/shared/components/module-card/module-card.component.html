@@ -1,0 +1,21 @@
+<div
+  class="module-card"
+  [class.selected]="selected"
+  [class.locked]="module.locked"
+  (click)="onClick()"
+>
+  <div class="module-card-top">
+    <mat-icon>{{ module.icon }}</mat-icon>
+    <strong class="module-card-label">{{ module.label }}</strong>
+
+    @if (module.locked) {
+      <span class="module-lock-badge">Incluido</span>
+    } @else if (variant === 'toggle') {
+      <mat-slide-toggle [checked]="selected" (click)="$event.stopPropagation()" (change)="toggle.emit()" />
+    } @else {
+      <mat-checkbox [checked]="selected" (click)="$event.stopPropagation()" (change)="toggle.emit()" />
+    }
+  </div>
+
+  <small class="module-card-description">{{ module.description }}</small>
+</div>

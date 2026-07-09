@@ -25,6 +25,17 @@ export class TenantApiService {
     );
   }
 
+  getCurrentTenant(): Observable<TenantApiResponse> {
+    return this.http.get<TenantApiResponse>(`${environment.apiBaseUrl}/api/tenants/current`);
+  }
+
+  updateActiveModules(activeModules: string[]): Observable<TenantApiResponse> {
+    return this.http.patch<TenantApiResponse>(
+      `${environment.apiBaseUrl}/api/tenants/current/modules`,
+      { activeModules }
+    );
+  }
+
   createTenantUser(userProfile: AppUserProfile): Observable<AppUserProfile> {
     return this.http.post<AppUserProfile>(
       `${environment.apiBaseUrl}/api/tenants/current/users`,

@@ -113,9 +113,16 @@ export interface FacturaCompra {
   almacenId?: string | null;
   ordenCompraId?: string | null;
 
+  // Contabilizacion: tipo de gasto (plantilla de cuentas) usado al generar el asiento.
+  tipoGastoId?: string | null;
+
   // Archivo XML
   archivoId?: string | null;
   xmlStoragePath?: string | null;
+
+  // PDF/RIDE asociado (mismo claveAcceso en el módulo Archivos), para ver el comprobante.
+  pdfArchivoId?: string | null;
+  pdfDownloadUrl?: string | null;
 
   creadoPor?: string;
   creadoEn: number;
@@ -138,6 +145,9 @@ export interface FacturaCompraParsed {
   tpIdProv: string;
   idProv: string;
   razonSocialProv: string;
+  // Comprador (receptor) del comprobante: usado para validar que la factura es para la empresa.
+  identificacionComprador?: string;
+  razonSocialComprador?: string;
   tipoComprobante: string;
   establecimiento: string;
   puntoEmision: string;

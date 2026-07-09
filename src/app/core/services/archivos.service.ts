@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, get, onValue, push, ref as databaseRef, remove, runTransaction, set } from '@angular/fire/database';
+import { Database, endAt, get, onValue, orderByChild, push, query, ref as databaseRef, remove, runTransaction, set, startAt } from '@angular/fire/database';
 import { Storage, deleteObject, getDownloadURL, ref as storageRef, uploadBytesResumable } from '@angular/fire/storage';
 import { Observable } from 'rxjs';
 
@@ -72,6 +72,47 @@ export class ArchivosService {
 
       return () => unsubscribe();
     });
+  }
+
+  async getArchivosPorFechaEmision(fechaInicio: string, fechaFin: string): Promise<ArchivoItem[]> {
+    const tenantId = this.authService.getTenantId();
+    const porFechaEmisionQuery = query(
+      databaseRef(this.database, this.getArchivosPath(tenantId)),
+      orderByChild('fechaEmision'),
+      startAt(fechaInicio),
+      endAt(fechaFin)
+    );
+    const porNombreQuery = query(
+      databaseRef(this.database, this.getArchivosPath(tenantId)),
+      orderByChild('name'),
+      startAt(fechaInicio),
+      endAt(`${fechaFin}\uf8ff`)
+    );
+    const [porFechaEmision, porNombre] = await Promise.all([
+      get(porFechaEmisionQuery),
+      get(porNombreQuery)
+    ]);
+    const archivos: ArchivoItem[] = [];
+    const vistos = new Set<string>();
+
+    for (const snapshot of [porFechaEmision, porNombre]) {
+      snapshot.forEach((child) => {
+        const value = child.val() as Partial<ArchivoItem> | null;
+        if (!value) {
+          return false;
+        }
+        const id = child.key ?? value.id ?? '';
+        if (!id || vistos.has(id)) {
+          return false;
+        }
+        vistos.add(id);
+        archivos.push(this.mapArchivoItem(id, tenantId, value));
+        return false;
+      });
+    }
+
+    archivos.sort((a, b) => b.uploadedAt - a.uploadedAt);
+    return archivos;
   }
 
   getUsage(): Observable<ArchivosUsage> {
@@ -322,6 +363,85 @@ export class ArchivosService {
         updatedAt: Date.now()
       };
     });
+  }
+
+  /**
+   * Busca un archivo por su clave de acceso SRI (compartida entre el XML y su RIDE/PDF),
+   * opcionalmente filtrando por extensión (ej. 'pdf'). Devuelve el más reciente que coincida.
+   */
+  async buscarPorClaveAcceso(claveAcceso: string, extension?: string): Promise<ArchivoItem | null> {
+    const clave = (claveAcceso ?? '').trim();
+    if (!clave) {
+      return null;
+    }
+    const tenantId = this.authService.getTenantId();
+    const snapshot = await get(databaseRef(this.database, this.getArchivosPath(tenantId)));
+    if (!snapshot.exists()) {
+      return null;
+    }
+    const ext = extension?.toLowerCase();
+    const coincidencias: ArchivoItem[] = [];
+    snapshot.forEach((child) => {
+      const value = child.val() as Partial<ArchivoItem> | null;
+      if (!value || (value.claveAcceso ?? '').trim() !== clave) {
+        return false;
+      }
+      const valueExt = (value.extension ?? '').toString().toLowerCase();
+      if (ext && valueExt !== ext) {
+        return false;
+      }
+      coincidencias.push({
+        id: child.key ?? value.id ?? '',
+        tenantId: value.tenantId ?? tenantId,
+        name: value.name ?? 'Sin nombre',
+        sizeBytes: typeof value.sizeBytes === 'number' ? value.sizeBytes : 0,
+        contentType: value.contentType,
+        extension: value.extension,
+        sourceModule: value.sourceModule,
+        jobId: value.jobId,
+        claveAcceso: value.claveAcceso,
+        tipoArchivo: value.tipoArchivo,
+        fechaEmision: value.fechaEmision,
+        rucProveedor: value.rucProveedor,
+        proveedor: value.proveedor,
+        numeroDocumento: value.numeroDocumento,
+        uploadedBy: value.uploadedBy,
+        uploadedById: value.uploadedById,
+        uploadedAt: typeof value.uploadedAt === 'number' ? value.uploadedAt : Date.now(),
+        storagePath: value.storagePath ?? '',
+        downloadUrl: value.downloadUrl ?? ''
+      });
+      return false;
+    });
+    if (coincidencias.length === 0) {
+      return null;
+    }
+    coincidencias.sort((a, b) => b.uploadedAt - a.uploadedAt);
+    return coincidencias[0];
+  }
+
+  private mapArchivoItem(id: string, tenantId: string, value: Partial<ArchivoItem>): ArchivoItem {
+    return {
+      id,
+      tenantId: value.tenantId ?? tenantId,
+      name: value.name ?? 'Sin nombre',
+      sizeBytes: typeof value.sizeBytes === 'number' ? value.sizeBytes : 0,
+      contentType: value.contentType,
+      extension: value.extension,
+      sourceModule: value.sourceModule,
+      jobId: value.jobId,
+      claveAcceso: value.claveAcceso,
+      tipoArchivo: value.tipoArchivo,
+      fechaEmision: value.fechaEmision,
+      rucProveedor: value.rucProveedor,
+      proveedor: value.proveedor,
+      numeroDocumento: value.numeroDocumento,
+      uploadedBy: value.uploadedBy,
+      uploadedById: value.uploadedById,
+      uploadedAt: typeof value.uploadedAt === 'number' ? value.uploadedAt : Date.now(),
+      storagePath: value.storagePath ?? '',
+      downloadUrl: value.downloadUrl ?? ''
+    };
   }
 
   private getArchivosPath(tenantId: string): string {

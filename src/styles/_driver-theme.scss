@@ -1,0 +1,74 @@
+/* Tactile Clarity theming for driver.js guided tours.
+   Overrides driver.js's own class hooks; see node_modules/driver.js/dist/driver.css
+   for the base rules being replaced. */
+
+.driver-popover {
+  background: var(--tc-glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--tc-ghost-border);
+  border-radius: var(--tc-radius-lg);
+  box-shadow: var(--tc-elevation-1);
+  color: var(--tc-on-surface);
+  padding: 1.1rem 1.2rem;
+  max-width: 320px;
+}
+
+.driver-popover-title {
+  color: var(--tc-on-surface);
+  font-family: var(--tc-font-family-heading);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.driver-popover-description {
+  color: var(--tc-on-surface);
+  opacity: 0.85;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.driver-popover-progress-text {
+  color: var(--tc-tertiary);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.driver-popover-footer {
+  margin-top: 0.75rem;
+}
+
+.driver-popover-footer button {
+  background: var(--tc-surface-container-high, var(--tc-surface-container-highest));
+  color: var(--tc-on-surface);
+  border: none;
+  border-radius: 999px;
+  padding: 0.45rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-shadow: none;
+  box-shadow: none;
+}
+
+.driver-popover-footer .driver-popover-next-btn,
+.driver-popover-footer .driver-popover-done-btn {
+  background: var(--tc-gradient-primary);
+  color: var(--tc-on-primary);
+}
+
+.driver-popover-close-btn {
+  color: var(--tc-on-surface);
+  opacity: 0.6;
+}
+
+.driver-popover-arrow-side-left.driver-popover-arrow,
+.driver-popover-arrow-side-right.driver-popover-arrow,
+.driver-popover-arrow-side-top.driver-popover-arrow,
+.driver-popover-arrow-side-bottom.driver-popover-arrow {
+  border-color: transparent;
+}
+
+.driver-active-element {
+  border-radius: var(--tc-radius-md);
+  box-shadow: 0 0 0 3px var(--tc-primary);
+}

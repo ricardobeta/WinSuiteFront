@@ -1,11 +1,14 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, get, onValue, push, ref, set, update } from '@angular/fire/database';
+import { Database, get, onValue, push, ref, remove, set, update } from '@angular/fire/database';
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
 import {
   CuentaContable,
   CuentaPlanExport,
+  AsientoContable,
+  ConfiguracionIntegracionContable,
+  MapeoCategoriaContable,
   NaturalezaCuenta,
   PlanCuentasExport,
   PlantillaPlanCuentas,
@@ -132,6 +135,34 @@ export class PlanCuentasService {
     }
 
     await update(this.getCollectionRef(), updates);
+  }
+
+  async eliminarCuenta(cuenta: CuentaContable): Promise<void> {
+    if (!cuenta.id) {
+      return;
+    }
+
+    const cuentaId = cuenta.id;
+    const cuentas = await this.getCuentasOnce();
+    const cuentaActual = cuentas.find((item) => item.id === cuentaId);
+    if (!cuentaActual) {
+      throw new Error('La cuenta ya no existe en el plan de cuentas.');
+    }
+
+    if (!cuentaActual.cuentaPadreId) {
+      throw new Error('Solo se pueden eliminar cuentas hijas. Las cuentas principales se conservan para mantener la estructura del plan.');
+    }
+
+    if (cuentas.some((item) => item.cuentaPadreId === cuentaActual.id)) {
+      throw new Error('No se puede eliminar la cuenta porque tiene subcuentas asociadas.');
+    }
+
+    const uso = await this.validarCuentaSinUso(cuentaId);
+    if (uso) {
+      throw new Error(uso);
+    }
+
+    await remove(this.getItemRef(cuentaId));
   }
 
   async aplicarPlantilla(plantilla: PlantillaPlanCuentas): Promise<ResultadoAplicarPlantilla> {
@@ -363,5 +394,62 @@ export class PlanCuentasService {
     }
 
     return 0;
+  }
+
+  private async validarCuentaSinUso(cuentaId: string): Promise<string | null> {
+    const asientosSnapshot = await get(ref(this.database, `${this.getTenantPath()}/asientos`));
+    if (asientosSnapshot.exists()) {
+      const asientos = asientosSnapshot.val() as Record<string, AsientoContable>;
+      const usadaEnAsiento = Object.values(asientos).some((asiento) =>
+        Array.isArray(asiento.lineas) && asiento.lineas.some((linea) => linea.cuentaId === cuentaId)
+      );
+      if (usadaEnAsiento) {
+        return 'No se puede eliminar la cuenta porque ya fue usada en asientos contables.';
+      }
+    }
+
+    const saldosSnapshot = await get(ref(this.database, `${this.getTenantPath()}/saldos`));
+    if (saldosSnapshot.exists() && this.saldosUsanCuenta(saldosSnapshot.val(), cuentaId)) {
+      return 'No se puede eliminar la cuenta porque tiene saldos contables asociados.';
+    }
+
+    const integracionesSnapshot = await get(ref(this.database, `${this.getTenantPath()}/configuracion/integraciones`));
+    if (integracionesSnapshot.exists() && this.configuracionUsaCuenta(integracionesSnapshot.val(), cuentaId)) {
+      return 'No se puede eliminar la cuenta porque esta asignada en la configuracion de integraciones contables.';
+    }
+
+    const mapeosSnapshot = await get(ref(this.database, `${this.getTenantPath()}/mapeosAutomaticos/categorias`));
+    if (mapeosSnapshot.exists()) {
+      const mapeos = mapeosSnapshot.val() as Record<string, MapeoCategoriaContable>;
+      const usadaEnMapeo = Object.values(mapeos).some((mapeo) => this.mapeoUsaCuenta(mapeo, cuentaId));
+      if (usadaEnMapeo) {
+        return 'No se puede eliminar la cuenta porque esta asignada en un mapeo contable de categoria.';
+      }
+    }
+
+    return null;
+  }
+
+  private saldosUsanCuenta(value: unknown, cuentaId: string): boolean {
+    if (!value || typeof value !== 'object') {
+      return false;
+    }
+
+    return Object.entries(value as Record<string, unknown>).some(([key, child]) =>
+      key === cuentaId || this.saldosUsanCuenta(child, cuentaId)
+    );
+  }
+
+  private configuracionUsaCuenta(value: unknown, cuentaId: string): boolean {
+    const config = value as Partial<ConfiguracionIntegracionContable> | null;
+    if (!config || typeof config !== 'object') {
+      return false;
+    }
+
+    return Object.entries(config).some(([key, configValue]) => key.startsWith('cuenta') && configValue === cuentaId);
+  }
+
+  private mapeoUsaCuenta(mapeo: MapeoCategoriaContable, cuentaId: string): boolean {
+    return Object.entries(mapeo).some(([key, value]) => key.startsWith('cuenta') && value === cuentaId);
   }
 }

@@ -435,7 +435,12 @@ export class AsientoFormComponent implements OnInit {
       }
 
       this.mostrarMensaje(accion === 'APROBADO' ? 'Asiento aprobado.' : 'Borrador guardado.', accion === 'APROBADO' ? 'check_circle' : 'save');
-      await this.router.navigate(['/workspace/contabilidad/asientos', id, 'editar']);
+
+      if (accion === 'APROBADO') {
+        await this.router.navigate(['/workspace/contabilidad/asientos']);
+      } else {
+        await this.router.navigate(['/workspace/contabilidad/asientos', id, 'editar']);
+      }
     } catch (error: unknown) {
       this.error.set(error instanceof Error ? error.message : 'No se pudo guardar el asiento.');
     } finally {

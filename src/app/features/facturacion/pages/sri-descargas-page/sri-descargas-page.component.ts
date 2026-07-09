@@ -11,14 +11,14 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
-import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
-import { finalize, interval, startWith, switchMap, takeWhile } from 'rxjs';
+import { Database, objectVal, ref } from '@angular/fire/database';
+import { finalize } from 'rxjs';
 
 import { SriDescargasService } from '../../../../core/services/sri-descargas.service';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
-import { SriDownloadJob, SriFrecuencia } from '../../../../shared/models/sri.models';
+import { SriDownloadJob } from '../../../../shared/models/sri.models';
 
 @Component({
   selector: 'app-sri-descargas-page',
@@ -35,7 +35,6 @@ import { SriDownloadJob, SriFrecuencia } from '../../../../shared/models/sri.mod
     MatInputModule,
     MatProgressBarModule,
     MatSelectModule,
-    MatSlideToggleModule,
     MatSnackBarModule,
     MatTableModule
   ],
@@ -47,17 +46,23 @@ import { SriDownloadJob, SriFrecuencia } from '../../../../shared/models/sri.mod
           <h2>Facturas recibidas</h2>
           <p>Descarga XML y PDF/RIDE de compras autorizadas, con control de cuota del modulo Archivos.</p>
         </div>
-        <button mat-stroked-button type="button" (click)="loadJobs()" [disabled]="loadingJobs()">
-          <mat-icon>refresh</mat-icon>
-          Actualizar
-        </button>
+        <div class="toolbar-actions">
+          <a mat-stroked-button [href]="agentDownloadUrl" target="_blank" rel="noopener">
+            <mat-icon>download</mat-icon>
+            Descargar agente
+          </a>
+          <button mat-stroked-button type="button" (click)="loadJobs()" [disabled]="loadingJobs()">
+            <mat-icon>refresh</mat-icon>
+            Actualizar
+          </button>
+        </div>
       </div>
 
       <div class="grid">
         <mat-card appearance="outlined" class="surface-card">
           <mat-card-header>
-            <mat-card-title>Credenciales y batch</mat-card-title>
-            <mat-card-subtitle>La clave se guarda protegida para tus procesos autorizados</mat-card-subtitle>
+            <mat-card-title>Credenciales SRI</mat-card-title>
+            <mat-card-subtitle>Se guardan cifradas SOLO en tu equipo (agente local); nunca en la nube</mat-card-subtitle>
           </mat-card-header>
           <mat-card-content>
             <form class="form" [formGroup]="configForm" (ngSubmit)="saveConfig()">
@@ -76,22 +81,10 @@ import { SriDownloadJob, SriFrecuencia } from '../../../../shared/models/sri.mod
                 <input matInput type="password" formControlName="password" autocomplete="new-password" />
               </mat-form-field>
 
-              <div class="schedule-row">
-                <mat-slide-toggle color="primary" formControlName="activa">Batch activo</mat-slide-toggle>
-                <mat-form-field appearance="outline">
-                  <mat-label>Frecuencia</mat-label>
-                  <mat-select formControlName="frecuencia">
-                    <mat-option value="diaria">Diaria</mat-option>
-                    <mat-option value="semanal">Semanal</mat-option>
-                    <mat-option value="mensual">Mensual</mat-option>
-                  </mat-select>
-                </mat-form-field>
-              </div>
-
               <div class="actions">
                 <button mat-raised-button color="primary" type="submit" [disabled]="configForm.invalid || savingConfig()">
                   <mat-icon>vpn_key</mat-icon>
-                  {{ savingConfig() ? 'Guardando...' : 'Guardar configuracion' }}
+                  {{ savingConfig() ? 'Guardando...' : 'Guardar en el agente local' }}
                 </button>
               </div>
             </form>
@@ -104,6 +97,23 @@ import { SriDownloadJob, SriFrecuencia } from '../../../../shared/models/sri.mod
             <mat-card-subtitle>Elige un dia especifico o un mes completo (maximo hasta ayer)</mat-card-subtitle>
           </mat-card-header>
           <mat-card-content>
+            <div class="conn-row">
+              <button mat-stroked-button type="button" (click)="checkConnection()" [disabled]="connStatus() === 'checking'">
+                <mat-icon>lan</mat-icon>
+                {{ connStatus() === 'checking' ? 'Comprobando...' : 'Comprobar conexion' }}
+              </button>
+              @if (connStatus() === 'ok') {
+                <span class="conn-badge conn-ok"><mat-icon>check_circle</mat-icon>{{ connMessage() }}</span>
+              }
+              @if (connStatus() === 'fail') {
+                <span class="conn-badge conn-fail"><mat-icon>error</mat-icon>{{ connMessage() }}</span>
+                <a mat-stroked-button [href]="agentDownloadUrl" target="_blank" rel="noopener">
+                  <mat-icon>download</mat-icon>
+                  Descargar agente
+                </a>
+              }
+            </div>
+
             <form class="form" [formGroup]="downloadForm" (ngSubmit)="startDownload()">
               <mat-button-toggle-group
                 class="mode-toggle"
@@ -155,10 +165,15 @@ import { SriDownloadJob, SriFrecuencia } from '../../../../shared/models/sri.mod
               }
 
               <div class="actions">
-                <button mat-raised-button color="primary" type="submit" [disabled]="downloadForm.invalid || startingDownload() || !!downloadError()">
+                <button mat-raised-button color="primary" type="submit" [disabled]="downloadForm.invalid || startingDownload() || !!downloadError() || connStatus() !== 'ok' || !credsConfigured()">
                   <mat-icon>cloud_download</mat-icon>
                   {{ startingDownload() ? 'Iniciando...' : 'Descargar XML y PDF' }}
                 </button>
+                @if (connStatus() !== 'ok') {
+                  <span class="conn-hint">Comprueba la conexion para habilitar la descarga.</span>
+                } @else if (!credsConfigured()) {
+                  <span class="conn-hint">Guarda las credenciales SRI en el agente para habilitar la descarga.</span>
+                }
               </div>
             </form>
           </mat-card-content>
@@ -169,7 +184,7 @@ import { SriDownloadJob, SriFrecuencia } from '../../../../shared/models/sri.mod
         <mat-card appearance="outlined" class="surface-card status-card">
           <mat-card-header>
             <mat-card-title>Descarga en curso</mat-card-title>
-            <mat-card-subtitle>{{ statusLabel(job.status) }}</mat-card-subtitle>
+            <mat-card-subtitle>{{ progresoLabel(job) || statusLabel(job.status) }}</mat-card-subtitle>
           </mat-card-header>
           <mat-card-content>
             <mat-progress-bar mode="indeterminate"></mat-progress-bar>
@@ -238,13 +253,20 @@ import { SriDownloadJob, SriFrecuencia } from '../../../../shared/models/sri.mod
     .toolbar { padding: 1.25rem 1.5rem; display: flex; justify-content: space-between; gap: 1rem; align-items: end; background: var(--tc-surface-container-lowest); }
     .toolbar h2 { margin: 0; font-size: 1.5rem; }
     .toolbar p { margin: .35rem 0 0; color: var(--muted-foreground); max-width: 72ch; }
+    .toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: .75rem; flex-wrap: wrap; }
     .eyebrow { margin: 0 0 .35rem; text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; color: var(--primary); }
     .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; align-items: start; }
     .form { display: grid; gap: .9rem; padding-top: .75rem; }
     .date-row, .schedule-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; align-items: center; }
     .mode-toggle { align-self: start; }
     .mode-hint { margin: 0; color: var(--muted-foreground); font-size: .82rem; }
-    .actions { display: flex; justify-content: flex-end; }
+    .conn-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: .5rem; }
+    .conn-badge { display: inline-flex; align-items: center; gap: .3rem; font-size: .85rem; font-weight: 600; }
+    .conn-badge mat-icon { font-size: 1.1rem; width: 1.1rem; height: 1.1rem; }
+    .conn-ok { color: #12805c; }
+    .conn-fail { color: #b42318; }
+    .conn-hint { align-self: center; color: var(--muted-foreground); font-size: .8rem; }
+    .actions { display: flex; justify-content: flex-end; gap: .75rem; align-items: center; }
     .form-error { margin: 0; color: #b42318; font-weight: 600; }
     .status-card mat-progress-bar { margin: .5rem 0 1rem; }
     .metrics { display: flex; flex-wrap: wrap; gap: .75rem; color: var(--muted-foreground); }
@@ -263,7 +285,9 @@ export class SriDescargasPageComponent {
   private readonly service = inject(SriDescargasService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly db = inject(Database);
 
+  protected readonly agentDownloadUrl = 'https://drive.google.com/uc?export=download&id=1Mw70B8Pz5i3D2IuJFeH49jNMXMsijag-';
   protected readonly maxDownloadDate = this.addDays(new Date(), -1);
   protected readonly jobs = signal<SriDownloadJob[]>([]);
   protected readonly loadingJobs = signal(false);
@@ -275,12 +299,39 @@ export class SriDescargasPageComponent {
   protected readonly configForm = this.formBuilder.nonNullable.group({
     ruc: ['', [Validators.required, Validators.pattern(/^[0-9]{10,13}$/)]],
     usuario: [''],
-    password: ['', [Validators.required, Validators.minLength(4)]],
-    activa: [false],
-    frecuencia: ['diaria' as SriFrecuencia]
+    password: ['', [Validators.required, Validators.minLength(4)]]
   });
 
+  protected readonly connStatus = signal<'idle' | 'checking' | 'ok' | 'fail'>('idle');
+  protected readonly connMessage = signal<string>('');
+  protected readonly credsConfigured = signal<boolean>(false);
+
   protected readonly modo = signal<'dia' | 'mes'>('dia');
+
+  protected checkConnection(): void {
+    this.connStatus.set('checking');
+    this.connMessage.set('');
+    this.service.checkConnection().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (res) => {
+        this.credsConfigured.set(!!res.credencialesConfiguradas);
+        if (res.ready) {
+          this.connStatus.set('ok');
+          this.connMessage.set('Agente local y servidor conectados.');
+        } else {
+          this.connStatus.set('fail');
+          this.connMessage.set(
+            res.worker === 'ok'
+              ? `El agente responde, pero el servidor falló (${res.springDetail || res.spring}).`
+              : 'No se pudo verificar la conexión.'
+          );
+        }
+      },
+      error: () => {
+        this.connStatus.set('fail');
+        this.connMessage.set('No se detecta el agente local. ¿Está instalado y en ejecución?');
+      }
+    });
+  }
   protected readonly meses = [
     { value: 1, label: 'Enero' }, { value: 2, label: 'Febrero' }, { value: 3, label: 'Marzo' },
     { value: 4, label: 'Abril' }, { value: 5, label: 'Mayo' }, { value: 6, label: 'Junio' },
@@ -328,25 +379,31 @@ export class SriDescargasPageComponent {
     }
     const raw = this.configForm.getRawValue();
     this.savingConfig.set(true);
-    this.service.saveConfig({
+    // Las credenciales se guardan SOLO en el worker local (nunca en el cloud).
+    this.service.saveWorkerConfig({
       ruc: raw.ruc,
       usuario: raw.usuario || raw.ruc,
-      password: raw.password,
-      programacion: {
-        activa: raw.activa,
-        frecuencia: raw.frecuencia,
-        diaSemana: null,
-        diaMes: null
-      }
+      password: raw.password
     }).pipe(finalize(() => this.savingConfig.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
-      next: () => this.showMessage('Configuracion SRI guardada.', 'save'),
-      error: () => this.showMessage('No se pudo guardar la configuracion SRI.', 'error')
+      next: () => {
+        this.credsConfigured.set(true);
+        this.showMessage('Credenciales SRI guardadas en el agente local.', 'save');
+      },
+      error: () => this.showMessage('No se pudo guardar en el agente local. Verifica que este en ejecucion.', 'error')
     });
   }
 
   protected startDownload(): void {
     if (this.downloadForm.invalid || this.downloadError()) {
       this.downloadForm.markAllAsTouched();
+      return;
+    }
+    if (this.connStatus() !== 'ok') {
+      this.showMessage('Comprueba la conexion antes de descargar.', 'error');
+      return;
+    }
+    if (!this.credsConfigured()) {
+      this.showMessage('Configura y guarda las credenciales SRI en el agente local.', 'error');
       return;
     }
     const { inicio, fin } = this.resolveRange();
@@ -357,18 +414,32 @@ export class SriDescargasPageComponent {
       ? { anio: inicio.getFullYear(), mes: inicio.getMonth() + 1, dia: inicio.getDate() }
       : { anio, mes, dia: null };
     this.startingDownload.set(true);
+    // Paso 1: crear el job en Spring (ID + estado inicial en Realtime DB).
     this.service.startDownload({
       fechaInicio: this.toApiDate(inicio),
       fechaFin: this.toApiDate(fin),
       ...periodo
-    }).pipe(finalize(() => this.startingDownload.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
+    }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (job) => {
         this.activeJob.set(job);
         this.jobs.update((current) => [job, ...current.filter((item) => item.id !== job.id)]);
-        this.watchJob(job.id);
-        this.showMessage('Descarga SRI iniciada.', 'cloud_download');
+        this.watchJob(job);
+        // Paso 2: disparar la descarga en el worker local (usa credenciales locales).
+        this.service.runOnWorker({
+          jobId: job.id,
+          tenantId: job.tenantId,
+          ...periodo,
+          descargarXml: true,
+          descargarPdf: true
+        }).pipe(finalize(() => this.startingDownload.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({
+          next: () => this.showMessage('Descarga SRI iniciada en el agente local.', 'cloud_download'),
+          error: () => this.showMessage('No se pudo iniciar la descarga en el agente local.', 'error')
+        });
       },
-      error: () => this.showMessage('No se pudo iniciar la descarga SRI.', 'error')
+      error: () => {
+        this.startingDownload.set(false);
+        this.showMessage('No se pudo crear la descarga SRI.', 'error');
+      }
     });
   }
 
@@ -393,6 +464,22 @@ export class SriDescargasPageComponent {
     return labels[status] ?? status;
   }
 
+  protected progresoLabel(job: SriDownloadJob): string | null {
+    const progreso = job.metadata?.['progreso'] as string | undefined;
+    if (!progreso) {
+      return null;
+    }
+    const labels: Record<string, string> = {
+      INICIA_PROCESO: 'Iniciando proceso',
+      LOGIN: 'Iniciando sesion en el SRI',
+      PANTALLA_DESCARGA: 'Abriendo pantalla de descarga',
+      DESCARGANDO: 'Descargando comprobantes',
+      FINALIZADO: 'Finalizado',
+      ERROR: 'Error'
+    };
+    return labels[progreso] ?? progreso;
+  }
+
   protected firstDiagnostic(job: SriDownloadJob): { type: 'error' | 'warning'; message: string } | null {
     const firstError = job.errores?.find((message) => !!message?.trim());
     if (firstError) {
@@ -405,16 +492,18 @@ export class SriDescargasPageComponent {
     return null;
   }
 
-  private watchJob(jobId: string): void {
-    interval(3000).pipe(
-      startWith(0),
-      switchMap(() => this.service.getJob(jobId)),
-      takeWhile((job) => this.isActive(job), true),
-      takeUntilDestroyed(this.destroyRef)
-    ).subscribe({
-      next: (job) => {
-        this.activeJob.set(this.isActive(job) ? job : null);
-        this.jobs.update((current) => [job, ...current.filter((item) => item.id !== job.id)]);
+  private watchJob(job: SriDownloadJob): void {
+    // Escucha el nodo del job en Realtime Database; el worker (via Spring) va
+    // actualizando estado y contadores en tiempo real.
+    const path = `sri_descargas/${job.tenantId}/${job.id}`;
+    objectVal<SriDownloadJob>(ref(this.db, path)).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (updated) => {
+        if (!updated) {
+          return;
+        }
+        const merged: SriDownloadJob = { ...updated, id: job.id, tenantId: job.tenantId };
+        this.activeJob.set(this.isActive(merged) ? merged : null);
+        this.jobs.update((current) => [merged, ...current.filter((item) => item.id !== merged.id)]);
       }
     });
   }

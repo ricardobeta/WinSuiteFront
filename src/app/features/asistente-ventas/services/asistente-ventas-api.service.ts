@@ -4,10 +4,15 @@ import { Observable } from 'rxjs';
 
 import { environment } from '../../../../environments/environment';
 import {
+  AiAnswer,
+  AiConfigView,
   ConversationMessage,
   ConversationSummary,
   FlowDefinition,
   FunnelDefinition,
+  FunnelMetrics,
+  KnowledgeItem,
+  SourceTypeDto,
   WhatsAppInstance,
   WhatsAppTemplate
 } from '../models/asistente-ventas.models';
@@ -92,12 +97,55 @@ export class AsistenteVentasApiService {
     return this.http.post<FunnelDefinition>(`${this.baseUrl}/funnels`, payload);
   }
 
+  getFunnelMetrics(flowId: string): Observable<FunnelMetrics> {
+    return this.http.get<FunnelMetrics>(`${this.baseUrl}/funnels/${flowId}/metrics`);
+  }
+
   listMessages(conversationId: string): Observable<ConversationMessage[]> {
     return this.http.get<ConversationMessage[]>(`${this.baseUrl}/conversations/${conversationId}/messages`);
   }
 
   listConversations(): Observable<ConversationSummary[]> {
     return this.http.get<ConversationSummary[]>(`${this.baseUrl}/conversations`);
+  }
+
+  // ---- IA / Base de conocimiento ----
+  private readonly aiUrl = `${this.baseUrl}/ai`;
+
+  getAiConfig(): Observable<AiConfigView> {
+    return this.http.get<AiConfigView>(`${this.aiUrl}/config`);
+  }
+
+  saveAiConfig(payload: { provider: string; model?: string; apiKey?: string; systemPrompt?: string; enabled: boolean }): Observable<AiConfigView> {
+    return this.http.put<AiConfigView>(`${this.aiUrl}/config`, payload);
+  }
+
+  listKnowledge(): Observable<KnowledgeItem[]> {
+    return this.http.get<KnowledgeItem[]>(`${this.aiUrl}/knowledge`);
+  }
+
+  indexKnowledge(payload: { source: string; content: string }): Observable<{ chunks: number }> {
+    return this.http.post<{ chunks: number }>(`${this.aiUrl}/knowledge`, payload);
+  }
+
+  deleteKnowledge(chunkId: string): Observable<void> {
+    return this.http.delete<void>(`${this.aiUrl}/knowledge/${chunkId}`);
+  }
+
+  clearKnowledge(): Observable<void> {
+    return this.http.delete<void>(`${this.aiUrl}/knowledge`);
+  }
+
+  getSourceTypes(): Observable<SourceTypeDto[]> {
+    return this.http.get<SourceTypeDto[]>(`${this.aiUrl}/source-types`);
+  }
+
+  saveSourceTypes(types: SourceTypeDto[]): Observable<SourceTypeDto[]> {
+    return this.http.put<SourceTypeDto[]>(`${this.aiUrl}/source-types`, types);
+  }
+
+  aiAnswer(payload: { query: string; useRag: boolean }): Observable<AiAnswer> {
+    return this.http.post<AiAnswer>(`${this.aiUrl}/answer`, payload);
   }
 
   sendMessage(payload: {

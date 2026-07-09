@@ -27,6 +27,12 @@ import { VentasUsuariosAlmacenesService } from '../../services/ventas-usuarios-a
 import { VentasAlmacenSesionService } from '../../services/ventas-almacen-sesion.service';
 import { UsuariosAlmacenesConfig, UsuarioAlmacenAsignacion } from '../../models/ventas.models';
 
+interface ColaboradorAlmacenesRow {
+  colaborador: AppUserProfile;
+  almacenesAsignados: Almacen[];
+  almacenesNoAsignados: Almacen[];
+}
+
 @Component({
   selector: 'app-ventas-configuracion',
   standalone: true,
@@ -128,35 +134,33 @@ import { UsuariosAlmacenesConfig, UsuarioAlmacenAsignacion } from '../../models/
             </div>
 
             <!-- Filas -->
-            @for (colaborador of colaboradores(); track colaborador.userId) {
+            @for (row of colaboradoresAlmacenesRows(); track row.colaborador.userId) {
               <div class="asignaciones-row">
                 <div class="col-colaborador">
-                  <span class="colaborador-nombre">{{ colaborador.fullName }}</span>
-                  <span class="colaborador-email">{{ colaborador.email }}</span>
+                  <span class="colaborador-nombre">{{ row.colaborador.fullName }}</span>
+                  <span class="colaborador-email">{{ row.colaborador.email }}</span>
                 </div>
 
                 <div class="col-almacenes">
                   <div class="almacenes-chips">
-                    @for (almacen of almacenesActivos(); track almacen.id) {
-                      @if (isAlmacenAsignado(colaborador.userId, almacen.id ?? '')) {
-                        <mat-chip
-                          removable
-                          (removed)="toggleAlmacen(colaborador.userId, almacen.id ?? '')"
-                        >
-                          {{ almacen.nombre }}
-                          <button matChipRemove>
-                            <mat-icon>cancel</mat-icon>
-                          </button>
-                        </mat-chip>
-                      }
+                    @for (almacen of row.almacenesAsignados; track almacen.id) {
+                      <mat-chip
+                        removable
+                        (removed)="toggleAlmacen(row.colaborador.userId, almacen.id ?? '')"
+                      >
+                        {{ almacen.nombre }}
+                        <button matChipRemove>
+                          <mat-icon>cancel</mat-icon>
+                        </button>
+                      </mat-chip>
                     }
 
-                    @if (almacenesNoAsignados(colaborador.userId).length > 0) {
+                    @if (row.almacenesNoAsignados.length > 0) {
                       <mat-form-field appearance="fill" class="add-almacen-field">
                         <mat-label>+ Agregar</mat-label>
-                        <mat-select (selectionChange)="toggleAlmacen(colaborador.userId, $event.value)">
+                        <mat-select (selectionChange)="toggleAlmacen(row.colaborador.userId, $event.value)">
                           <mat-option value="">-- Seleccionar --</mat-option>
-                          @for (almacen of almacenesNoAsignados(colaborador.userId); track almacen.id) {
+                          @for (almacen of row.almacenesNoAsignados; track almacen.id) {
                             <mat-option [value]="almacen.id ?? ''">{{ almacen.nombre }}</mat-option>
                           }
                         </mat-select>
@@ -532,6 +536,19 @@ export class VentasConfiguracionComponent {
     const trabajo = JSON.stringify(this.asignacionesTrabajo());
     return actual !== trabajo;
   });
+  protected readonly colaboradoresAlmacenesRows = computed<ColaboradorAlmacenesRow[]>(() => {
+    const almacenes = this.almacenesActivos();
+    const asignaciones = this.asignacionesTrabajo()?.asignaciones ?? {};
+
+    return this.colaboradores().map((colaborador) => {
+      const asignadosIds = new Set(asignaciones[colaborador.userId]?.almacenIds ?? []);
+      return {
+        colaborador,
+        almacenesAsignados: almacenes.filter((almacen) => asignadosIds.has(almacen.id ?? '')),
+        almacenesNoAsignados: almacenes.filter((almacen) => !asignadosIds.has(almacen.id ?? ''))
+      };
+    });
+  });
 
   constructor() {
     this.cargarDatos();
@@ -634,20 +651,9 @@ export class VentasConfiguracionComponent {
   /**
    * Determina si un almacén está asignado a un colaborador.
    */
-  protected isAlmacenAsignado(usuarioId: string, almacenId: string): boolean {
-    const config = this.asignacionesTrabajo();
-    return config?.asignaciones[usuarioId]?.almacenIds.includes(almacenId) ?? false;
-  }
-
   /**
    * Retorna los almacenes no asignados a un colaborador (para el dropdown de agregar).
    */
-  protected almacenesNoAsignados(usuarioId: string): Almacen[] {
-    return this.almacenesActivos().filter(
-      (almacen) => !this.isAlmacenAsignado(usuarioId, almacen.id ?? '')
-    );
-  }
-
   /**
    * Toggle de asignación de un almacén a un colaborador.
    */

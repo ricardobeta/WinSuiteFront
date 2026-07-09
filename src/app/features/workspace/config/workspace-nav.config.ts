@@ -1,24 +1,33 @@
 import { NavItem } from '../../../core/models/navigation.models';
+import { getModuleCatalogEntry } from '../../../core/config/module-catalog';
+
+function moduleMeta(moduleId: string): { label: string; icon: string } {
+  const entry = getModuleCatalogEntry(moduleId);
+  if (!entry) {
+    throw new Error(`Unknown module id in catalog: ${moduleId}`);
+  }
+  return entry;
+}
 
 export const WORKSPACE_NAV_ITEMS: NavItem[] = [
   {
     id: 'dashboard',
-    label: 'Dashboard',
-    icon: 'dashboard',
+    label: moduleMeta('dashboard').label,
+    icon: moduleMeta('dashboard').icon,
     route: '/workspace/dashboard'
   },
   {
     id: 'users',
-    label: 'Clientes',
-    icon: 'group',
+    label: moduleMeta('clientes').label,
+    icon: moduleMeta('clientes').icon,
     route: '/workspace/customers/lista',
     requiredModule: 'clientes',
     requiredAction: 'read'
   },
   {
     id: 'billing',
-    label: 'Facturación',
-    icon: 'receipt_long',
+    label: moduleMeta('facturacion').label,
+    icon: moduleMeta('facturacion').icon,
     requiredModule: 'facturacion',
     requiredAction: 'read',
     children: [
@@ -50,8 +59,8 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
   },
   {
     id: 'sales',
-    label: 'Ventas',
-    icon: 'shopping_bag',
+    label: moduleMeta('ventas').label,
+    icon: moduleMeta('ventas').icon,
     requiredModule: 'ventas',
     requiredAction: 'read',
     children: [
@@ -91,8 +100,8 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
   },
   {
     id: 'services',
-    label: 'Servicios',
-    icon: 'build_circle',
+    label: moduleMeta('servicios').label,
+    icon: moduleMeta('servicios').icon,
     requiredModule: 'servicios',
     requiredAction: 'read',
     children: [
@@ -116,8 +125,8 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
   },
   {
     id: 'asistente-ventas',
-    label: 'Asistente Ventas',
-    icon: 'forum',
+    label: moduleMeta('asistente_ventas').label,
+    icon: moduleMeta('asistente_ventas').icon,
     requiredModule: 'asistente_ventas',
     requiredAction: 'read',
     children: [
@@ -160,13 +169,21 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
         route: '/workspace/asistente-ventas/funnels',
         requiredModule: 'asistente_ventas',
         requiredAction: 'read'
+      },
+      {
+        id: 'asistente-conocimiento',
+        label: 'Base de conocimiento',
+        icon: 'auto_awesome',
+        route: '/workspace/asistente-ventas/conocimiento',
+        requiredModule: 'asistente_ventas',
+        requiredAction: 'update'
       }
     ]
   },
   {
     id: 'inventory',
-    label: 'Inventario',
-    icon: 'inventory_2',
+    label: moduleMeta('inventario').label,
+    icon: moduleMeta('inventario').icon,
     requiredModule: 'inventario',
     requiredAction: 'read',
     children: [
@@ -222,8 +239,8 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
   },
   {
     id: 'accounting',
-    label: 'Contabilidad',
-    icon: 'account_balance',
+    label: moduleMeta('contabilidad').label,
+    icon: moduleMeta('contabilidad').icon,
     requiredModule: 'contabilidad',
     requiredAction: 'read',
     children: [
@@ -260,6 +277,14 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
         requiredAction: 'read'
       },
       {
+        id: 'accounting-payables',
+        label: 'Cuentas por Pagar',
+        icon: 'request_quote',
+        route: '/workspace/contabilidad/cuentas-por-pagar',
+        requiredModule: 'contabilidad',
+        requiredAction: 'read'
+      },
+      {
         id: 'accounting-reports',
         label: 'Reportes',
         icon: 'insert_chart',
@@ -274,13 +299,21 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
         route: '/workspace/contabilidad/ats',
         requiredModule: 'contabilidad',
         requiredAction: 'read'
+      },
+      {
+        id: 'accounting-payroll',
+        label: 'Nomina',
+        icon: 'payments',
+        route: '/workspace/contabilidad/nomina',
+        requiredModule: 'contabilidad',
+        requiredAction: 'read'
       }
     ]
   },
   {
     id: 'colaboradores',
-    label: 'Colaboradores',
-    icon: 'supervisor_account',
+    label: moduleMeta('colaboradores').label,
+    icon: moduleMeta('colaboradores').icon,
     requiredModule: 'colaboradores',
     requiredAction: 'read',
     children: [
@@ -312,8 +345,8 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
   },
   {
     id: 'archivos',
-    label: 'Archivos',
-    icon: 'drive_folder_upload',
+    label: moduleMeta('archivos').label,
+    icon: moduleMeta('archivos').icon,
     route: '/workspace/archivos/lista',
     requiredModule: 'archivos',
     requiredAction: 'read'

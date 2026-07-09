@@ -4,6 +4,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -12,8 +13,9 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { debounceTime, startWith } from 'rxjs';
+import { debounceTime, firstValueFrom, startWith } from 'rxjs';
 
+import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { EstadoFacturaCompra, FacturaCompra, TIPOS_COMPROBANTE, TIPO_COMPROBANTE_NOTA_CREDITO } from '../../models/compras.models';
 import { FacturasCompraService } from '../../services/facturas-compra.service';
@@ -26,6 +28,7 @@ import { FacturasCompraService } from '../../services/facturas-compra.service';
     ReactiveFormsModule,
     RouterLink,
     MatButtonModule,
+    MatDialogModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -43,10 +46,16 @@ import { FacturasCompraService } from '../../services/facturas-compra.service';
           <h2>Facturas de compra</h2>
           <p class="support">Registra las facturas de tus proveedores para contabilizarlas y alimentar el ATS del período.</p>
         </div>
-        <a mat-flat-button color="primary" class="cta" routerLink="/workspace/contabilidad/compras/nueva">
-          <mat-icon>add</mat-icon>
-          Nueva factura
-        </a>
+        <div class="header-actions">
+          <a mat-stroked-button color="primary" class="cta" routerLink="/workspace/contabilidad/compras/carga-masiva">
+            <mat-icon>upload_file</mat-icon>
+            Carga masiva
+          </a>
+          <a mat-flat-button color="primary" class="cta" routerLink="/workspace/contabilidad/compras/nueva">
+            <mat-icon>add</mat-icon>
+            Nueva factura
+          </a>
+        </div>
       </header>
 
       <section class="kpi-row">
@@ -186,12 +195,6 @@ import { FacturasCompraService } from '../../services/facturas-compra.service';
                       <mat-icon>{{ row.estado === 'BORRADOR' ? 'edit' : 'visibility' }}</mat-icon>
                       <span>{{ row.estado === 'BORRADOR' ? 'Editar' : 'Ver' }}</span>
                     </button>
-                    @if (row.estado === 'BORRADOR') {
-                      <button mat-menu-item (click)="registrar(row)">
-                        <mat-icon>task_alt</mat-icon>
-                        <span>Registrar</span>
-                      </button>
-                    }
                     @if (row.estado !== 'ANULADA') {
                       <button mat-menu-item (click)="anular(row)">
                         <mat-icon>block</mat-icon>
@@ -217,6 +220,7 @@ import { FacturasCompraService } from '../../services/facturas-compra.service';
     .page-header h2 { margin: 0; font-size: 1.6rem; }
     .support { margin: .4rem 0 0; color: var(--muted-foreground); max-width: 62ch; }
     .cta { border-radius: 999px; }
+    .header-actions { display: flex; gap: .6rem; flex-wrap: wrap; }
 
     .kpi-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
     .kpi-card { padding: 1.1rem 1.25rem; border-radius: 1rem; display: grid; gap: .35rem; }
@@ -261,6 +265,7 @@ export class FacturasCompraListComponent {
   private readonly facturasService = inject(FacturasCompraService);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly columnas = ['documento', 'proveedor', 'tipo', 'fecha', 'total', 'inventario', 'estado', 'acciones'];
@@ -375,22 +380,26 @@ export class FacturasCompraListComponent {
     void this.router.navigate(['/workspace/contabilidad/compras', factura.id, 'editar']);
   }
 
-  protected async registrar(factura: FacturaCompra): Promise<void> {
-    if (!factura.id) {
-      return;
-    }
-    try {
-      await this.facturasService.registrarFacturaCompra(factura.id);
-      this.toast('Factura registrada y contabilizada.', 'task_alt');
-    } catch (error) {
-      this.toast(error instanceof Error ? error.message : 'No se pudo registrar la factura.', 'error');
-    }
-  }
-
   protected async anular(factura: FacturaCompra): Promise<void> {
     if (!factura.id) {
       return;
     }
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '520px',
+      maxWidth: '95vw',
+      data: {
+        title: 'Anular compra',
+        message: 'Esta compra quedara anulada. Si la compra ya genero un asiento contable, el sistema no lo reversa automaticamente; deberas crear el reverso manualmente en Contabilidad > Asientos.',
+        confirmText: 'Anular compra',
+        cancelText: 'Cancelar'
+      }
+    });
+
+    const confirmado = await firstValueFrom(dialogRef.afterClosed());
+    if (!confirmado) {
+      return;
+    }
+
     try {
       await this.facturasService.cambiarEstado(factura.id, 'ANULADA');
       this.toast('Factura anulada.', 'block');

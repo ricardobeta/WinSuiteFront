@@ -62,6 +62,7 @@
     "archivos": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".indexOn": ["fechaEmision", "name"],
         "$archivoId": {
           ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
         }
@@ -284,6 +285,55 @@
       }
     },
 
+    "nomina": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        "configuracion": {
+          ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+        },
+        "empleados": {
+          "$empleadoId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+        "contratos": {
+          "$contratoId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+        "novedades": {
+          "$periodo": {
+            "$novedadId": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          }
+        },
+        "rubros": {
+          "$rubroId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+        "rolesPago": {
+          ".indexOn": ["periodo"],
+          "$rolId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+        "rolesPagoDetalles": {
+          "$rolId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+        "secuencias": {
+          "rolesPago": {
+            "$anio": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          }
+        }
+      }
+    },
+
     "contabilidad": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
@@ -292,6 +342,9 @@
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           },
           "integraciones": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          },
+          "cuentasPorPagar": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
@@ -330,6 +383,16 @@
             }
           }
         },
+        "documentosPorPagar": {
+          "$documentoId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+        "pagosProveedor": {
+          "$pagoId": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
         "asientosOrigen": {
           "$origenTipo": {
             "$origenId": {
@@ -340,6 +403,11 @@
         "mapeosAutomaticos": {
           "categorias": {
             "$categoriaId": {
+              ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          },
+          "proveedores": {
+            "$proveedorId": {
               ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
             }
           }
@@ -356,6 +424,12 @@
             }
           },
           "facturasCompra": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          },
+          "documentosPorPagar": {
+            ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          },
+          "pagosProveedor": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },

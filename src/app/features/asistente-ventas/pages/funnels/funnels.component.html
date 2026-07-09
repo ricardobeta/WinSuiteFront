@@ -1,0 +1,57 @@
+<section class="funnels">
+  <aside class="panel surface-card config">
+    <div><p class="eyebrow">Embudo</p><h2>Etapas del flujo</h2></div>
+
+    <mat-form-field appearance="outline">
+      <mat-label>Flujo</mat-label>
+      <mat-select [(ngModel)]="flowId" (ngModelChange)="onFlowChange()">
+        @for (flow of flows(); track flow.id) { <mat-option [value]="flow.id">{{ flow.name }} · {{ flow.status }}</mat-option> }
+      </mat-select>
+    </mat-form-field>
+
+    @if (!flows().length) { <p class="muted">Crea y publica un flujo primero.</p> }
+
+    @if (flowId) {
+      <mat-form-field appearance="outline">
+        <mat-label>Nombre del embudo</mat-label>
+        <input matInput [(ngModel)]="funnelName" />
+      </mat-form-field>
+
+      <div class="stages">
+        @for (stage of stages(); track stage.id; let i = $index) {
+          <div class="stage">
+            <div class="stage-head">
+              <mat-form-field appearance="outline"><mat-label>Etapa {{ i + 1 }}</mat-label><input matInput [(ngModel)]="stage.name" /></mat-form-field>
+              <button mat-icon-button type="button" (click)="removeStage(i)"><mat-icon>delete</mat-icon></button>
+            </div>
+            <mat-form-field appearance="outline">
+              <mat-label>Nodos de esta etapa</mat-label>
+              <mat-select [(ngModel)]="stage.nodeIds" multiple>
+                @for (node of flowNodes(); track node.id) { <mat-option [value]="node.id">{{ node.label }}</mat-option> }
+              </mat-select>
+            </mat-form-field>
+          </div>
+        }
+        <button mat-stroked-button type="button" (click)="addStage()"><mat-icon>add</mat-icon> Agregar etapa</button>
+      </div>
+
+      <div class="actions">
+        <button mat-raised-button color="primary" type="button" [disabled]="saving()" (click)="saveFunnel()"><mat-icon>save</mat-icon> Guardar embudo</button>
+      </div>
+      @if (message()) { <p class="msg">{{ message() }}</p> }
+    }
+  </aside>
+
+  <main class="panel surface-card dashboard">
+    <div><p class="eyebrow">Conversión</p><h2>Rendimiento del embudo</h2></div>
+    <div echarts [options]="chartOptions()" class="chart"></div>
+
+    <div class="metrics-table">
+      <div class="row head"><span>Etapa</span><span>Alcanzaron</span><span>Conversión</span></div>
+      @for (m of metrics(); track m.stageId) {
+        <div class="row"><span>{{ m.name }}</span><span>{{ m.reached }}</span><span>{{ m.conversion }}%</span></div>
+      }
+      @if (!metrics().length) { <p class="muted pad">Aún no hay datos. Se llenarán cuando lleguen conversaciones al flujo publicado.</p> }
+    </div>
+  </main>
+</section>

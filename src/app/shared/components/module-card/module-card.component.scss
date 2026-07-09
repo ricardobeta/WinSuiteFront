@@ -1,0 +1,59 @@
+.module-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.85rem;
+  border-radius: var(--tc-radius-lg);
+  background: var(--tc-surface-container-low);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.module-card:hover {
+  background: var(--tc-surface-container-highest);
+}
+
+.module-card.selected {
+  background: var(--tc-primary-container);
+  color: var(--tc-on-primary-container);
+}
+
+.module-card.locked {
+  cursor: default;
+  opacity: 0.85;
+}
+
+.module-card-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.module-card-top mat-icon {
+  color: var(--tc-primary);
+  flex-shrink: 0;
+}
+
+.module-card-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.module-card-description {
+  color: var(--muted-foreground);
+  line-height: 1.35;
+}
+
+.module-lock-badge {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--tc-on-primary-container);
+  background: var(--tc-primary-container);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  white-space: nowrap;
+}

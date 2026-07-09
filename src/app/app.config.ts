@@ -1,4 +1,6 @@
-import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
+import { ApplicationConfig, LOCALE_ID, provideBrowserGlobalErrorListeners } from '@angular/core';
+import { registerLocaleData } from '@angular/common';
+import localeEs from '@angular/common/locales/es';
 import { provideFirebaseApp, initializeApp } from '@angular/fire/app';
 import { provideAuth, getAuth } from '@angular/fire/auth';
 import { provideDatabase, getDatabase } from '@angular/fire/database';
@@ -8,11 +10,27 @@ import { provideHttpClient, withInterceptorsFromDi, HTTP_INTERCEPTORS } from '@a
 import { provideRouter } from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
-import { provideNativeDateAdapter } from '@angular/material/core';
+import { MAT_DATE_FORMATS, MAT_DATE_LOCALE, MatDateFormats, provideNativeDateAdapter } from '@angular/material/core';
 
 import { routes } from './app.routes';
 import { environment } from '../environments/environment';
 import { AuthInterceptor } from './core/interceptors/auth.interceptor';
+
+// Ecuador usa el formato de fecha día/mes/año. Con el adaptador nativo, estas opciones de Intl
+// (junto con MAT_DATE_LOCALE 'es-EC') hacen que los datepickers muestren y parseen dd/mm/aaaa.
+const ES_EC_DATE_FORMATS: MatDateFormats = {
+  parse: {
+    dateInput: { year: 'numeric', month: 'numeric', day: 'numeric' }
+  },
+  display: {
+    dateInput: { year: 'numeric', month: '2-digit', day: '2-digit' },
+    monthYearLabel: { year: 'numeric', month: 'short' },
+    dateA11yLabel: { year: 'numeric', month: 'long', day: 'numeric' },
+    monthYearA11yLabel: { year: 'numeric', month: 'long' }
+  }
+};
+
+registerLocaleData(localeEs, 'es-EC');
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -22,6 +40,9 @@ export const appConfig: ApplicationConfig = {
     { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-outlined' } },
     provideNativeDateAdapter(),
+    { provide: LOCALE_ID, useValue: 'es-EC' },
+    { provide: MAT_DATE_LOCALE, useValue: 'es-EC' },
+    { provide: MAT_DATE_FORMATS, useValue: ES_EC_DATE_FORMATS },
     provideAnimationsAsync(),
     provideFirebaseApp(() => initializeApp(environment.firebase)),
     provideAuth(() => getAuth()),

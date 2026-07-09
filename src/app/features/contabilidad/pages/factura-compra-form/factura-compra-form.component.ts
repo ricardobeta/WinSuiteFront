@@ -1,7 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectorRef, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { FormArray, FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
+import { firstValueFrom } from 'rxjs';
+import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -22,6 +23,7 @@ import { ArchivoUploaderComponent } from '../../../../shared/components/archivo-
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { TwoDecimalInputDirective } from '../../../../shared/directives/two-decimal-input.directive';
 import { ArchivoItem } from '../../../../shared/models/archivos.models';
+import { ArchivosService } from '../../../../core/services/archivos.service';
 import { Almacen, Producto } from '../../../inventario/models/inventario.models';
 import { AlmacenesService } from '../../../inventario/services/almacenes.service';
 import { ProductosService } from '../../../inventario/services/productos.service';
@@ -39,15 +41,22 @@ import {
   TIPO_COMPROBANTE_NOTA_CREDITO,
   TipoIdProveedor
 } from '../../models/compras.models';
+import { CuentaContable, TipoGastoCompra } from '../../models/contabilidad.models';
 import { ComprasXmlService } from '../../services/compras-xml.service';
 import { FacturasCompraService } from '../../services/facturas-compra.service';
+import { ConfiguracionContableService } from '../../services/configuracion-contable.service';
 import { IntegracionContableService } from '../../services/integracion-contable.service';
+import { PlanCuentasService } from '../../services/plan-cuentas.service';
+import { TiposGastoCompraService } from '../../services/tipos-gasto-compra.service';
+import { FacturaDuplicadaAccion, FacturaDuplicadaDialogComponent, FacturaDuplicadaDialogData } from './factura-duplicada-dialog.component';
+import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarAsientoCompraResult } from './revisar-asiento-compra-dialog.component';
 
 @Component({
   selector: 'app-factura-compra-form',
   standalone: true,
   imports: [
     CommonModule,
+    FormsModule,
     ReactiveFormsModule,
     RouterLink,
     MatButtonModule,
@@ -111,10 +120,18 @@ import { IntegracionContableService } from '../../services/integracion-contable.
                 <strong>{{ form.value.razonSocialProv }}</strong>
                 <span>{{ tipoComprobanteLabel() }} {{ documento() }} · {{ form.value.fechaEmision | date: 'dd/MM/yyyy' }} · {{ form.value.importeTotal | currency: 'USD':'symbol-narrow':'1.2-2' }}</span>
               </div>
+              @if (pdfUrl()) {
+                <button mat-icon-button type="button" color="primary" (click)="abrirPdf()" matTooltip="Ver PDF del comprobante" aria-label="Ver PDF">
+                  <mat-icon>picture_as_pdf</mat-icon>
+                </button>
+              }
               <button mat-stroked-button type="button" (click)="reemplazarXml()" [disabled]="soloLectura()">
                 <mat-icon>autorenew</mat-icon> Reemplazar XML
               </button>
             </div>
+          }
+          @if (advertenciaEmpresa()) {
+            <div class="empresa-warn"><mat-icon>warning</mat-icon> {{ advertenciaEmpresa() }}</div>
           }
         } @else {
           <!-- Modo manual: adjunto obligatorio del documento -->
@@ -295,6 +312,8 @@ import { IntegracionContableService } from '../../services/integracion-contable.
                     }
                   </mat-select>
                 </mat-form-field>
+              } @else {
+                <p class="hint-inline">Las cuentas de gasto se eligen al registrar, en el formulario de asiento (por Tipo de gasto).</p>
               }
             </div>
           </section>
@@ -488,6 +507,8 @@ import { IntegracionContableService } from '../../services/integracion-contable.
     .muted-hint { margin: 0; color: var(--muted-foreground); font-size: .85rem; }
     .parsing-hint, .parse-error { display: flex; align-items: center; gap: .5rem; font-weight: 500; }
     .parse-error { color: var(--destructive); }
+    .empresa-warn { display: flex; align-items: center; gap: .5rem; font-weight: 500; color: #9c6412; background: #fff4e0; border: 1px solid #f0c778; border-radius: 8px; padding: .6rem .8rem; margin-top: .6rem; }
+    .empresa-warn mat-icon { color: #b9770e; }
     .parsed-chip { display: flex; align-items: center; gap: .85rem; padding: .85rem 1rem; border-radius: 1rem; background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
     .parsed-chip > mat-icon { color: var(--primary); }
     .chip-copy { display: grid; flex: 1; }
@@ -558,6 +579,11 @@ export class FacturaCompraFormComponent implements OnInit {
   private readonly productosService = inject(ProductosService);
   private readonly almacenesService = inject(AlmacenesService);
   private readonly integracionContable = inject(IntegracionContableService);
+  private readonly tiposGastoService = inject(TiposGastoCompraService);
+  private readonly planCuentasService = inject(PlanCuentasService);
+  private readonly configuracionContable = inject(ConfiguracionContableService);
+  private readonly archivosService = inject(ArchivosService);
+  private readonly cdr = inject(ChangeDetectorRef);
 
   protected readonly sustentos = CODIGOS_SUSTENTO;
   protected readonly formasPago = FORMAS_PAGO;
@@ -571,14 +597,22 @@ export class FacturaCompraFormComponent implements OnInit {
   protected readonly parseando = signal(false);
   protected readonly parseado = signal(false);
   protected readonly parseError = signal<string | null>(null);
+  /** Advertencia si el XML no está dirigido a la empresa configurada (RUC comprador ≠ RUC empresa). */
+  protected readonly advertenciaEmpresa = signal<string | null>(null);
+  /** URL del PDF/RIDE asociado al comprobante (si existe en el módulo Archivos). */
+  protected readonly pdfUrl = signal<string | null>(null);
   protected readonly facturaId = signal<string | null>(null);
   protected readonly estado = signal<'BORRADOR' | 'REGISTRADA' | 'ANULADA'>('BORRADOR');
   protected readonly soloLectura = computed(() => this.estado() !== 'BORRADOR');
   protected readonly productos = signal<Producto[]>([]);
   protected readonly almacenes = signal<Almacen[]>([]);
+  protected readonly tiposGasto = signal<TipoGastoCompra[]>([]);
+  protected readonly tipoGastoId = signal<string | null>(null);
+  private cuentas: CuentaContable[] = [];
 
   private archivoId: string | null = null;
   private xmlStoragePath: string | null = null;
+  private pdfArchivoId: string | null = null;
   private ordenCompraId: string | null = null;
 
   protected readonly form = this.fb.nonNullable.group({
@@ -658,10 +692,30 @@ export class FacturaCompraFormComponent implements OnInit {
       .subscribe((productos) => this.productos.set(productos.filter((p) => p.activo !== false)));
     this.almacenesService.getAlmacenesActivos().pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((almacenes) => this.almacenes.set(almacenes));
+    this.tiposGastoService.listar().pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((tipos) => this.tiposGasto.set(tipos.filter((t) => t.activo)));
+    this.planCuentasService.getCuentasOnce().then((cuentas) => (this.cuentas = cuentas));
 
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       await this.cargarFactura(id);
+    } else {
+      await this.sugerirTipoGastoPorProveedor();
+    }
+  }
+
+  /** Preselecciona el tipo de gasto recordado para el proveedor actual (si el usuario no eligió uno). */
+  private async sugerirTipoGastoPorProveedor(): Promise<void> {
+    if (this.tipoGastoId()) {
+      return;
+    }
+    const idProv = (this.form.getRawValue().idProv ?? '').trim();
+    if (!idProv) {
+      return;
+    }
+    const tipoId = await this.tiposGastoService.getTipoGastoDeProveedor(idProv);
+    if (tipoId && !this.tipoGastoId()) {
+      this.tipoGastoId.set(tipoId);
     }
   }
 
@@ -727,9 +781,8 @@ export class FacturaCompraFormComponent implements OnInit {
     this.parseError.set(null);
     this.comprasXml.parseXml(item.storagePath).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (parsed) => {
-        this.aplicarParseado(parsed);
         this.parseando.set(false);
-        this.parseado.set(true);
+        void this.procesarParseado(parsed);
       },
       error: (error) => {
         this.parseando.set(false);
@@ -740,7 +793,7 @@ export class FacturaCompraFormComponent implements OnInit {
   }
 
   private aplicarParseado(parsed: FacturaCompraParsed): void {
-    const fecha = parsed.fechaEmision ? new Date(parsed.fechaEmision) : new Date();
+    const fecha = parsed.fechaEmision ? this.parseFechaLocal(parsed.fechaEmision) : new Date();
     this.form.patchValue({
       tpIdProv: (parsed.tpIdProv as TipoIdProveedor) ?? '01',
       idProv: parsed.idProv ?? '',
@@ -770,9 +823,11 @@ export class FacturaCompraFormComponent implements OnInit {
         docModEstablecimiento: partes[0] ?? '',
         docModPuntoEmision: partes[1] ?? '',
         docModSecuencial: partes[2] ?? '',
-        docModFecha: parsed.fechaEmisionDocSustento ? new Date(parsed.fechaEmisionDocSustento) : null
+        docModFecha: parsed.fechaEmisionDocSustento ? this.parseFechaLocal(parsed.fechaEmisionDocSustento) : null
       });
     }
+
+    void this.sugerirTipoGastoPorProveedor();
 
     this.items.clear();
     (parsed.items ?? []).forEach((item) => {
@@ -791,6 +846,94 @@ export class FacturaCompraFormComponent implements OnInit {
     });
     if (this.items.length === 0) {
       this.agregarItem();
+    }
+  }
+
+  /**
+   * Procesa el XML parseado: al crear una compra nueva, primero verifica que no sea una factura ya
+   * cargada. Si es duplicada NO carga los datos al formulario, descarta el XML y pide subir otro.
+   */
+  private async procesarParseado(parsed: FacturaCompraParsed): Promise<void> {
+    if (!this.facturaId()) {
+      const existente = await this.facturasService.buscarDuplicadoDocumento({
+        claveAcceso: parsed.claveAcceso,
+        establecimiento: parsed.establecimiento,
+        puntoEmision: parsed.puntoEmision,
+        secuencial: parsed.secuencial,
+        idProv: parsed.idProv,
+        tipoComprobante: parsed.tipoComprobante
+      });
+      if (existente) {
+        await this.descartarXmlDuplicado(existente);
+        return;
+      }
+    }
+    this.aplicarParseado(parsed);
+    this.parseado.set(true);
+    await this.validarFacturaParaEmpresa(parsed);
+    await this.buscarPdfAsociado(parsed.claveAcceso);
+  }
+
+  /**
+   * Busca en el módulo Archivos el PDF/RIDE con la misma clave de acceso que el XML y, si existe,
+   * habilita el icono para verlo en otra pestaña.
+   */
+  private async buscarPdfAsociado(claveAcceso?: string): Promise<void> {
+    this.pdfUrl.set(null);
+    this.pdfArchivoId = null;
+    const clave = (claveAcceso ?? '').trim();
+    if (!clave) {
+      return;
+    }
+    const pdf = await this.archivosService.buscarPorClaveAcceso(clave, 'pdf');
+    if (pdf?.downloadUrl) {
+      this.pdfUrl.set(pdf.downloadUrl);
+      this.pdfArchivoId = pdf.id;
+    }
+  }
+
+  protected abrirPdf(): void {
+    const url = this.pdfUrl();
+    if (url) {
+      window.open(url, '_blank');
+    }
+  }
+
+  /**
+   * Advierte (sin bloquear) si el RUC del comprador del XML no coincide con el RUC de la empresa
+   * configurada: el SRI rechaza registrar en el ATS una compra que no está dirigida a tu empresa.
+   */
+  private async validarFacturaParaEmpresa(parsed: FacturaCompraParsed): Promise<void> {
+    this.advertenciaEmpresa.set(null);
+    const rucComprador = (parsed.identificacionComprador ?? '').trim();
+    if (!rucComprador) {
+      return;
+    }
+    const empresa = await this.configuracionContable.getEmpresaOnce();
+    const rucEmpresa = (empresa?.ruc ?? '').trim();
+    if (rucEmpresa && rucComprador !== rucEmpresa) {
+      this.advertenciaEmpresa.set(
+        `Esta factura está dirigida a ${rucComprador}${parsed.razonSocialComprador ? ' (' + parsed.razonSocialComprador + ')' : ''} y no a tu empresa (${rucEmpresa}). El SRI rechazará su registro en el ATS.`
+      );
+    }
+  }
+
+  /**
+   * Descarta el XML duplicado: no se cargan datos, se limpia el archivo para que el usuario suba
+   * otro, y se muestra el aviso (con opción de ver la factura existente).
+   */
+  private async descartarXmlDuplicado(existente: FacturaCompra): Promise<void> {
+    this.parseado.set(false);
+    this.parseError.set(null);
+    this.archivoId = null;
+    this.xmlStoragePath = null;
+    const dialogRef = this.dialog.open<FacturaDuplicadaDialogComponent, FacturaDuplicadaDialogData, FacturaDuplicadaAccion>(
+      FacturaDuplicadaDialogComponent,
+      { data: { factura: existente } }
+    );
+    const accion = await firstValueFrom(dialogRef.afterClosed());
+    if (accion === 'ver' && existente.id) {
+      await this.router.navigate(['/workspace/contabilidad/compras', existente.id, 'editar']);
     }
   }
 
@@ -904,9 +1047,78 @@ export class FacturaCompraFormComponent implements OnInit {
       this.toast('Selecciona un almacén destino para alimentar inventario.', 'warning');
       return;
     }
+
+    // Si la contabilidad está desactivada, no se genera asiento: registrar directo sin el diálogo de revisión.
+    if (!(await this.integracionContable.contabilidadActiva())) {
+      this.guardando.set(true);
+      try {
+        const tipoId = this.tipoGastoId();
+        if (!this.form.value.alimentaInventario) {
+          await this.facturasService.actualizarFacturaCompra(id, { tipoGastoId: tipoId || null });
+        }
+        await this.facturasService.registrarFacturaCompra(id);
+        this.estado.set('REGISTRADA');
+        this.toast('Factura registrada (contabilidad desactivada: sin asiento).', 'task_alt');
+        await this.router.navigate(['/workspace/contabilidad/compras']);
+      } catch (error) {
+        this.toast(error instanceof Error ? error.message : 'No se pudo registrar la factura.', 'error');
+      } finally {
+        this.guardando.set(false);
+      }
+      return;
+    }
+
+    // 1) Construir el asiento propuesto y abrir el formulario de revisión (con selección de Tipo de gasto).
+    let resultado: RevisarAsientoCompraResult | undefined;
+    try {
+      const factura = await this.facturasService.getFacturaCompraById(id);
+      const items = await this.facturasService.getItems(id);
+      if (!factura) {
+        this.toast('Factura no encontrada.', 'error');
+        return;
+      }
+      const facturaRegistrada = { ...factura, estado: 'REGISTRADA' as const };
+      const tipoGasto = this.tipoGastoId() ? await this.tiposGastoService.getTipoGastoById(this.tipoGastoId()!) : null;
+      const lineas = await this.integracionContable.construirLineasAsientoCompra(facturaRegistrada, items, tipoGasto, { lenient: true });
+      const data: RevisarAsientoCompraData = {
+        factura: facturaRegistrada,
+        items,
+        lineas,
+        cuentas: this.cuentas,
+        tiposGasto: this.tiposGasto(),
+        tipoGastoId: this.tipoGastoId(),
+        documento: this.documento(),
+        proveedor: factura.razonSocialProv
+      };
+      const dialogRef = this.dialog.open<RevisarAsientoCompraDialogComponent, RevisarAsientoCompraData, RevisarAsientoCompraResult | undefined>(
+        RevisarAsientoCompraDialogComponent,
+        { maxWidth: '96vw', data }
+      );
+      resultado = await firstValueFrom(dialogRef.afterClosed());
+    } catch (error) {
+      this.toast(error instanceof Error ? error.message : 'No se pudo preparar el asiento contable.', 'error');
+      return;
+    }
+
+    // Usuario canceló el diálogo: la factura queda como borrador.
+    if (!resultado) {
+      return;
+    }
+
+    // 2) Registrar con las líneas revisadas y recordar el tipo de gasto del proveedor.
     this.guardando.set(true);
     try {
-      await this.facturasService.registrarFacturaCompra(id);
+      const tipoId = resultado.tipoGastoId;
+      this.tipoGastoId.set(tipoId);
+      // Persistir el tipo de gasto elegido en el diálogo (trazabilidad) antes de contabilizar.
+      if (!this.form.value.alimentaInventario) {
+        await this.facturasService.actualizarFacturaCompra(id, { tipoGastoId: tipoId || null });
+      }
+      await this.facturasService.registrarFacturaCompra(id, resultado.lineas);
+      const idProv = (this.form.getRawValue().idProv ?? '').trim();
+      if (idProv && tipoId && !this.form.value.alimentaInventario) {
+        await this.tiposGastoService.recordarProveedor(idProv, tipoId);
+      }
       this.estado.set('REGISTRADA');
       this.toast('Factura registrada y contabilizada.', 'task_alt');
       await this.router.navigate(['/workspace/contabilidad/compras']);
@@ -920,6 +1132,7 @@ export class FacturaCompraFormComponent implements OnInit {
   protected reemplazarXml(): void {
     this.parseado.set(false);
     this.parseError.set(null);
+    this.advertenciaEmpresa.set(null);
   }
 
   private construirFactura(): Omit<FacturaCompra, 'id' | 'numero' | 'creadoEn' | 'actualizadoEn'> {
@@ -977,9 +1190,12 @@ export class FacturaCompraFormComponent implements OnInit {
       totalRetencion: this.totalRetencion(),
       alimentaInventario: !!v.alimentaInventario,
       almacenId: v.alimentaInventario ? (v.almacenId || null) : null,
+      tipoGastoId: v.alimentaInventario ? null : (this.tipoGastoId() || null),
       ordenCompraId: this.ordenCompraId,
       archivoId: this.archivoId,
       xmlStoragePath: this.xmlStoragePath,
+      pdfArchivoId: this.pdfArchivoId,
+      pdfDownloadUrl: this.pdfUrl(),
       creadoPor: this.authService.currentUser()?.uid ?? 'sistema'
     };
   }
@@ -1026,8 +1242,11 @@ export class FacturaCompraFormComponent implements OnInit {
     }
     this.facturaId.set(id);
     this.estado.set(factura.estado);
+    this.tipoGastoId.set(factura.tipoGastoId ?? null);
     this.archivoId = factura.archivoId ?? null;
     this.xmlStoragePath = factura.xmlStoragePath ?? null;
+    this.pdfArchivoId = factura.pdfArchivoId ?? null;
+    this.pdfUrl.set(factura.pdfDownloadUrl ?? null);
     this.ordenCompraId = factura.ordenCompraId ?? null;
     this.modo.set(factura.origen ?? 'XML');
     this.soporteAdjunto.set(!!factura.archivoId);
@@ -1078,6 +1297,11 @@ export class FacturaCompraFormComponent implements OnInit {
       this.retencionesIva.at(this.retencionesIva.length - 1).patchValue(ret);
     });
 
+    // Si la factura no tiene PDF guardado, intentar localizarlo por clave de acceso (compat).
+    if (!this.pdfUrl()) {
+      await this.buscarPdfAsociado(factura.claveAcceso);
+    }
+
     const items = await this.facturasService.getItems(id);
     this.items.clear();
     items.forEach((item) => this.items.push(this.crearItemGroup(item)));
@@ -1088,6 +1312,10 @@ export class FacturaCompraFormComponent implements OnInit {
     if (this.soloLectura()) {
       this.form.disable({ emitEvent: false });
     }
+
+    // App zoneless: los ítems/retenciones se empujan al FormArray tras los awaits y las señales
+    // ya se emitieron antes, así que forzamos la detección de cambios para que se rendericen.
+    this.cdr.markForCheck();
   }
 
   private toTs(value: unknown): number {
@@ -1095,6 +1323,16 @@ export class FacturaCompraFormComponent implements OnInit {
     if (value instanceof Date) return value.getTime();
     const parsed = new Date(String(value));
     return Number.isNaN(parsed.getTime()) ? Date.now() : parsed.getTime();
+  }
+
+  /**
+   * Parsea una fecha SRI en formato ISO solo-fecha ("yyyy-MM-dd") como fecha LOCAL.
+   * `new Date("yyyy-MM-dd")` la interpreta en UTC medianoche y en zonas negativas
+   * (Ecuador UTC-5) el datepicker la mostraria un dia antes.
+   */
+  private parseFechaLocal(iso: string): Date {
+    const [y, m, d] = String(iso).split('-').map(Number);
+    return (y && m && d) ? new Date(y, m - 1, d) : new Date();
   }
 
   private num(value: unknown): number {

@@ -90,7 +90,13 @@ export class PendienteContabilizacionDialogComponent {
       RECEPCION_OC: 'Recepcion de orden de compra',
       REVERSO_RECEPCION_OC: 'Reverso de recepcion',
       FACTURA_COMPRA: 'Factura de compra',
-      REVERSO_FACTURA_COMPRA: 'Reverso de factura de compra'
+      REVERSO_FACTURA_COMPRA: 'Reverso de factura de compra',
+      ROL_PAGO: 'Rol de pago',
+      REVERSO_ROL_PAGO: 'Reverso de rol de pago',
+      CXP_MANUAL: 'Cuenta por pagar manual',
+      REVERSO_CXP_MANUAL: 'Reverso CxP manual',
+      PAGO_PROVEEDOR: 'Pago a proveedor',
+      REVERSO_PAGO_PROVEEDOR: 'Reverso pago a proveedor'
     };
     return labels[origenTipo] ?? origenTipo;
   }
@@ -107,6 +113,9 @@ export class PendienteContabilizacionDialogComponent {
     }
     if (pendiente.origenTipo === 'VENTA_POS') {
       return 'Verifique cuentas de caja/banco, cuentas por cobrar, ventas, IVA ventas, inventario y costo de ventas segun el tipo de producto.';
+    }
+    if (pendiente.origenTipo === 'ROL_PAGO') {
+      return 'Revise las cuentas de Nomina, el periodo contable y los empleados incluidos en el rol de pago.';
     }
     return 'Revise la configuracion de integracion contable y vuelva a ejecutar o reintentar la operacion origen.';
   }

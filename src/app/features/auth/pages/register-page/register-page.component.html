@@ -30,7 +30,7 @@
   <section class="form-panel">
     <mat-card appearance="outlined" class="auth-card">
       <h2>Crear cuenta</h2>
-      <p class="muted">Paso {{ currentStep() }} de 2</p>
+      <p class="muted">Paso {{ currentStep() }} de 3</p>
 
       @if (auth.error(); as apiError) {
         <p class="error-banner">{{ apiError }}</p>
@@ -58,7 +58,13 @@
 
           <mat-form-field appearance="outline">
             <mat-label>Contrasena</mat-label>
-            <input matInput type="password" formControlName="password" />
+            <input
+              matInput
+              [type]="passwordToggle.visible() ? 'text' : 'password'"
+              formControlName="password"
+              autocomplete="new-password"
+            />
+            <app-password-visibility-toggle #passwordToggle matSuffix />
             @if (hasUserError('password', 'required')) {
               <mat-error>La contrasena es obligatoria.</mat-error>
             } @else if (hasUserError('password', 'minlength')) {
@@ -68,7 +74,13 @@
 
           <mat-form-field appearance="outline">
             <mat-label>Repite la contrasena</mat-label>
-            <input matInput type="password" formControlName="confirmPassword" />
+            <input
+              matInput
+              [type]="confirmPasswordToggle.visible() ? 'text' : 'password'"
+              formControlName="confirmPassword"
+              autocomplete="new-password"
+            />
+            <app-password-visibility-toggle #confirmPasswordToggle matSuffix />
             @if (hasUserError('confirmPassword', 'required')) {
               <mat-error>Debes repetir la contrasena.</mat-error>
             } @else if (hasPasswordMismatch()) {
@@ -80,8 +92,8 @@
             Continuar con datos del negocio
           </button>
         </form>
-      } @else {
-        <form [formGroup]="businessForm" (ngSubmit)="submit()" novalidate>
+      } @else if (currentStep() === 2) {
+        <form [formGroup]="businessForm" (ngSubmit)="nextStep()" novalidate>
           <mat-form-field appearance="outline">
             <mat-label>Nombre del negocio</mat-label>
             <input matInput formControlName="businessName" />
@@ -114,15 +126,37 @@
 
           <div class="actions">
             <button mat-stroked-button type="button" (click)="prevStep()">Volver</button>
-            <button mat-flat-button color="primary" type="submit" [disabled]="auth.loading()">
-              @if (auth.loading()) {
-                <mat-spinner diameter="18"></mat-spinner>
-              } @else {
-                <span>Crear cuenta</span>
-              }
+            <button mat-flat-button color="primary" type="submit">
+              Continuar con modulos
             </button>
           </div>
         </form>
+      } @else {
+        <p class="muted modules-intro">
+          Elige los modulos que necesita tu negocio. Dashboard y Clientes vienen incluidos siempre;
+          el resto lo puedes activar o desactivar despues desde Ajustes.
+        </p>
+
+        <div class="module-grid">
+          @for (module of moduleCatalog; track module.id) {
+            <app-module-card
+              [module]="module"
+              [selected]="isModuleSelected(module.id)"
+              (toggle)="toggleModule(module.id)"
+            />
+          }
+        </div>
+
+        <div class="actions">
+          <button mat-stroked-button type="button" (click)="prevStep()">Volver</button>
+          <button mat-flat-button color="primary" type="button" [disabled]="auth.loading()" (click)="submit()">
+            @if (auth.loading()) {
+              <mat-spinner diameter="18"></mat-spinner>
+            } @else {
+              <span>Crear cuenta</span>
+            }
+          </button>
+        </div>
       }
 
       <p class="switch-text">

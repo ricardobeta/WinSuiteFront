@@ -242,6 +242,7 @@ export class RoleFormComponent implements OnInit {
       clientes: { canCreate: false, canRead: true, canUpdate: false, canDelete: false },
       facturacion: { canCreate: false, canRead: true, canUpdate: false, canDelete: false },
       inventario: { canCreate: false, canRead: true, canUpdate: false, canDelete: false },
+      contabilidad: { canCreate: false, canRead: true, canUpdate: false, canDelete: false },
       ventas: { canCreate: false, canRead: true, canUpdate: false, canDelete: false },
       servicios: { canCreate: false, canRead: true, canUpdate: false, canDelete: false },
       archivos: { canCreate: false, canRead: true, canUpdate: false, canDelete: false },

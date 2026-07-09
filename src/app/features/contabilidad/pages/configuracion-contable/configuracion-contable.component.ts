@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -19,14 +20,16 @@ import { Subscription } from 'rxjs';
 
 import { AuthorizationService } from '../../../../core/services/authorization.service';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
-import { Categoria } from '../../../inventario/models/inventario.models';
+import { Categoria, Proveedor } from '../../../inventario/models/inventario.models';
 import { CategoriasService } from '../../../inventario/services/categorias.service';
+import { ProveedoresService } from '../../../inventario/services/proveedores.service';
 import { CuentaContableAutocompleteComponent } from '../../components/cuenta-contable-autocomplete/cuenta-contable-autocomplete.component';
 import {
   ConfiguracionEmpresaContable,
   ConfiguracionIntegracionContable,
   CuentaContable,
   MapeoCategoriaContable,
+  MapeoProveedorContable,
   PendienteContabilizacion,
   PeriodoContable,
   TipoContribuyente
@@ -34,6 +37,9 @@ import {
 import { ConfiguracionContableService } from '../../services/configuracion-contable.service';
 import { IntegracionContableService } from '../../services/integracion-contable.service';
 import { PlanCuentasService } from '../../services/plan-cuentas.service';
+import { NominaConfiguracionContableComponent } from '../nomina-configuracion/nomina-configuracion-contable.component';
+import { TiposGastoCompraComponent } from '../tipos-gasto/tipos-gasto-compra.component';
+import { CxpConfiguracionComponent } from '../cxp-configuracion/cxp-configuracion.component';
 
 type CuentaIntegracionKey =
   | 'cuentaCajaBancoId'
@@ -66,6 +72,7 @@ type CuentaIntegracionCampo = {
     MatCheckboxModule,
     MatChipsModule,
     MatDatepickerModule,
+    MatExpansionModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -75,7 +82,10 @@ type CuentaIntegracionCampo = {
     MatTableModule,
     MatTabsModule,
     MatTooltipModule,
-    CuentaContableAutocompleteComponent
+    CuentaContableAutocompleteComponent,
+    NominaConfiguracionContableComponent,
+    TiposGastoCompraComponent,
+    CxpConfiguracionComponent
   ],
   template: `
     <section class="config-page">
@@ -336,152 +346,295 @@ type CuentaIntegracionCampo = {
                 </mat-form-field>
               </div>
 
-              <h3>Cuentas por defecto</h3>
-              <section class="account-groups">
-                @for (grupo of gruposCuentasIntegracion; track grupo.titulo) {
-                  <article class="account-group">
-                    <header>
-                      <h4>{{ grupo.titulo }}</h4>
-                      <p>{{ grupo.descripcion }}</p>
-                    </header>
+              <h3>Cuentas contables por módulo</h3>
+              <p class="muted">Organiza las cuentas por módulo. Las cuentas específicas (por proveedor o categoría) tienen prioridad sobre las generales.</p>
 
-                    <div class="account-grid">
-                      @for (campo of grupo.campos; track campo.key) {
-                        <div class="account-field">
-                          <div class="field-label">
-                            <span>{{ campo.label }}</span>
-                            <button mat-icon-button type="button" [matTooltip]="campo.tooltip" matTooltipPosition="above" [attr.aria-label]="'Ayuda ' + campo.label">
-                              <mat-icon>help_outline</mat-icon>
-                            </button>
-                          </div>
+              <mat-accordion multi class="cuentas-accordion">
+                <!-- General: IVA, retenciones, caja/banco -->
+                <mat-expansion-panel expanded>
+                  <mat-expansion-panel-header>
+                    <mat-panel-title><mat-icon>tune</mat-icon> General</mat-panel-title>
+                    <mat-panel-description>IVA, retenciones y caja/banco</mat-panel-description>
+                  </mat-expansion-panel-header>
+                  <div class="account-grid">
+                    @for (campo of camposGeneral; track campo.key) {
+                      <div class="account-field">
+                        <div class="field-label">
+                          <span>{{ campo.label }}</span>
+                          <button mat-icon-button type="button" [matTooltip]="campo.tooltip" matTooltipPosition="above" [attr.aria-label]="'Ayuda ' + campo.label">
+                            <mat-icon>help_outline</mat-icon>
+                          </button>
+                        </div>
+                        <app-cuenta-contable-autocomplete
+                          [cuentas]="cuentasMovimiento()"
+                          [cuentaId]="integracionForm[campo.key]"
+                          [soloActivas]="true"
+                          [soloMovimiento]="true"
+                          [label]="campo.label"
+                          [mostrarNumero]="false"
+                          [compact]="true"
+                          [disabled]="!canUpdate()"
+                          (cuentaSeleccionada)="seleccionarCuentaIntegracion(campo.key, $event)"
+                        />
+                      </div>
+                    }
+                  </div>
+                </mat-expansion-panel>
+
+                <!-- Inventario: general + por proveedor -->
+                <mat-expansion-panel>
+                  <mat-expansion-panel-header>
+                    <mat-panel-title><mat-icon>inventory_2</mat-icon> Inventario</mat-panel-title>
+                    <mat-panel-description>General y por proveedor</mat-panel-description>
+                  </mat-expansion-panel-header>
+
+                  <h4>General</h4>
+                  <div class="account-grid">
+                    @for (campo of camposInventario; track campo.key) {
+                      <div class="account-field">
+                        <div class="field-label">
+                          <span>{{ campo.label }}</span>
+                          <button mat-icon-button type="button" [matTooltip]="campo.tooltip" matTooltipPosition="above" [attr.aria-label]="'Ayuda ' + campo.label">
+                            <mat-icon>help_outline</mat-icon>
+                          </button>
+                        </div>
+                        <app-cuenta-contable-autocomplete
+                          [cuentas]="cuentasMovimiento()"
+                          [cuentaId]="integracionForm[campo.key]"
+                          [soloActivas]="true"
+                          [soloMovimiento]="true"
+                          [label]="campo.label"
+                          [mostrarNumero]="false"
+                          [compact]="true"
+                          [disabled]="!canUpdate()"
+                          (cuentaSeleccionada)="seleccionarCuentaIntegracion(campo.key, $event)"
+                        />
+                      </div>
+                    }
+                  </div>
+
+                  <h4>Por proveedor</h4>
+                  <p class="muted">Sobrescribe la cuenta de inventario/por pagar para proveedores específicos. Si se deja vacío, se usa la cuenta general.</p>
+                  @if (proveedoresActivos().length === 0) {
+                    <div class="empty-state compact"><mat-icon>store</mat-icon><p>No hay proveedores registrados.</p></div>
+                  } @else {
+                    <div class="table-wrap">
+                      <table mat-table [dataSource]="proveedoresActivos()">
+                        <ng-container matColumnDef="proveedor">
+                          <th mat-header-cell *matHeaderCellDef>Proveedor</th>
+                          <td mat-cell *matCellDef="let row"><strong>{{ row.nombre }}</strong><span class="muted"> {{ row.ruc }}</span></td>
+                        </ng-container>
+                        <ng-container matColumnDef="inventario">
+                          <th mat-header-cell *matHeaderCellDef>Inventario</th>
+                          <td mat-cell *matCellDef="let row">
+                            <app-cuenta-contable-autocomplete
+                              class="table-account"
+                              [cuentas]="cuentasMovimiento()"
+                              [cuentaId]="mapeoProveedor(row.id).cuentaInventarioId ?? ''"
+                              label="General"
+                              [mostrarNumero]="false"
+                              [compact]="true"
+                              [disabled]="!canUpdate()"
+                              (cuentaSeleccionada)="actualizarMapeoProveedor(row.id, 'cuentaInventarioId', $event?.id ?? '')"
+                            />
+                          </td>
+                        </ng-container>
+                        <ng-container matColumnDef="cuentasPorPagar">
+                          <th mat-header-cell *matHeaderCellDef>Cuentas por pagar</th>
+                          <td mat-cell *matCellDef="let row">
+                            <app-cuenta-contable-autocomplete
+                              class="table-account"
+                              [cuentas]="cuentasMovimiento()"
+                              [cuentaId]="mapeoProveedor(row.id).cuentaCuentasPorPagarId ?? ''"
+                              label="General"
+                              [mostrarNumero]="false"
+                              [compact]="true"
+                              [disabled]="!canUpdate()"
+                              (cuentaSeleccionada)="actualizarMapeoProveedor(row.id, 'cuentaCuentasPorPagarId', $event?.id ?? '')"
+                            />
+                          </td>
+                        </ng-container>
+                        <ng-container matColumnDef="acciones">
+                          <th mat-header-cell *matHeaderCellDef></th>
+                          <td mat-cell *matCellDef="let row">
+                            <button mat-button type="button" (click)="guardarMapeoProveedor(row)" [disabled]="!canUpdate()">Guardar</button>
+                          </td>
+                        </ng-container>
+                        <tr mat-header-row *matHeaderRowDef="columnasMapeoProveedor"></tr>
+                        <tr mat-row *matRowDef="let row; columns: columnasMapeoProveedor"></tr>
+                      </table>
+                    </div>
+                  }
+                </mat-expansion-panel>
+
+                <!-- Ventas: general + por categoría -->
+                <mat-expansion-panel>
+                  <mat-expansion-panel-header>
+                    <mat-panel-title><mat-icon>point_of_sale</mat-icon> Ventas</mat-panel-title>
+                    <mat-panel-description>General y por categoría de producto</mat-panel-description>
+                  </mat-expansion-panel-header>
+
+                  <h4>General</h4>
+                  <div class="account-grid">
+                    @for (campo of camposVentas; track campo.key) {
+                      <div class="account-field">
+                        <div class="field-label">
+                          <span>{{ campo.label }}</span>
+                          <button mat-icon-button type="button" [matTooltip]="campo.tooltip" matTooltipPosition="above" [attr.aria-label]="'Ayuda ' + campo.label">
+                            <mat-icon>help_outline</mat-icon>
+                          </button>
+                        </div>
+                        <app-cuenta-contable-autocomplete
+                          [cuentas]="cuentasMovimiento()"
+                          [cuentaId]="integracionForm[campo.key]"
+                          [soloActivas]="true"
+                          [soloMovimiento]="true"
+                          [label]="campo.label"
+                          [mostrarNumero]="false"
+                          [compact]="true"
+                          [disabled]="!canUpdate()"
+                          (cuentaSeleccionada)="seleccionarCuentaIntegracion(campo.key, $event)"
+                        />
+                      </div>
+                    }
+                  </div>
+
+                  <h4>Por categoría de producto</h4>
+                  <p class="muted">La categoría del producto tiene prioridad sobre las cuentas generales.</p>
+                  <div class="table-wrap">
+                    <table mat-table [dataSource]="categoriasActivas()">
+                      <ng-container matColumnDef="categoria">
+                        <th mat-header-cell *matHeaderCellDef>Categoria</th>
+                        <td mat-cell *matCellDef="let row"><strong>{{ row.nombre }}</strong></td>
+                      </ng-container>
+
+                      <ng-container matColumnDef="ingresoProductos">
+                        <th mat-header-cell *matHeaderCellDef>Ingreso productos</th>
+                        <td mat-cell *matCellDef="let row">
                           <app-cuenta-contable-autocomplete
+                            class="table-account"
                             [cuentas]="cuentasMovimiento()"
-                            [cuentaId]="integracionForm[campo.key]"
-                            [soloActivas]="true"
-                            [soloMovimiento]="true"
-                            [label]="campo.label"
+                            [cuentaId]="mapeoCategoria(row.id).cuentaIngresoProductosId ?? ''"
+                            label="Global"
                             [mostrarNumero]="false"
                             [compact]="true"
                             [disabled]="!canUpdate()"
-                            (cuentaSeleccionada)="seleccionarCuentaIntegracion(campo.key, $event)"
+                            (cuentaSeleccionada)="actualizarMapeoCategoria(row.id, 'cuentaIngresoProductosId', $event?.id ?? '')"
                           />
-                        </div>
-                      }
-                    </div>
-                  </article>
-                }
-              </section>
+                        </td>
+                      </ng-container>
+
+                      <ng-container matColumnDef="ingresoServicios">
+                        <th mat-header-cell *matHeaderCellDef>Ingreso servicios</th>
+                        <td mat-cell *matCellDef="let row">
+                          <app-cuenta-contable-autocomplete
+                            class="table-account"
+                            [cuentas]="cuentasMovimiento()"
+                            [cuentaId]="mapeoCategoria(row.id).cuentaIngresoServiciosId ?? ''"
+                            label="Global"
+                            [mostrarNumero]="false"
+                            [compact]="true"
+                            [disabled]="!canUpdate()"
+                            (cuentaSeleccionada)="actualizarMapeoCategoria(row.id, 'cuentaIngresoServiciosId', $event?.id ?? '')"
+                          />
+                        </td>
+                      </ng-container>
+
+                      <ng-container matColumnDef="inventario">
+                        <th mat-header-cell *matHeaderCellDef>Inventario</th>
+                        <td mat-cell *matCellDef="let row">
+                          <app-cuenta-contable-autocomplete
+                            class="table-account"
+                            [cuentas]="cuentasMovimiento()"
+                            [cuentaId]="mapeoCategoria(row.id).cuentaInventarioId ?? ''"
+                            label="Global"
+                            [mostrarNumero]="false"
+                            [compact]="true"
+                            [disabled]="!canUpdate()"
+                            (cuentaSeleccionada)="actualizarMapeoCategoria(row.id, 'cuentaInventarioId', $event?.id ?? '')"
+                          />
+                        </td>
+                      </ng-container>
+
+                      <ng-container matColumnDef="costoVenta">
+                        <th mat-header-cell *matHeaderCellDef>Costo venta</th>
+                        <td mat-cell *matCellDef="let row">
+                          <app-cuenta-contable-autocomplete
+                            class="table-account"
+                            [cuentas]="cuentasMovimiento()"
+                            [cuentaId]="mapeoCategoria(row.id).cuentaCostoVentaId ?? ''"
+                            label="Global"
+                            [mostrarNumero]="false"
+                            [compact]="true"
+                            [disabled]="!canUpdate()"
+                            (cuentaSeleccionada)="actualizarMapeoCategoria(row.id, 'cuentaCostoVentaId', $event?.id ?? '')"
+                          />
+                        </td>
+                      </ng-container>
+
+                      <ng-container matColumnDef="compraGasto">
+                        <th mat-header-cell *matHeaderCellDef>Compra/gasto</th>
+                        <td mat-cell *matCellDef="let row">
+                          <app-cuenta-contable-autocomplete
+                            class="table-account"
+                            [cuentas]="cuentasMovimiento()"
+                            [cuentaId]="mapeoCategoria(row.id).cuentaCompraGastoId ?? ''"
+                            label="Global"
+                            [mostrarNumero]="false"
+                            [compact]="true"
+                            [disabled]="!canUpdate()"
+                            (cuentaSeleccionada)="actualizarMapeoCategoria(row.id, 'cuentaCompraGastoId', $event?.id ?? '')"
+                          />
+                        </td>
+                      </ng-container>
+
+                      <ng-container matColumnDef="acciones">
+                        <th mat-header-cell *matHeaderCellDef></th>
+                        <td mat-cell *matCellDef="let row">
+                          <button mat-button type="button" (click)="guardarMapeoCategoria(row)" [disabled]="!canUpdate()">Guardar</button>
+                        </td>
+                      </ng-container>
+
+                      <tr mat-header-row *matHeaderRowDef="columnasMapeos"></tr>
+                      <tr mat-row *matRowDef="let row; columns: columnasMapeos"></tr>
+                    </table>
+                  </div>
+                </mat-expansion-panel>
+
+                <!-- Nómina (migrado): edición desde aquí, datos en su propia ruta -->
+                <mat-expansion-panel>
+                  <mat-expansion-panel-header>
+                    <mat-panel-title><mat-icon>badge</mat-icon> Nómina</mat-panel-title>
+                    <mat-panel-description>Cuentas contables de roles de pago</mat-panel-description>
+                  </mat-expansion-panel-header>
+                  <app-nomina-configuracion-contable></app-nomina-configuracion-contable>
+                </mat-expansion-panel>
+
+                <!-- Tipos de gasto / Cuentas por cobrar (migrado) -->
+                <mat-expansion-panel>
+                  <mat-expansion-panel-header>
+                    <mat-panel-title><mat-icon>receipt_long</mat-icon> Tipos de gasto / Cuentas por cobrar</mat-panel-title>
+                    <mat-panel-description>Plantillas de cuentas de gasto para compras</mat-panel-description>
+                  </mat-expansion-panel-header>
+                  <app-tipos-gasto-compra></app-tipos-gasto-compra>
+                </mat-expansion-panel>
+
+                <!-- Cuentas por Pagar: cuentas del modulo y fuentes activas -->
+                <mat-expansion-panel>
+                  <mat-expansion-panel-header>
+                    <mat-panel-title><mat-icon>request_quote</mat-icon> Cuentas por Pagar</mat-panel-title>
+                    <mat-panel-description>Cuentas del modulo y fuentes de obligaciones</mat-panel-description>
+                  </mat-expansion-panel-header>
+                  <app-cxp-configuracion></app-cxp-configuracion>
+                </mat-expansion-panel>
+              </mat-accordion>
 
               <footer class="actions-row">
                 <button mat-raised-button color="primary" type="button" (click)="guardarIntegracion()" [disabled]="guardandoIntegracion() || !canUpdate()">
                   <mat-icon>save</mat-icon>
-                  Guardar integracion
+                  Guardar cuentas generales
                 </button>
               </footer>
-
-              <section class="mapping-section">
-                <h3>Mapeo por categoria</h3>
-                <p class="muted">La categoria del producto tiene prioridad sobre las cuentas globales.</p>
-
-                <div class="table-wrap">
-                  <table mat-table [dataSource]="categoriasActivas()">
-                    <ng-container matColumnDef="categoria">
-                      <th mat-header-cell *matHeaderCellDef>Categoria</th>
-                      <td mat-cell *matCellDef="let row"><strong>{{ row.nombre }}</strong></td>
-                    </ng-container>
-
-                    <ng-container matColumnDef="ingresoProductos">
-                      <th mat-header-cell *matHeaderCellDef>Ingreso productos</th>
-                      <td mat-cell *matCellDef="let row">
-                        <app-cuenta-contable-autocomplete
-                          class="table-account"
-                          [cuentas]="cuentasMovimiento()"
-                          [cuentaId]="mapeoCategoria(row.id).cuentaIngresoProductosId ?? ''"
-                          label="Global"
-                          [mostrarNumero]="false"
-                          [compact]="true"
-                          [disabled]="!canUpdate()"
-                          (cuentaSeleccionada)="actualizarMapeoCategoria(row.id, 'cuentaIngresoProductosId', $event?.id ?? '')"
-                        />
-                      </td>
-                    </ng-container>
-
-                    <ng-container matColumnDef="ingresoServicios">
-                      <th mat-header-cell *matHeaderCellDef>Ingreso servicios</th>
-                      <td mat-cell *matCellDef="let row">
-                        <app-cuenta-contable-autocomplete
-                          class="table-account"
-                          [cuentas]="cuentasMovimiento()"
-                          [cuentaId]="mapeoCategoria(row.id).cuentaIngresoServiciosId ?? ''"
-                          label="Global"
-                          [mostrarNumero]="false"
-                          [compact]="true"
-                          [disabled]="!canUpdate()"
-                          (cuentaSeleccionada)="actualizarMapeoCategoria(row.id, 'cuentaIngresoServiciosId', $event?.id ?? '')"
-                        />
-                      </td>
-                    </ng-container>
-
-                    <ng-container matColumnDef="inventario">
-                      <th mat-header-cell *matHeaderCellDef>Inventario</th>
-                      <td mat-cell *matCellDef="let row">
-                        <app-cuenta-contable-autocomplete
-                          class="table-account"
-                          [cuentas]="cuentasMovimiento()"
-                          [cuentaId]="mapeoCategoria(row.id).cuentaInventarioId ?? ''"
-                          label="Global"
-                          [mostrarNumero]="false"
-                          [compact]="true"
-                          [disabled]="!canUpdate()"
-                          (cuentaSeleccionada)="actualizarMapeoCategoria(row.id, 'cuentaInventarioId', $event?.id ?? '')"
-                        />
-                      </td>
-                    </ng-container>
-
-                    <ng-container matColumnDef="costoVenta">
-                      <th mat-header-cell *matHeaderCellDef>Costo venta</th>
-                      <td mat-cell *matCellDef="let row">
-                        <app-cuenta-contable-autocomplete
-                          class="table-account"
-                          [cuentas]="cuentasMovimiento()"
-                          [cuentaId]="mapeoCategoria(row.id).cuentaCostoVentaId ?? ''"
-                          label="Global"
-                          [mostrarNumero]="false"
-                          [compact]="true"
-                          [disabled]="!canUpdate()"
-                          (cuentaSeleccionada)="actualizarMapeoCategoria(row.id, 'cuentaCostoVentaId', $event?.id ?? '')"
-                        />
-                      </td>
-                    </ng-container>
-
-                    <ng-container matColumnDef="compraGasto">
-                      <th mat-header-cell *matHeaderCellDef>Compra/gasto</th>
-                      <td mat-cell *matCellDef="let row">
-                        <app-cuenta-contable-autocomplete
-                          class="table-account"
-                          [cuentas]="cuentasMovimiento()"
-                          [cuentaId]="mapeoCategoria(row.id).cuentaCompraGastoId ?? ''"
-                          label="Global"
-                          [mostrarNumero]="false"
-                          [compact]="true"
-                          [disabled]="!canUpdate()"
-                          (cuentaSeleccionada)="actualizarMapeoCategoria(row.id, 'cuentaCompraGastoId', $event?.id ?? '')"
-                        />
-                      </td>
-                    </ng-container>
-
-                    <ng-container matColumnDef="acciones">
-                      <th mat-header-cell *matHeaderCellDef></th>
-                      <td mat-cell *matCellDef="let row">
-                        <button mat-button type="button" (click)="guardarMapeoCategoria(row)" [disabled]="!canUpdate()">Guardar</button>
-                      </td>
-                    </ng-container>
-
-                    <tr mat-header-row *matHeaderRowDef="columnasMapeos"></tr>
-                    <tr mat-row *matRowDef="let row; columns: columnasMapeos"></tr>
-                  </table>
-                </div>
-              </section>
 
               <section class="mapping-section">
                 <h3>Pendientes de contabilizacion</h3>
@@ -545,6 +698,10 @@ type CuentaIntegracionCampo = {
     .integration-header h3, .integration-header p, .mapping-section h3, .mapping-section p { margin: 0; }
     .mapping-section { display: grid; gap: .75rem; }
     .account-groups { display: grid; gap: .85rem; }
+    .cuentas-accordion { display: block; margin: .5rem 0 1rem; }
+    .cuentas-accordion h4 { margin: 1rem 0 .5rem; font-size: .95rem; }
+    .cuentas-accordion mat-panel-title { display: flex; align-items: center; gap: .5rem; }
+    .cuentas-accordion mat-panel-title mat-icon { color: var(--primary); }
     .account-group { display: grid; gap: .75rem; padding: .85rem; border: 1px solid color-mix(in srgb, var(--outline) 40%, transparent); border-radius: .5rem; background: var(--tc-surface-container-low); }
     .account-group header h4, .account-group header p { margin: 0; }
     .account-group header p { color: var(--muted-foreground); font-size: .9rem; }
@@ -583,20 +740,25 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
   private readonly integracionService = inject(IntegracionContableService);
   private readonly planCuentasService = inject(PlanCuentasService);
   private readonly categoriasService = inject(CategoriasService);
+  private readonly proveedoresService = inject(ProveedoresService);
   private readonly authorization = inject(AuthorizationService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly columnasPeriodos = ['nombre', 'fechaInicio', 'fechaFin', 'estado', 'cierre', 'acciones'];
   protected readonly columnasMapeos = ['categoria', 'ingresoProductos', 'ingresoServicios', 'inventario', 'costoVenta', 'compraGasto', 'acciones'];
+  protected readonly columnasMapeoProveedor = ['proveedor', 'inventario', 'cuentasPorPagar', 'acciones'];
   protected readonly columnasPendientes = ['origen', 'motivo', 'fecha', 'acciones'];
   protected readonly anio = signal(new Date().getFullYear());
   protected readonly periodos = signal<PeriodoContable[]>([]);
   protected readonly cuentasMovimiento = signal<CuentaContable[]>([]);
   protected readonly categorias = signal<Categoria[]>([]);
   protected readonly mapeosCategorias = signal<MapeoCategoriaContable[]>([]);
+  protected readonly proveedores = signal<Proveedor[]>([]);
+  protected readonly mapeosProveedores = signal<MapeoProveedorContable[]>([]);
   protected readonly pendientes = signal<PendienteContabilizacion[]>([]);
   protected readonly categoriasActivas = computed(() => this.categorias().filter((categoria) => categoria.activo !== false && !!categoria.id));
+  protected readonly proveedoresActivos = computed(() => this.proveedores().filter((proveedor) => proveedor.activo !== false && !!proveedor.id));
   protected readonly cargandoPeriodos = signal(true);
   protected readonly guardandoEmpresa = signal(false);
   protected readonly guardandoIntegracion = signal(false);
@@ -639,89 +801,80 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
 
   protected readonly integracionForm: ConfiguracionIntegracionContable = this.getDefaultIntegracion();
 
-  protected readonly gruposCuentasIntegracion: Array<{ titulo: string; descripcion: string; campos: CuentaIntegracionCampo[] }> = [
+  // Cuentas generales y transversales (IVA, retenciones, caja/banco, gasto genérico).
+  protected readonly camposGeneral: CuentaIntegracionCampo[] = [
     {
-      titulo: 'Cobros y cartera',
-      descripcion: 'Define donde se registra el dinero recibido y las ventas pendientes de cobro.',
-      campos: [
-        {
-          key: 'cuentaCajaBancoId',
-          label: 'Caja/banco',
-          tooltip: 'Cuenta de activo que recibe el debito por pagos al contado, efectivo, tarjeta, transferencia o banco.'
-        },
-        {
-          key: 'cuentaCuentasPorCobrarId',
-          label: 'Cuentas por cobrar',
-          tooltip: 'Cuenta de activo usada cuando la venta queda a credito y el cliente todavia no paga.'
-        }
-      ]
+      key: 'cuentaIvaVentasId',
+      label: 'IVA ventas',
+      tooltip: 'Cuenta de pasivo tributario que registra el IVA cobrado al cliente en ventas.'
     },
     {
-      titulo: 'Ventas e impuestos',
-      descripcion: 'Cuentas de resultado e impuestos que se acreditan al completar ventas.',
-      campos: [
-        {
-          key: 'cuentaVentasProductosId',
-          label: 'Ventas productos',
-          tooltip: 'Cuenta de ingresos para ventas de bienes o productos inventariables.'
-        },
-        {
-          key: 'cuentaVentasServiciosId',
-          label: 'Ventas servicios',
-          tooltip: 'Cuenta de ingresos para ventas de servicios; no genera salida de inventario ni costo automatico.'
-        },
-        {
-          key: 'cuentaIvaVentasId',
-          label: 'IVA ventas',
-          tooltip: 'Cuenta de pasivo tributario que registra el IVA cobrado al cliente en ventas.'
-        },
-        {
-          key: 'cuentaDescuentosVentasId',
-          label: 'Descuentos ventas',
-          tooltip: 'Cuenta de resultado que registra descuentos concedidos al cliente, normalmente como menor ingreso o gasto comercial.'
-        }
-      ]
+      key: 'cuentaIvaComprasId',
+      label: 'IVA compras',
+      tooltip: 'Cuenta de activo/credito tributario que registra el IVA pagado en compras cuando aplica.'
     },
     {
-      titulo: 'Compras e inventario',
-      descripcion: 'Cuentas usadas al recibir compras con documento proveedor y al reconocer costo de ventas.',
-      campos: [
-        {
-          key: 'cuentaInventarioId',
-          label: 'Inventario',
-          tooltip: 'Cuenta de activo que se debita al ingresar mercaderia y se acredita cuando el producto se vende o consume.'
-        },
-        {
-          key: 'cuentaCostoVentasId',
-          label: 'Costo de ventas',
-          tooltip: 'Cuenta de costo que se debita por el costo de productos vendidos o recetas consumidas.'
-        },
-        {
-          key: 'cuentaCuentasPorPagarId',
-          label: 'Cuentas por pagar',
-          tooltip: 'Cuenta de pasivo que se acredita por facturas de proveedor pendientes de pago.'
-        },
-        {
-          key: 'cuentaIvaComprasId',
-          label: 'IVA compras',
-          tooltip: 'Cuenta de activo/credito tributario que registra el IVA pagado en compras cuando aplica.'
-        },
-        {
-          key: 'cuentaGastoComprasId',
-          label: 'Gasto / compras',
-          tooltip: 'Cuenta de gasto que se debita en facturas de compra cuando la factura NO alimenta inventario.'
-        },
-        {
-          key: 'cuentaRetencionFuenteXPagarId',
-          label: 'Retención fuente por pagar',
-          tooltip: 'Cuenta de pasivo que se acredita por la retención en la fuente de renta practicada al proveedor.'
-        },
-        {
-          key: 'cuentaRetencionIvaXPagarId',
-          label: 'Retención IVA por pagar',
-          tooltip: 'Cuenta de pasivo que se acredita por la retención de IVA practicada al proveedor.'
-        }
-      ]
+      key: 'cuentaRetencionFuenteXPagarId',
+      label: 'Retención fuente por pagar',
+      tooltip: 'Cuenta de pasivo que se acredita por la retención en la fuente de renta practicada al proveedor.'
+    },
+    {
+      key: 'cuentaRetencionIvaXPagarId',
+      label: 'Retención IVA por pagar',
+      tooltip: 'Cuenta de pasivo que se acredita por la retención de IVA practicada al proveedor.'
+    },
+    {
+      key: 'cuentaCajaBancoId',
+      label: 'Caja/banco',
+      tooltip: 'Cuenta de activo que recibe el debito por pagos al contado, efectivo, tarjeta, transferencia o banco.'
+    },
+    {
+      key: 'cuentaGastoComprasId',
+      label: 'Gasto / compras (genérico)',
+      tooltip: 'Cuenta de gasto que se debita en facturas de compra cuando la factura NO alimenta inventario y no hay tipo de gasto.'
+    }
+  ];
+
+  // Cuentas del módulo de Inventario/Compras (nivel general).
+  protected readonly camposInventario: CuentaIntegracionCampo[] = [
+    {
+      key: 'cuentaInventarioId',
+      label: 'Inventario',
+      tooltip: 'Cuenta de activo que se debita al ingresar mercaderia y se acredita cuando el producto se vende o consume.'
+    },
+    {
+      key: 'cuentaCostoVentasId',
+      label: 'Costo de ventas',
+      tooltip: 'Cuenta de costo que se debita por el costo de productos vendidos o recetas consumidas.'
+    },
+    {
+      key: 'cuentaCuentasPorPagarId',
+      label: 'Cuentas por pagar',
+      tooltip: 'Cuenta de pasivo que se acredita por facturas de proveedor pendientes de pago.'
+    }
+  ];
+
+  // Cuentas del módulo de Ventas (nivel general).
+  protected readonly camposVentas: CuentaIntegracionCampo[] = [
+    {
+      key: 'cuentaVentasProductosId',
+      label: 'Ventas productos',
+      tooltip: 'Cuenta de ingresos para ventas de bienes o productos inventariables.'
+    },
+    {
+      key: 'cuentaVentasServiciosId',
+      label: 'Ventas servicios',
+      tooltip: 'Cuenta de ingresos para ventas de servicios; no genera salida de inventario ni costo automatico.'
+    },
+    {
+      key: 'cuentaDescuentosVentasId',
+      label: 'Descuentos ventas',
+      tooltip: 'Cuenta de resultado que registra descuentos concedidos al cliente, normalmente como menor ingreso o gasto comercial.'
+    },
+    {
+      key: 'cuentaCuentasPorCobrarId',
+      label: 'Cuentas por cobrar',
+      tooltip: 'Cuenta de activo usada cuando la venta queda a credito y el cliente todavia no paga.'
     }
   ];
 
@@ -883,6 +1036,38 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
     }
   }
 
+  protected mapeoProveedor(proveedorId: string | undefined): MapeoProveedorContable {
+    const id = proveedorId ?? '';
+    return this.mapeosProveedores().find((mapeo) => mapeo.proveedorId === id) ?? { proveedorId: id };
+  }
+
+  protected actualizarMapeoProveedor(
+    proveedorId: string | undefined,
+    campo: 'cuentaInventarioId' | 'cuentaCuentasPorPagarId',
+    cuentaId: string
+  ): void {
+    const id = proveedorId ?? '';
+    if (!id) {
+      return;
+    }
+    const actual = this.mapeoProveedor(id);
+    const actualizado = { ...actual, [campo]: cuentaId ?? '' };
+    const otros = this.mapeosProveedores().filter((mapeo) => mapeo.proveedorId !== id);
+    this.mapeosProveedores.set([...otros, actualizado]);
+  }
+
+  protected async guardarMapeoProveedor(proveedor: Proveedor): Promise<void> {
+    if (!proveedor.id) {
+      return;
+    }
+    try {
+      await this.integracionService.guardarMapeoProveedor(this.mapeoProveedor(proveedor.id));
+      this.mostrarMensaje(`Cuentas de ${proveedor.nombre} guardadas.`, 'store');
+    } catch (error: unknown) {
+      this.error.set(error instanceof Error ? error.message : 'No se pudo guardar el mapeo del proveedor.');
+    }
+  }
+
   protected async reintentarPendiente(pendiente: PendienteContabilizacion): Promise<void> {
     try {
       await this.integracionService.reintentarPendiente(pendiente);
@@ -931,6 +1116,16 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
       .getMapeosCategorias()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((mapeos) => this.mapeosCategorias.set(mapeos));
+
+    this.proveedoresService
+      .getProveedores()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((proveedores) => this.proveedores.set(proveedores));
+
+    this.integracionService
+      .getMapeosProveedores()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((mapeos) => this.mapeosProveedores.set(mapeos));
 
     this.integracionService
       .getPendientes()

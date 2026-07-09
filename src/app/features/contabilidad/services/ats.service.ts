@@ -19,7 +19,7 @@ export class AtsService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${environment.apiBaseUrl}/api/ats`;
 
-  generar(anio: number, mes: number): Observable<AtsResult> {
-    return this.http.post<AtsResult>(`${this.baseUrl}/generar`, { anio, mes });
+  generar(anio: number, mes: number, incluirBorradores = false): Observable<AtsResult> {
+    return this.http.post<AtsResult>(`${this.baseUrl}/generar`, { anio, mes, incluirBorradores });
   }
 }

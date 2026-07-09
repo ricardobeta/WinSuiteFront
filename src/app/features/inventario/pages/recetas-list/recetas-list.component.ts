@@ -13,6 +13,13 @@ import { AlmacenesService } from '../../services/almacenes.service';
 import { KardexService } from '../../services/kardex.service';
 import { ProductosService } from '../../services/productos.service';
 
+interface RecetaRow {
+  receta: Producto;
+  cantidadInsumos: number;
+  disponibleTotal: number;
+  disponibleAlmacen: number;
+}
+
 @Component({
   selector: 'app-recetas-list',
   standalone: true,
@@ -44,55 +51,55 @@ import { ProductosService } from '../../services/productos.service';
             <article class="skeleton-row"></article>
           }
         </section>
-      } @else if (recetas().length === 0) {
+      } @else if (recetaRows().length === 0) {
         <section class="empty-card">
           <h3>Sin recetas</h3>
           <p>No hay productos tipo receta creados para esta empresa.</p>
         </section>
       } @else {
         <div class="table-wrap">
-          <table mat-table [dataSource]="recetas()">
+          <table mat-table [dataSource]="recetaRows()">
             <ng-container matColumnDef="sku">
               <th mat-header-cell *matHeaderCellDef>SKU</th>
-              <td mat-cell *matCellDef="let row">{{ row.sku }}</td>
+              <td mat-cell *matCellDef="let row">{{ row.receta.sku }}</td>
             </ng-container>
 
             <ng-container matColumnDef="nombre">
               <th mat-header-cell *matHeaderCellDef>Nombre</th>
-              <td mat-cell *matCellDef="let row">{{ row.nombre }}</td>
+              <td mat-cell *matCellDef="let row">{{ row.receta.nombre }}</td>
             </ng-container>
 
             <ng-container matColumnDef="insumos">
               <th mat-header-cell *matHeaderCellDef>Insumos</th>
-              <td mat-cell *matCellDef="let row">{{ cantidadInsumos(row) }}</td>
+              <td mat-cell *matCellDef="let row">{{ row.cantidadInsumos }}</td>
             </ng-container>
 
             <ng-container matColumnDef="disponible">
               <th mat-header-cell *matHeaderCellDef>Disp. estimada</th>
               <td mat-cell *matCellDef="let row">
-                <mat-chip [class.danger]="disponibilidadReceta(row) <= 0">{{ disponibilidadReceta(row) }}</mat-chip>
+                <mat-chip [class.danger]="row.disponibleTotal <= 0">{{ row.disponibleTotal }}</mat-chip>
               </td>
             </ng-container>
 
             <ng-container matColumnDef="stockAlmacen">
               <th mat-header-cell *matHeaderCellDef>Stock ({{ nombreAlmacenSeleccionado() }})</th>
               <td mat-cell *matCellDef="let row">
-                {{ disponibilidadEnAlmacenSeleccionado(row) }}
+                {{ row.disponibleAlmacen }}
               </td>
             </ng-container>
 
             <ng-container matColumnDef="estado">
               <th mat-header-cell *matHeaderCellDef>Estado</th>
               <td mat-cell *matCellDef="let row">
-                <mat-chip [class.inactivo]="!row.activo">{{ row.activo ? 'Activa' : 'Inactiva' }}</mat-chip>
+                <mat-chip [class.inactivo]="!row.receta.activo">{{ row.receta.activo ? 'Activa' : 'Inactiva' }}</mat-chip>
               </td>
             </ng-container>
 
             <ng-container matColumnDef="acciones">
               <th mat-header-cell *matHeaderCellDef>Acciones</th>
               <td mat-cell *matCellDef="let row">
-                <a mat-button [routerLink]="['/workspace/inventario/productos', row.id, 'editar']">Editar</a>
-                <a mat-button [routerLink]="['/workspace/inventario/productos', row.id, 'auditoria-receta']">Auditoria</a>
+                <a mat-button [routerLink]="['/workspace/inventario/productos', row.receta.id, 'editar']">Editar</a>
+                <a mat-button [routerLink]="['/workspace/inventario/productos', row.receta.id, 'auditoria-receta']">Auditoria</a>
               </td>
             </ng-container>
 
@@ -150,6 +157,17 @@ export class RecetasListComponent implements OnInit {
       .filter((producto) => (producto.tipo ?? 'SIMPLE') === 'RECETA')
       .sort((a, b) => a.nombre.localeCompare(b.nombre))
   );
+  protected readonly recetaRows = computed<RecetaRow[]>(() => {
+    const almacenId = this.almacenSeleccionadoId();
+    return this.recetas().map((receta) => ({
+      receta,
+      cantidadInsumos: (receta.recetaItems ?? []).length,
+      disponibleTotal: this.calcularDisponibilidadReceta(receta),
+      disponibleAlmacen: receta.id && almacenId
+        ? this.capacidadRecetaEnAlmacen(receta.id, almacenId, new Set<string>())
+        : 0
+    }));
+  });
 
   ngOnInit(): void {
     this.productosService
@@ -184,11 +202,7 @@ export class RecetasListComponent implements OnInit {
       });
   }
 
-  protected cantidadInsumos(receta: Producto): number {
-    return (receta.recetaItems ?? []).length;
-  }
-
-  protected disponibilidadReceta(receta: Producto): number {
+  private calcularDisponibilidadReceta(receta: Producto): number {
     const items = (receta.recetaItems ?? []).filter((item) => item.cantidad > 0 && !!item.productoId);
     if (items.length === 0) {
       return 0;
@@ -216,33 +230,6 @@ export class RecetasListComponent implements OnInit {
     }
 
     return this.almacenes().find((almacen) => almacen.id === id)?.nombre ?? 'Sin seleccion';
-  }
-
-  protected disponibilidadEnAlmacenSeleccionado(receta: Producto): number {
-    const almacenId = this.almacenSeleccionadoId();
-    if (!receta.id || !almacenId) {
-      return 0;
-    }
-
-    return this.capacidadRecetaEnAlmacen(receta.id, almacenId, new Set<string>());
-  }
-
-  private disponibilidadPorAlmacen(receta: Producto): Array<{ almacenId: string; nombre: string; cantidad: number }> {
-    if (!receta.id) {
-      return [];
-    }
-
-    return this.almacenes()
-      .filter((almacen) => !!almacen.id)
-      .map((almacen) => {
-        const almacenId = almacen.id as string;
-        return {
-          almacenId,
-          nombre: almacen.nombre,
-          cantidad: this.capacidadRecetaEnAlmacen(receta.id as string, almacenId, new Set<string>())
-        };
-      })
-      .sort((a, b) => b.cantidad - a.cantidad || a.nombre.localeCompare(b.nombre));
   }
 
   private capacidadRecetaEnAlmacen(recetaId: string, almacenId: string, trail: Set<string>): number {

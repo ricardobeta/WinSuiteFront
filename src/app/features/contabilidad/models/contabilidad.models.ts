@@ -141,13 +141,19 @@ export type OrigenAsiento =
   | 'RECEPCION_OC'
   | 'REVERSO_RECEPCION_OC'
   | 'FACTURA_COMPRA'
-  | 'REVERSO_FACTURA_COMPRA';
+  | 'REVERSO_FACTURA_COMPRA'
+  | 'ROL_PAGO'
+  | 'REVERSO_ROL_PAGO'
+  | 'CXP_MANUAL'
+  | 'REVERSO_CXP_MANUAL'
+  | 'PAGO_PROVEEDOR'
+  | 'REVERSO_PAGO_PROVEEDOR';
 
 export type OrigenAsientoAutomatico = Exclude<OrigenAsiento, 'MANUAL'>;
 
 export type ModoAsientoAutomatico = 'APROBADO' | 'BORRADOR';
 
-export type OrigenModuloContable = 'VENTAS' | 'INVENTARIO' | 'COMPRAS';
+export type OrigenModuloContable = 'VENTAS' | 'INVENTARIO' | 'COMPRAS' | 'NOMINA' | 'CUENTAS_POR_PAGAR';
 
 export interface AsientoContableLinea {
   id: string;
@@ -213,6 +219,39 @@ export interface MapeoCategoriaContable {
   actualizadoEn?: number;
 }
 
+/**
+ * Override de cuentas de inventario por proveedor: si un proveedor tiene cuentas específicas, se
+ * usan al contabilizar sus compras/recepciones en lugar de las cuentas globales de inventario.
+ */
+export interface MapeoProveedorContable {
+  proveedorId: string;
+  cuentaInventarioId?: string;
+  cuentaCuentasPorPagarId?: string;
+  actualizadoEn?: number;
+}
+
+/** Cuenta de gasto/costo (linea de DEBE) que compone la plantilla de un tipo de gasto. */
+export interface CuentaGastoPlantilla {
+  cuentaId: string;
+  codigoCuenta: string;
+  nombreCuenta: string;
+}
+
+/**
+ * Tipo de gasto de compra (ej. "Gasto Internet"): plantilla de cuentas de gasto/costo que
+ * se usan al contabilizar una factura de compra que no alimenta inventario. Solo define la
+ * distribucion de DEBE; IVA, retenciones y cuenta por pagar se calculan desde la factura.
+ */
+export interface TipoGastoCompra {
+  id?: string;
+  nombre: string;
+  descripcion?: string;
+  activo: boolean;
+  cuentasGasto: CuentaGastoPlantilla[];
+  creadoEn?: number;
+  actualizadoEn?: number;
+}
+
 export type EstadoPendienteContabilizacion = 'PENDIENTE' | 'RESUELTO';
 
 export interface PendienteContabilizacion {
@@ -267,6 +306,8 @@ export interface LibroMayorFila {
   fecha: string;
   periodo: string;
   numero: string;
+  /** Número del documento origen (ej. factura del proveedor: establecimiento-punto-secuencial). */
+  numeroFactura?: string;
   concepto: string;
   cuentaId: string;
   codigoCuenta: string;

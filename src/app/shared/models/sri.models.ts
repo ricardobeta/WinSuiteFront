@@ -1,18 +1,30 @@
 export type SriJobStatus = 'queued' | 'running' | 'completed' | 'completed_with_warnings' | 'failed' | 'cancelled' | 'config_saved';
-export type SriFrecuencia = 'diaria' | 'semanal' | 'mensual';
 
-export interface SriScheduleRequest {
-  activa: boolean;
-  frecuencia: SriFrecuencia;
-  diaSemana?: number | null;
-  diaMes?: number | null;
+export interface SriConnectionCheck {
+  worker: string;
+  spring: string;
+  springDetail?: string;
+  ready: boolean;
+  credencialesConfiguradas?: boolean;
 }
 
-export interface SriConfigRequest {
+// Credenciales SRI que se guardan SOLO en el worker local (no en el cloud).
+export interface SriWorkerConfigRequest {
   ruc: string;
   usuario?: string | null;
   password: string;
-  programacion: SriScheduleRequest;
+}
+
+// Peticion al worker local (localhost) para correr una descarga.
+// Las credenciales NO viajan aqui: el worker las lee de su almacen local.
+export interface SriWorkerRunRequest {
+  jobId: string;
+  tenantId: string;
+  anio?: number;
+  mes?: number;
+  dia?: number | null;
+  descargarXml?: boolean;
+  descargarPdf?: boolean;
 }
 
 export interface SriDownloadRequest {

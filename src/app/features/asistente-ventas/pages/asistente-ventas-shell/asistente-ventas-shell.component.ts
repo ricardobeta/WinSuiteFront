@@ -1,15 +1,22 @@
-import { Component } from '@angular/core';
+import { Component, Injector, afterNextRender, inject } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+
+import { loadTourSteps } from '../../../../core/config/tour-steps/tour-steps.registry';
+import { GuidedTourService } from '../../../../core/services/guided-tour.service';
+import { TourTriggerButtonComponent } from '../../../../shared/components/tour-trigger-button/tour-trigger-button.component';
 
 @Component({
   selector: 'app-asistente-ventas-shell',
   standalone: true,
-  imports: [RouterLink, RouterLinkActive, RouterOutlet],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, TourTriggerButtonComponent],
   template: `
     <section class="asistente-shell">
-      <header class="asistente-hero surface-card">
+      <header class="asistente-hero surface-card" id="tour-asistente_ventas-header">
         <div>
-          <p class="eyebrow">Asistente Ventas</p>
+          <p class="eyebrow">
+            Asistente Ventas
+            <app-tour-trigger-button (open)="startTourManually()" />
+          </p>
           <h1>Administrador WhatsApp</h1>
           <p>
             Gestiona instancias, plantillas, automatizaciones de flujo y funnels de conversion para cada empresa.
@@ -17,15 +24,16 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
         </div>
       </header>
 
-      <nav class="subnav surface-card" aria-label="Navegacion asistente ventas">
+      <nav class="subnav surface-card" id="tour-asistente_ventas-subnav" aria-label="Navegacion asistente ventas">
         <a routerLink="instancias" routerLinkActive="active-link">Instancias</a>
         <a routerLink="plantillas" routerLinkActive="active-link">Plantillas</a>
         <a routerLink="flujos" routerLinkActive="active-link">Flujos</a>
         <a routerLink="conversaciones" routerLinkActive="active-link">Conversaciones</a>
         <a routerLink="funnels" routerLinkActive="active-link">Funnels</a>
+        <a routerLink="conocimiento" routerLinkActive="active-link">Base de conocimiento</a>
       </nav>
 
-      <main>
+      <main id="tour-asistente_ventas-content">
         <router-outlet />
       </main>
     </section>
@@ -41,4 +49,28 @@ import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
     .active-link { background: color-mix(in srgb, var(--primary) 20%, transparent); color: var(--foreground); }
   `]
 })
-export class AsistenteVentasShellComponent {}
+export class AsistenteVentasShellComponent {
+  private static readonly MODULE_ID = 'asistente_ventas';
+
+  private readonly guidedTour = inject(GuidedTourService);
+  private readonly injector = inject(Injector);
+
+  constructor() {
+    if (!this.guidedTour.hasSeenTour(AsistenteVentasShellComponent.MODULE_ID)) {
+      afterNextRender(
+        () => {
+          void loadTourSteps(AsistenteVentasShellComponent.MODULE_ID).then((steps) =>
+            this.guidedTour.startTour(AsistenteVentasShellComponent.MODULE_ID, steps)
+          );
+        },
+        { injector: this.injector }
+      );
+    }
+  }
+
+  protected startTourManually(): void {
+    void loadTourSteps(AsistenteVentasShellComponent.MODULE_ID).then((steps) =>
+      this.guidedTour.startTour(AsistenteVentasShellComponent.MODULE_ID, steps)
+    );
+  }
+}

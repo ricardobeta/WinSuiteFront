@@ -13,6 +13,14 @@ export interface WhatsAppInstance {
   updatedAt: number;
 }
 
+export type TemplateButtonType = 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER';
+
+export interface TemplateButton {
+  type: TemplateButtonType;
+  text: string;
+  value?: string;
+}
+
 export interface WhatsAppTemplate {
   id: string;
   tenantId: string;
@@ -22,6 +30,13 @@ export interface WhatsAppTemplate {
   language: string;
   body: string;
   status: string;
+  headerType?: 'NONE' | 'TEXT' | 'IMAGE';
+  headerText?: string;
+  footerText?: string;
+  /** JSON serializado de TemplateButton[]. */
+  buttonsJson?: string;
+  /** Ejemplos de variables separados por '|'. */
+  example?: string;
   createdAt: number;
   updatedAt: number;
 }
@@ -49,6 +64,24 @@ export interface FunnelDefinition {
   updatedAt: number;
 }
 
+export interface FunnelStage {
+  id: string;
+  name: string;
+  nodeIds: string[];
+}
+
+export interface StageMetric {
+  stageId: string;
+  name: string;
+  reached: number;
+  conversion: number;
+}
+
+export interface FunnelMetrics {
+  flowId: string;
+  stages: StageMetric[];
+}
+
 export interface ConversationMessage {
   id: string;
   tenantId: string;
@@ -74,11 +107,55 @@ export interface ConversationSummary {
   updatedAt: number;
 }
 
-export type FlowNodeType = 'trigger' | 'text' | 'buttons' | 'list' | 'question' | 'end';
+export interface AiConfigView {
+  provider: string;
+  model: string | null;
+  systemPrompt: string | null;
+  enabled: boolean;
+  hasApiKey: boolean;
+  chunkCount: number;
+}
+
+export interface KnowledgeItem {
+  id: string;
+  source: string;
+  text: string;
+}
+
+/** Tipo de fuente personalizado de la base de conocimiento (persistido por tenant en Firebase). */
+export interface SourceTypeDto {
+  value: string;
+  label: string;
+  icon: string;
+  hint: string;
+}
+
+export interface AiAnswer {
+  text: string;
+  usedSources: string[];
+  inputTokens: number;
+  outputTokens: number;
+}
+
+export type FlowNodeType =
+  | 'trigger'
+  | 'text'
+  | 'buttons'
+  | 'list'
+  | 'question'
+  | 'ai'
+  | 'condition'
+  | 'action'
+  | 'delay'
+  | 'end';
 
 export interface FlowOption {
   id: string;
   label: string;
+  /** Sólo para nodos `condition`: rama evaluada por variable/operador/valor. */
+  variable?: string;
+  operator?: 'equals' | 'contains' | 'gt' | 'lt' | 'exists';
+  value?: string;
 }
 
 export interface FlowNodeData {
@@ -87,6 +164,24 @@ export interface FlowNodeData {
   keywords?: string[];
   buttonText?: string;
   options?: FlowOption[];
+  /** Nombre de variable donde se guarda la respuesta del contacto (question / ai). */
+  captureVariable?: string;
+  /** Configuración del nodo IA. */
+  aiPrompt?: string;
+  aiPersona?: string;
+  aiUseRag?: boolean;
+  /** Configuración del nodo Acción. */
+  actionType?: 'create_lead' | 'add_tag' | 'http' | 'handoff';
+  actionConfig?: Record<string, string>;
+  /** Segundos de espera para el nodo Delay. */
+  delaySeconds?: number;
+}
+
+/** Resultado de validación de un flujo, mostrado en el panel de problemas del builder. */
+export interface FlowIssue {
+  nodeId: string | null;
+  severity: 'error' | 'warning';
+  message: string;
 }
 
 export interface FlowNode {

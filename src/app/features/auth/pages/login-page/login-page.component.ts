@@ -9,6 +9,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { AuthService } from '../../../../core/services/auth.service';
+import { PasswordVisibilityToggleComponent } from '../../../../shared/components/password-visibility-toggle/password-visibility-toggle.component';
 
 @Component({
   selector: 'app-login-page',
@@ -20,7 +21,8 @@ import { AuthService } from '../../../../core/services/auth.service';
     MatInputModule,
     MatButtonModule,
     MatCheckboxModule,
-    MatProgressSpinnerModule
+    MatProgressSpinnerModule,
+    PasswordVisibilityToggleComponent
   ],
   templateUrl: './login-page.component.html',
   styleUrl: './login-page.component.scss'
