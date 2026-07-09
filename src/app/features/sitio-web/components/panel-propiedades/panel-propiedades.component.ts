@@ -121,6 +121,24 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
                     <option value="primario">Primario</option>
                     <option value="secundario">Secundario</option>
                   </select>
+                  <div class="fila">
+                    <label>
+                      Fondo
+                      <input
+                        type="color"
+                        [ngModel]="elemento.colorFondo ?? '#2563eb'"
+                        (ngModelChange)="patchElementoColumna(ci, ei, { colorFondo: $event })"
+                      />
+                    </label>
+                    <label>
+                      Texto
+                      <input
+                        type="color"
+                        [ngModel]="elemento.colorTexto ?? '#ffffff'"
+                        (ngModelChange)="patchElementoColumna(ci, ei, { colorTexto: $event })"
+                      />
+                    </label>
+                  </div>
                 </div>
               } @else if (elemento.tipo === 'texto') {
                 <div class="item-lista columna">
@@ -241,7 +259,9 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
                     <input
                       type="checkbox"
                       [ngModel]="elemento.estiloTexto?.negrita ?? false"
-                      (ngModelChange)="patchEstiloElementoLienzo(ei, { negrita: $event || undefined })"
+                      (ngModelChange)="
+                        patchEstiloElementoLienzo(ei, { negrita: $event || undefined })
+                      "
                     />
                     <b>Negrita</b>
                   </label>
@@ -249,7 +269,9 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
                     <input
                       type="checkbox"
                       [ngModel]="elemento.estiloTexto?.cursiva ?? false"
-                      (ngModelChange)="patchEstiloElementoLienzo(ei, { cursiva: $event || undefined })"
+                      (ngModelChange)="
+                        patchEstiloElementoLienzo(ei, { cursiva: $event || undefined })
+                      "
                     />
                     <i>Cursiva</i>
                   </label>
@@ -270,6 +292,24 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
                   <option value="primario">Primario</option>
                   <option value="secundario">Secundario</option>
                 </select>
+                <div class="fila">
+                  <label>
+                    Fondo
+                    <input
+                      type="color"
+                      [ngModel]="elemento.colorFondo ?? '#2563eb'"
+                      (ngModelChange)="patchElementoLienzo(ei, { colorFondo: $event })"
+                    />
+                  </label>
+                  <label>
+                    Texto
+                    <input
+                      type="color"
+                      [ngModel]="elemento.colorTexto ?? '#ffffff'"
+                      (ngModelChange)="patchElementoLienzo(ei, { colorTexto: $event })"
+                    />
+                  </label>
+                </div>
               </div>
             } @else if (elemento.tipo === 'imagen') {
               <div class="item-lista columna">
@@ -317,6 +357,32 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
               <option value="centro">Centro</option>
             </select>
           </label>
+          <h4>Colores del boton</h4>
+          <div class="fila">
+            <label>
+              Fondo
+              <input
+                type="color"
+                [ngModel]="b.colorFondo ?? '#2563eb'"
+                (ngModelChange)="patch({ colorFondo: $event })"
+              />
+            </label>
+            <label>
+              Texto
+              <input
+                type="color"
+                [ngModel]="b.colorTexto ?? '#ffffff'"
+                (ngModelChange)="patch({ colorTexto: $event })"
+              />
+            </label>
+          </div>
+          <button
+            type="button"
+            class="agregar"
+            (click)="patch({ colorFondo: undefined, colorTexto: undefined })"
+          >
+            Usar colores del tema
+          </button>
         }
         @case ('video') {
           <label>
