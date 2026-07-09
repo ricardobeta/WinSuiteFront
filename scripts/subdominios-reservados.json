@@ -1,0 +1,117 @@
+{
+  "www": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "api": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "app": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "dashboard": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "admin": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "mail": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "smtp": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "ftp": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "sites": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "cdn": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "static": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "assets": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "blog": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "docs": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "ayuda": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "soporte": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "status": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "dev": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "test": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "staging": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "demo": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "winsuite": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  },
+  "winsuit": {
+    "tenantId": "__reservado__",
+    "sitioId": "__reservado__",
+    "creadoEn": 1783619155123
+  }
+}

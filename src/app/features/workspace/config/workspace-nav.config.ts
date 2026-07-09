@@ -358,5 +358,13 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
     route: '/workspace/archivos/lista',
     requiredModule: 'archivos',
     requiredAction: 'read'
+  },
+  {
+    id: 'sitio-web',
+    label: moduleMeta('sitio_web').label,
+    icon: moduleMeta('sitio_web').icon,
+    route: '/workspace/sitio-web',
+    requiredModule: 'sitio_web',
+    requiredAction: 'read'
   }
 ];

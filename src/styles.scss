@@ -3,6 +3,8 @@
 @use 'styles/_material-mapping';
 @use 'driver.js/dist/driver.css';
 @use 'styles/_driver-theme';
+// Estilos base de los bloques del constructor de sitios (clases namespaced .ws-*)
+@use '../libs/bloques/src/estilos/bloques-base';
 
 @include mat.core();
 

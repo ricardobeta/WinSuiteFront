@@ -76,6 +76,13 @@ export const MODULE_CATALOG: ModuleCatalogEntry[] = [
     icon: 'drive_folder_upload',
     description: 'Almacenamiento y gestion documental.',
     locked: false
+  },
+  {
+    id: 'sitio_web',
+    label: 'Sitio Web',
+    icon: 'storefront',
+    description: 'Construye tu ecommerce o landing pages y publicalas en tu propio subdominio.',
+    locked: false
   }
 ];
 
