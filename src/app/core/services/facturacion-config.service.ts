@@ -5,6 +5,7 @@ import { combineLatest, forkJoin, map, Observable } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import { AuthService } from './auth.service';
+import { AuditService } from './audit.service';
 import {
   CatalogoEntry,
   CatalogosFacturacion,
@@ -38,6 +39,7 @@ export class FacturacionConfigService {
   private readonly http = inject(HttpClient);
   private readonly database = inject(Database);
   private readonly authService = inject(AuthService);
+  private readonly audit = inject(AuditService);
 
   private getConfigPath(): string {
     return `Facturacion/${this.authService.getTenantId()}/configuracion`;
@@ -75,9 +77,25 @@ export class FacturacionConfigService {
 
   async guardarConfiguracion(configuracion: ConfiguracionFacturacion): Promise<void> {
     const configRef = ref(this.database, this.getConfigPath());
+    const actual = await this.getConfiguracionOnce();
     await set(configRef, {
       ...this.normalizarConfiguracion(configuracion),
-      actualizadoEn: Date.now()
+      ...this.audit.createMetadata('configurar', actual)
+    });
+    await this.audit.recordSafe({
+      action: 'configurar',
+      target: { module: 'facturacion', entityType: 'configuracion', entityId: 'configuracion', label: 'Configuracion de facturacion' },
+      summary: 'Actualizo la configuracion de facturacion',
+      changesBefore: {
+        ambienteActivo: actual.ambienteActivo,
+        puntosEmision: actual.puntosEmision?.length ?? 0,
+        establecimientos: actual.establecimientos?.length ?? 0
+      },
+      changesAfter: {
+        ambienteActivo: configuracion.ambienteActivo,
+        puntosEmision: configuracion.puntosEmision?.length ?? 0,
+        establecimientos: configuracion.establecimientos?.length ?? 0
+      }
     });
   }
 

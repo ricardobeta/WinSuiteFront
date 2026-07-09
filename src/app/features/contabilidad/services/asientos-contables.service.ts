@@ -3,6 +3,7 @@ import { Database, get, onValue, push, ref, remove, runTransaction, set, update 
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
+import { AuditService } from '../../../core/services/audit.service';
 import { AsientoContable, AsientoContableLinea, SaldoCuentaPeriodo } from '../models/contabilidad.models';
 import { ConfiguracionContableService } from './configuracion-contable.service';
 
@@ -12,6 +13,7 @@ import { ConfiguracionContableService } from './configuracion-contable.service';
 export class AsientosContablesService {
   private readonly database = inject(Database);
   private readonly authService = inject(AuthService);
+  private readonly audit = inject(AuditService);
   private readonly configuracionService = inject(ConfiguracionContableService);
 
   private getTenantPath(): string {
@@ -91,18 +93,29 @@ export class AsientosContablesService {
       ...normalizado,
       estado: 'BORRADOR',
       numero: asiento.numero ?? null,
-      creadoEn: asiento.creadoEn ?? timestamp,
-      actualizadoEn: timestamp,
+      ...this.audit.createMetadata(asiento.id ? 'actualizar' : 'crear', asiento, timestamp),
       aprobadoEn: asiento.aprobadoEn ?? null
     });
 
     if (asiento.id) {
       await set(this.getAsientoRef(asiento.id), payload);
+      await this.audit.recordSafe({
+        action: 'actualizar',
+        target: { module: 'contabilidad', entityType: 'asiento', entityId: asiento.id, label: asiento.numero ?? asiento.glosa },
+        summary: `Actualizo el asiento en borrador ${asiento.numero ?? asiento.glosa}`,
+        changesAfter: { glosa: payload.glosa, estado: payload.estado, totalDebe: payload.totalDebe, totalHaber: payload.totalHaber }
+      });
       return asiento.id;
     }
 
     const asientoRef = push(this.getAsientosRef());
     await set(asientoRef, payload);
+    await this.audit.recordSafe({
+      action: 'crear',
+      target: { module: 'contabilidad', entityType: 'asiento', entityId: asientoRef.key!, label: payload.glosa },
+      summary: `Creo un asiento en borrador: ${payload.glosa}`,
+      changesAfter: { glosa: payload.glosa, estado: payload.estado, totalDebe: payload.totalDebe, totalHaber: payload.totalHaber }
+    });
     return asientoRef.key!;
   }
 
@@ -117,8 +130,7 @@ export class AsientosContablesService {
       ...validado,
       numero,
       estado: 'APROBADO',
-      creadoEn: validado.creadoEn ?? timestamp,
-      actualizadoEn: timestamp,
+      ...this.audit.createMetadata('aprobar', validado, timestamp),
       aprobadoEn: timestamp
     });
 
@@ -136,6 +148,12 @@ export class AsientosContablesService {
     }
 
     await this.acumularSaldos(payload);
+    await this.audit.recordSafe({
+      action: 'aprobar',
+      target: { module: 'contabilidad', entityType: 'asiento', entityId: asientoId, label: numero },
+      summary: `Aprobo el asiento ${numero}`,
+      changesAfter: { numero, estado: payload.estado, totalDebe: payload.totalDebe, totalHaber: payload.totalHaber }
+    });
     return asientoId;
   }
 
@@ -149,6 +167,12 @@ export class AsientosContablesService {
     }
 
     await remove(this.getAsientoRef(asiento.id));
+    await this.audit.recordSafe({
+      action: 'eliminar',
+      target: { module: 'contabilidad', entityType: 'asiento', entityId: asiento.id, label: asiento.numero ?? asiento.glosa },
+      summary: `Elimino el asiento borrador ${asiento.numero ?? asiento.glosa}`,
+      changesBefore: { glosa: asiento.glosa, estado: asiento.estado, totalDebe: asiento.totalDebe, totalHaber: asiento.totalHaber }
+    });
   }
 
   duplicarAsiento(asiento: AsientoContable): AsientoContable {
@@ -198,7 +222,12 @@ export class AsientosContablesService {
     await update(this.getAsientoRef(asientoId), {
       estado: 'REVERSADO',
       reversadoEn: Date.now(),
-      actualizadoEn: Date.now()
+      ...this.audit.createMetadata('reversar', null)
+    });
+    await this.audit.recordSafe({
+      action: 'reversar',
+      target: { module: 'contabilidad', entityType: 'asiento', entityId: asientoId, label: asientoId },
+      summary: `Marco como reversado el asiento ${asientoId}`
     });
   }
 

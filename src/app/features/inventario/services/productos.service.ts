@@ -3,6 +3,7 @@ import { Database, get, onValue, push, ref, set, update } from '@angular/fire/da
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
+import { AuditService } from '../../../core/services/audit.service';
 import { Producto } from '../models/inventario.models';
 
 @Injectable({
@@ -11,6 +12,7 @@ import { Producto } from '../models/inventario.models';
 export class ProductosService {
   private readonly database = inject(Database);
   private readonly authService = inject(AuthService);
+  private readonly audit = inject(AuditService);
 
   private getTenantPath(): string {
     return `inventario/${this.authService.getTenantId()}`;
@@ -77,17 +79,33 @@ export class ProductosService {
 
     await set(productoRef, {
       ...producto,
-      creadoEn: timestamp,
-      actualizadoEn: timestamp
+      ...this.audit.createMetadata('crear', null, timestamp)
     });
 
-    return productoRef.key!;
+    const productoId = productoRef.key!;
+    await this.audit.recordSafe({
+      action: 'crear',
+      target: { module: 'inventario', entityType: 'producto', entityId: productoId, label: producto.nombre },
+      summary: `Creo el producto ${producto.nombre}`,
+      changesAfter: { sku: producto.sku, nombre: producto.nombre, precioVenta: producto.precioVenta }
+    });
+
+    return productoId;
   }
 
   async actualizarProducto(productoId: string, producto: Partial<Producto>): Promise<void> {
+    const actual = await this.getProductoById(productoId);
     await update(this.getItemRef(productoId), {
       ...producto,
-      actualizadoEn: Date.now()
+      ...this.audit.createMetadata('actualizar', actual)
+    });
+
+    await this.audit.recordSafe({
+      action: 'actualizar',
+      target: { module: 'inventario', entityType: 'producto', entityId: productoId, label: producto.nombre ?? actual?.nombre ?? productoId },
+      summary: `Actualizo el producto ${producto.nombre ?? actual?.nombre ?? productoId}`,
+      changesBefore: actual ? { sku: actual.sku, nombre: actual.nombre, precioVenta: actual.precioVenta } : null,
+      changesAfter: { sku: producto.sku, nombre: producto.nombre, precioVenta: producto.precioVenta }
     });
   }
 }

@@ -3,6 +3,7 @@ import { Database, get, onValue, push, ref, remove, set, update } from '@angular
 import { Observable } from 'rxjs';
 
 import { AuthService } from './auth.service';
+import { AuditService } from './audit.service';
 import { Cliente, TipoIdentificacion } from '../../shared/models/clientes.models';
 
 @Injectable({
@@ -11,6 +12,7 @@ import { Cliente, TipoIdentificacion } from '../../shared/models/clientes.models
 export class ClientesService {
   private readonly database = inject(Database);
   private readonly authService = inject(AuthService);
+  private readonly audit = inject(AuditService);
 
   private getBasePath(): string {
     return `clientes/${this.authService.getTenantId()}/lista`;
@@ -71,28 +73,70 @@ export class ClientesService {
   async crearClienteYRetornarId(cliente: Omit<Cliente, 'id'>): Promise<string> {
     const clientesRef = ref(this.database, this.getBasePath());
     const nuevoClienteRef = push(clientesRef);
+    const timestamp = Date.now();
+    const metadata = this.audit.createMetadata('crear', null, timestamp);
 
     await set(nuevoClienteRef, {
       ...cliente,
-      creadoEn: Date.now(),
-      actualizadoEn: Date.now()
+      ...metadata
     });
 
-    return nuevoClienteRef.key ?? '';
+    const clienteId = nuevoClienteRef.key ?? '';
+    await this.audit.recordSafe({
+      action: 'crear',
+      target: {
+        module: 'clientes',
+        entityType: 'cliente',
+        entityId: clienteId,
+        label: cliente.nombreCompleto
+      },
+      summary: `Creo el cliente ${cliente.nombreCompleto}`,
+      changesAfter: { nombreCompleto: cliente.nombreCompleto, identificacion: cliente.identificacion }
+    });
+
+    return clienteId;
   }
 
   async actualizarCliente(id: string, datos: Partial<Cliente>): Promise<void> {
     const clienteRef = ref(this.database, `${this.getBasePath()}/${id}`);
+    const snapshot = await get(clienteRef);
+    const actual = snapshot.exists() ? ({ id, ...(snapshot.val() as Omit<Cliente, 'id'>) } as Cliente) : null;
 
     await update(clienteRef, {
       ...datos,
-      actualizadoEn: Date.now()
+      ...this.audit.createMetadata('actualizar', actual)
+    });
+
+    await this.audit.recordSafe({
+      action: 'actualizar',
+      target: {
+        module: 'clientes',
+        entityType: 'cliente',
+        entityId: id,
+        label: datos.nombreCompleto ?? actual?.nombreCompleto ?? id
+      },
+      summary: `Actualizo el cliente ${datos.nombreCompleto ?? actual?.nombreCompleto ?? id}`,
+      changesBefore: actual ? { nombreCompleto: actual.nombreCompleto, identificacion: actual.identificacion } : null,
+      changesAfter: { nombreCompleto: datos.nombreCompleto, identificacion: datos.identificacion }
     });
   }
 
   async eliminarCliente(id: string): Promise<void> {
     const clienteRef = ref(this.database, `${this.getBasePath()}/${id}`);
+    const snapshot = await get(clienteRef);
+    const actual = snapshot.exists() ? ({ id, ...(snapshot.val() as Omit<Cliente, 'id'>) } as Cliente) : null;
     await remove(clienteRef);
+    await this.audit.recordSafe({
+      action: 'eliminar',
+      target: {
+        module: 'clientes',
+        entityType: 'cliente',
+        entityId: id,
+        label: actual?.nombreCompleto ?? id
+      },
+      summary: `Elimino el cliente ${actual?.nombreCompleto ?? id}`,
+      changesBefore: actual ? { nombreCompleto: actual.nombreCompleto, identificacion: actual.identificacion } : null
+    });
   }
 
   async buscarClientePorIdentificacion(

@@ -127,6 +127,8 @@ export interface FacturaCompra {
   creadoPor?: string;
   creadoEn: number;
   actualizadoEn: number;
+  actualizadoPor?: string | null;
+  ultimaAccion?: string | null;
 }
 
 // ---- DTO de parseo devuelto por el backend (POST /api/compras/parse-xml) ----

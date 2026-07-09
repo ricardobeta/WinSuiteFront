@@ -71,6 +71,9 @@ export interface Producto {
   camposPersonalizados?: Record<string, any>;
   creadoEn?: number;
   actualizadoEn?: number;
+  creadoPor?: string | null;
+  actualizadoPor?: string | null;
+  ultimaAccion?: string | null;
 }
 
 export interface StockPorAlmacen {
@@ -110,6 +113,9 @@ export interface Proveedor {
   camposPersonalizados?: Record<string, any>;
   creadoEn?: number;
   actualizadoEn?: number;
+  creadoPor?: string | null;
+  actualizadoPor?: string | null;
+  ultimaAccion?: string | null;
 }
 
 export interface OrdenCompra {
@@ -174,6 +180,9 @@ export interface Almacen {
   activo: boolean;
   creadoEn?: number;
   actualizadoEn?: number;
+  creadoPor?: string | null;
+  actualizadoPor?: string | null;
+  ultimaAccion?: string | null;
 }
 
 export interface Categoria {

@@ -3,6 +3,7 @@ import { Database, get, onValue, push, ref, remove, set, update } from '@angular
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
+import { AuditService } from '../../../core/services/audit.service';
 import {
   CuentaContable,
   CuentaPlanExport,
@@ -22,6 +23,7 @@ import {
 export class PlanCuentasService {
   private readonly database = inject(Database);
   private readonly authService = inject(AuthService);
+  private readonly audit = inject(AuditService);
 
   private getTenantPath(): string {
     return `contabilidad/${this.authService.getTenantId()}`;
@@ -97,17 +99,28 @@ export class PlanCuentasService {
       seccionReporte: cuenta.seccionReporte ?? null,
       ordenReporte: cuenta.ordenReporte ?? this.sugerirOrdenReporte(cuenta.codigo),
       incluyeEnEstadoFinanciero: cuenta.incluyeEnEstadoFinanciero ?? true,
-      creadoEn: cuenta.creadoEn ?? timestamp,
-      actualizadoEn: timestamp
+      ...this.audit.createMetadata(cuenta.id ? 'actualizar' : 'crear', cuenta, timestamp)
     };
 
     if (cuenta.id) {
       await update(this.getItemRef(cuenta.id), payload);
+      await this.audit.recordSafe({
+        action: 'actualizar',
+        target: { module: 'contabilidad', entityType: 'cuenta_contable', entityId: cuenta.id, label: `${payload.codigo} ${payload.nombre}` },
+        summary: `Actualizo la cuenta contable ${payload.codigo} ${payload.nombre}`,
+        changesAfter: { codigo: payload.codigo, nombre: payload.nombre, estado: payload.estado }
+      });
       return;
     }
 
     const cuentaRef = push(this.getCollectionRef());
     await set(cuentaRef, payload);
+    await this.audit.recordSafe({
+      action: 'crear',
+      target: { module: 'contabilidad', entityType: 'cuenta_contable', entityId: cuentaRef.key!, label: `${payload.codigo} ${payload.nombre}` },
+      summary: `Creo la cuenta contable ${payload.codigo} ${payload.nombre}`,
+      changesAfter: { codigo: payload.codigo, nombre: payload.nombre, estado: payload.estado }
+    });
   }
 
   async cambiarEstado(cuenta: CuentaContable, estado: CuentaContable['estado']): Promise<void> {
@@ -117,7 +130,14 @@ export class PlanCuentasService {
 
     await update(this.getItemRef(cuenta.id), {
       estado,
-      actualizadoEn: Date.now()
+      ...this.audit.createMetadata('actualizar', cuenta)
+    });
+    await this.audit.recordSafe({
+      action: 'actualizar',
+      target: { module: 'contabilidad', entityType: 'cuenta_contable', entityId: cuenta.id, label: `${cuenta.codigo} ${cuenta.nombre}` },
+      summary: `Cambio el estado de la cuenta ${cuenta.codigo} a ${estado}`,
+      changesBefore: { estado: cuenta.estado },
+      changesAfter: { estado }
     });
   }
 
@@ -128,13 +148,22 @@ export class PlanCuentasService {
     }
 
     const timestamp = Date.now();
-    const updates: Record<string, boolean | number> = {};
+    const metadata = this.audit.createMetadata('actualizar', null, timestamp);
+    const updates: Record<string, boolean | number | string | null> = {};
     for (const cuentaId of idsUnicos) {
       updates[`${cuentaId}/permiteMovimiento`] = permiteMovimiento;
-      updates[`${cuentaId}/actualizadoEn`] = timestamp;
+      updates[`${cuentaId}/actualizadoEn`] = metadata.actualizadoEn ?? timestamp;
+      updates[`${cuentaId}/actualizadoPor`] = metadata.actualizadoPor ?? null;
+      updates[`${cuentaId}/ultimaAccion`] = metadata.ultimaAccion ?? 'actualizar';
     }
 
     await update(this.getCollectionRef(), updates);
+    await this.audit.recordSafe({
+      action: 'actualizar',
+      target: { module: 'contabilidad', entityType: 'cuenta_contable', entityId: idsUnicos.join(','), label: 'Permite movimiento' },
+      summary: `Cambio permite movimiento en ${idsUnicos.length} cuenta(s)`,
+      changesAfter: { permiteMovimiento }
+    });
   }
 
   async eliminarCuenta(cuenta: CuentaContable): Promise<void> {
@@ -163,6 +192,12 @@ export class PlanCuentasService {
     }
 
     await remove(this.getItemRef(cuentaId));
+    await this.audit.recordSafe({
+      action: 'eliminar',
+      target: { module: 'contabilidad', entityType: 'cuenta_contable', entityId: cuentaId, label: `${cuentaActual.codigo} ${cuentaActual.nombre}` },
+      summary: `Elimino la cuenta contable ${cuentaActual.codigo} ${cuentaActual.nombre}`,
+      changesBefore: { codigo: cuentaActual.codigo, nombre: cuentaActual.nombre, estado: cuentaActual.estado }
+    });
   }
 
   async aplicarPlantilla(plantilla: PlantillaPlanCuentas): Promise<ResultadoAplicarPlantilla> {
@@ -195,14 +230,22 @@ export class PlanCuentasService {
         seccionReporte: cuentaPlantilla.seccionReporte ?? this.sugerirSeccionReporte(codigo),
         ordenReporte: cuentaPlantilla.ordenReporte ?? this.sugerirOrdenReporte(codigo),
         incluyeEnEstadoFinanciero: cuentaPlantilla.incluyeEnEstadoFinanciero ?? true,
-        creadoEn: Date.now(),
-        actualizadoEn: Date.now()
+        ...this.audit.createMetadata('importar', null)
       };
 
       await set(cuentaRef, cuenta);
       codigosExistentes.add(codigo);
       idsPorCodigo.set(codigo, cuentaRef.key!);
       insertadas += 1;
+    }
+
+    if (insertadas > 0) {
+      await this.audit.recordSafe({
+        action: 'importar',
+        target: { module: 'contabilidad', entityType: 'plan_cuentas', entityId: plantilla.id, label: plantilla.nombre },
+        summary: `Aplico la plantilla de plan de cuentas ${plantilla.nombre}`,
+        changesAfter: { insertadas, omitidas }
+      });
     }
 
     return { insertadas, omitidas };
@@ -275,14 +318,22 @@ export class PlanCuentasService {
         seccionReporte: cuentaExport.seccionReporte ?? this.sugerirSeccionReporte(codigo),
         ordenReporte: cuentaExport.ordenReporte ?? this.sugerirOrdenReporte(codigo),
         incluyeEnEstadoFinanciero: cuentaExport.incluyeEnEstadoFinanciero ?? true,
-        creadoEn: Date.now(),
-        actualizadoEn: Date.now()
+        ...this.audit.createMetadata('importar', null)
       };
 
       await set(cuentaRef, cuenta);
       codigosExistentes.add(codigo);
       idsPorCodigo.set(codigo, cuentaRef.key!);
       insertadas += 1;
+    }
+
+    if (insertadas > 0) {
+      await this.audit.recordSafe({
+        action: 'importar',
+        target: { module: 'contabilidad', entityType: 'plan_cuentas', entityId: `import-${Date.now()}`, label: 'Importacion de plan de cuentas' },
+        summary: 'Importo un plan de cuentas',
+        changesAfter: { insertadas, omitidas }
+      });
     }
 
     return { insertadas, omitidas };

@@ -41,6 +41,9 @@ export interface CuentaContable {
   incluyeEnEstadoFinanciero?: boolean;
   creadoEn?: number;
   actualizadoEn?: number;
+  creadoPor?: string | null;
+  actualizadoPor?: string | null;
+  ultimaAccion?: string | null;
 }
 
 export interface CuentaPlantillaPlanCuentas {
@@ -186,6 +189,9 @@ export interface AsientoContable {
   asientoReversadoId?: string | null;
   creadoEn?: number;
   actualizadoEn?: number;
+  creadoPor?: string | null;
+  actualizadoPor?: string | null;
+  ultimaAccion?: string | null;
   aprobadoEn?: number | null;
   reversadoEn?: number | null;
 }

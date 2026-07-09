@@ -3,6 +3,7 @@ import { Database, get, onValue, push, ref, set, update } from '@angular/fire/da
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
+import { AuditService } from '../../../core/services/audit.service';
 import { Proveedor } from '../models/inventario.models';
 
 @Injectable({
@@ -11,6 +12,7 @@ import { Proveedor } from '../models/inventario.models';
 export class ProveedoresService {
   private readonly database = inject(Database);
   private readonly authService = inject(AuthService);
+  private readonly audit = inject(AuditService);
 
   private getTenantPath(): string {
     return `inventario/${this.authService.getTenantId()}`;
@@ -77,17 +79,33 @@ export class ProveedoresService {
 
     await set(proveedorRef, {
       ...proveedor,
-      creadoEn: timestamp,
-      actualizadoEn: timestamp
+      ...this.audit.createMetadata('crear', null, timestamp)
     });
 
-    return proveedorRef.key!;
+    const proveedorId = proveedorRef.key!;
+    await this.audit.recordSafe({
+      action: 'crear',
+      target: { module: 'inventario', entityType: 'proveedor', entityId: proveedorId, label: proveedor.nombre },
+      summary: `Creo el proveedor ${proveedor.nombre}`,
+      changesAfter: { nombre: proveedor.nombre, ruc: proveedor.ruc }
+    });
+
+    return proveedorId;
   }
 
   async actualizarProveedor(proveedorId: string, proveedor: Partial<Proveedor>): Promise<void> {
+    const actual = await this.getProveedorById(proveedorId);
     await update(this.getItemRef(proveedorId), {
       ...proveedor,
-      actualizadoEn: Date.now()
+      ...this.audit.createMetadata('actualizar', actual)
+    });
+
+    await this.audit.recordSafe({
+      action: 'actualizar',
+      target: { module: 'inventario', entityType: 'proveedor', entityId: proveedorId, label: proveedor.nombre ?? actual?.nombre ?? proveedorId },
+      summary: `Actualizo el proveedor ${proveedor.nombre ?? actual?.nombre ?? proveedorId}`,
+      changesBefore: actual ? { nombre: actual.nombre, ruc: actual.ruc } : null,
+      changesAfter: { nombre: proveedor.nombre, ruc: proveedor.ruc }
     });
   }
 }

@@ -3,6 +3,7 @@ import { Database, get, onValue, push, ref, runTransaction, set, update } from '
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
+import { AuditService } from '../../../core/services/audit.service';
 import { IntegracionContableService } from '../../contabilidad/services/integracion-contable.service';
 import { CostosService } from '../../inventario/services/costos.service';
 import { KardexService } from '../../inventario/services/kardex.service';
@@ -25,6 +26,7 @@ import { VentasConfigService } from './ventas-config.service';
 export class VentasService {
   private readonly database = inject(Database);
   private readonly authService = inject(AuthService);
+  private readonly audit = inject(AuditService);
   private readonly costosService = inject(CostosService);
   private readonly kardexService = inject(KardexService);
   private readonly productosService = inject(ProductosService);
@@ -388,6 +390,9 @@ export class VentasService {
       moneda: config.monedaBase,
       notas: input.notas,
       creadoEn: Date.now(),
+      actualizadoEn: Date.now(),
+      actualizadoPor: input.vendedorId,
+      ultimaAccion: 'crear',
       revertidaEn: null,
       revertidaPor: null,
       motivoReverso: null,
@@ -480,6 +485,13 @@ export class VentasService {
       await this.integracionContable.contabilizarVenta(detalle);
     }
 
+    await this.audit.recordSafe({
+      action: 'crear',
+      target: { module: 'ventas', entityType: 'venta', entityId: ventaId, label: numero },
+      summary: `Registro la venta ${numero}`,
+      changesAfter: { numero, cliente: input.clienteNombre, total, vendedor: input.vendedorNombre }
+    });
+
     return ventaId;
   }
 
@@ -544,7 +556,10 @@ export class VentasService {
       estado: 'REVERTIDA',
       revertidaEn: Date.now(),
       revertidaPor: userId,
-      motivoReverso: motivo
+      motivoReverso: motivo,
+      actualizadoEn: Date.now(),
+      actualizadoPor: userId,
+      ultimaAccion: 'reversar'
     });
 
     await this.integracionContable.contabilizarReversoVenta({
@@ -556,6 +571,14 @@ export class VentasService {
         revertidaPor: userId,
         motivoReverso: motivo
       }
+    });
+
+    await this.audit.recordSafe({
+      action: 'reversar',
+      target: { module: 'ventas', entityType: 'venta', entityId: ventaId, label: detalle.documento.numero },
+      summary: `Reverso la venta ${detalle.documento.numero}`,
+      changesBefore: { estado: detalle.documento.estado, total: detalle.documento.total },
+      changesAfter: { estado: 'REVERTIDA', motivo }
     });
   }
 

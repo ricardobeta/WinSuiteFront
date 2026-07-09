@@ -3,6 +3,7 @@ import { Database, get, onValue, push, ref, runTransaction, set, update } from '
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
+import { AuditService } from '../../../core/services/audit.service';
 import { KardexService } from '../../inventario/services/kardex.service';
 import { AsientoContableLinea } from '../models/contabilidad.models';
 import {
@@ -35,6 +36,7 @@ export interface ArchivosCompraRef {
 export class FacturasCompraService {
   private readonly database = inject(Database);
   private readonly authService = inject(AuthService);
+  private readonly audit = inject(AuditService);
   private readonly kardexService = inject(KardexService);
   private readonly integracionContable = inject(IntegracionContableService);
   private readonly cuentasPorPagar = inject(CuentasPorPagarService);
@@ -253,18 +255,37 @@ export class FacturasCompraService {
     await set(facturaRef, {
       ...input.factura,
       numero,
-      creadoEn: timestamp,
-      actualizadoEn: timestamp
+      ...this.audit.createMetadata('crear', null, timestamp)
     });
     await this.escribirItems(facturaId, input.items);
+    await this.audit.recordSafe({
+      action: 'crear',
+      target: { module: 'contabilidad', entityType: 'factura_compra', entityId: facturaId, label: numero },
+      summary: `Creo la factura de compra ${numero}`,
+      changesAfter: {
+        numero,
+        proveedor: input.factura.razonSocialProv,
+        total: input.factura.importeTotal,
+        estado: input.factura.estado
+      }
+    });
 
     return facturaId;
   }
 
   async actualizarFacturaCompra(facturaId: string, factura: Partial<FacturaCompra>): Promise<void> {
+    const actual = await this.getFacturaCompraById(facturaId);
     await update(this.getFacturaRef(facturaId), {
       ...factura,
-      actualizadoEn: Date.now()
+      ...this.audit.createMetadata('actualizar', actual)
+    });
+
+    await this.audit.recordSafe({
+      action: 'actualizar',
+      target: { module: 'contabilidad', entityType: 'factura_compra', entityId: facturaId, label: factura.numero ?? actual?.numero ?? facturaId },
+      summary: `Actualizo la factura de compra ${factura.numero ?? actual?.numero ?? facturaId}`,
+      changesBefore: actual ? { estado: actual.estado, total: actual.importeTotal, proveedor: actual.razonSocialProv } : null,
+      changesAfter: { estado: factura.estado, total: factura.importeTotal, proveedor: factura.razonSocialProv }
     });
   }
 
@@ -340,6 +361,13 @@ export class FacturasCompraService {
 
     // 3) Marcar como registrada.
     await this.actualizarFacturaCompra(facturaId, { estado: 'REGISTRADA' });
+    await this.audit.recordSafe({
+      action: 'aprobar',
+      target: { module: 'contabilidad', entityType: 'factura_compra', entityId: facturaId, label: factura.numero ?? facturaId },
+      summary: `Registro la factura de compra ${factura.numero ?? facturaId}`,
+      changesBefore: { estado: factura.estado },
+      changesAfter: { estado: 'REGISTRADA' }
+    });
 
     // 4) Sincronizar el subledger de Cuentas por Pagar (documento-espejo, sin generar asiento).
     //    Una falla aquí no debe revertir la factura ya registrada.

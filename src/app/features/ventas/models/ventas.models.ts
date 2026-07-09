@@ -27,6 +27,9 @@ export interface VentaDocumento {
   moneda: string;
   notas: string;
   creadoEn: number;
+  actualizadoEn?: number;
+  actualizadoPor?: string | null;
+  ultimaAccion?: string | null;
   revertidaEn: number | null;
   revertidaPor: string | null;
   motivoReverso: string | null;

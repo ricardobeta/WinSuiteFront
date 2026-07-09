@@ -3,6 +3,7 @@ import { Database, get, onValue, push, ref, remove, set, update } from '@angular
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
+import { AuditService } from '../../../core/services/audit.service';
 import { Almacen, AlmacenStockRow, Producto } from '../models/inventario.models';
 
 @Injectable({
@@ -11,6 +12,7 @@ import { Almacen, AlmacenStockRow, Producto } from '../models/inventario.models'
 export class AlmacenesService {
   private readonly database = inject(Database);
   private readonly authService = inject(AuthService);
+  private readonly audit = inject(AuditService);
 
   private getTenantPath(): string {
     return `inventario/${this.authService.getTenantId()}`;
@@ -75,6 +77,7 @@ export class AlmacenesService {
     const timestamp = Date.now();
 
     if (almacen.id) {
+      const actual = await this.getAlmacenById(almacen.id);
       await set(this.getItemRef(almacen.id), {
         codigo: almacen.codigo,
         nombre: almacen.nombre,
@@ -83,8 +86,14 @@ export class AlmacenesService {
         responsableId: almacen.responsableId ?? '',
         esPorDefecto: !!almacen.esPorDefecto,
         activo: almacen.activo,
-        creadoEn: almacen.creadoEn ?? timestamp,
-        actualizadoEn: timestamp
+        ...this.audit.createMetadata('actualizar', actual ?? almacen, timestamp)
+      });
+      await this.audit.recordSafe({
+        action: 'actualizar',
+        target: { module: 'inventario', entityType: 'almacen', entityId: almacen.id, label: almacen.nombre },
+        summary: `Actualizo el almacen ${almacen.nombre}`,
+        changesBefore: actual ? { codigo: actual.codigo, nombre: actual.nombre } : null,
+        changesAfter: { codigo: almacen.codigo, nombre: almacen.nombre }
       });
       return almacen.id;
     }
@@ -98,15 +107,29 @@ export class AlmacenesService {
       responsableId: almacen.responsableId ?? '',
       esPorDefecto: !!almacen.esPorDefecto,
       activo: almacen.activo,
-      creadoEn: timestamp,
-      actualizadoEn: timestamp
+      ...this.audit.createMetadata('crear', null, timestamp)
     });
 
-    return refAlmacen.key!;
+    const almacenId = refAlmacen.key!;
+    await this.audit.recordSafe({
+      action: 'crear',
+      target: { module: 'inventario', entityType: 'almacen', entityId: almacenId, label: almacen.nombre },
+      summary: `Creo el almacen ${almacen.nombre}`,
+      changesAfter: { codigo: almacen.codigo, nombre: almacen.nombre }
+    });
+
+    return almacenId;
   }
 
   async eliminarAlmacen(almacenId: string): Promise<void> {
+    const actual = await this.getAlmacenById(almacenId);
     await remove(this.getItemRef(almacenId));
+    await this.audit.recordSafe({
+      action: 'eliminar',
+      target: { module: 'inventario', entityType: 'almacen', entityId: almacenId, label: actual?.nombre ?? almacenId },
+      summary: `Elimino el almacen ${actual?.nombre ?? almacenId}`,
+      changesBefore: actual ? { codigo: actual.codigo, nombre: actual.nombre } : null
+    });
   }
 
   async marcarComoDefault(nuevoId: string): Promise<void> {
@@ -123,6 +146,11 @@ export class AlmacenesService {
     });
 
     await update(ref(this.database), updates);
+    await this.audit.recordSafe({
+      action: 'configurar',
+      target: { module: 'inventario', entityType: 'almacen', entityId: nuevoId, label: 'Almacen por defecto' },
+      summary: 'Configuro el almacen por defecto'
+    });
   }
 
   getStockDetallePorAlmacen(almacenId: string): Observable<AlmacenStockRow[]> {
@@ -190,5 +218,14 @@ export class AlmacenesService {
 
     const raw = snapshot.val() as Record<string, Almacen>;
     return Object.entries(raw).map(([id, almacen]) => ({ ...almacen, id }));
+  }
+
+  private async getAlmacenById(almacenId: string): Promise<Almacen | null> {
+    const snapshot = await get(this.getItemRef(almacenId));
+    if (!snapshot.exists()) {
+      return null;
+    }
+
+    return { ...(snapshot.val() as Almacen), id: almacenId };
   }
 }

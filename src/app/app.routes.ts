@@ -72,6 +72,14 @@ export const routes: Routes = [
 				loadChildren: () => import('./features/colaboradores/colaboradores.routes').then((routes) => routes.COLABORADORES_ROUTES)
 			},
 			{
+				path: 'auditoria',
+				canMatch: [moduleAccessGuard('colaboradores', 'read')],
+				loadComponent: () =>
+					import('./features/auditoria/pages/auditoria-page/auditoria-page.component').then(
+						(component) => component.AuditoriaPageComponent
+					)
+			},
+			{
 				path: 'archivos',
 				canMatch: [moduleAccessGuard('archivos', 'read')],
 				loadChildren: () => import('./features/archivos/archivos.routes').then((routes) => routes.ARCHIVOS_ROUTES)

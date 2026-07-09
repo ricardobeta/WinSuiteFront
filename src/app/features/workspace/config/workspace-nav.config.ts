@@ -344,6 +344,14 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
     ]
   },
   {
+    id: 'auditoria',
+    label: 'Auditoria',
+    icon: 'manage_search',
+    route: '/workspace/auditoria',
+    requiredModule: 'colaboradores',
+    requiredAction: 'read'
+  },
+  {
     id: 'archivos',
     label: moduleMeta('archivos').label,
     icon: moduleMeta('archivos').icon,
