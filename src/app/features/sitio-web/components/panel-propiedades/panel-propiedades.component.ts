@@ -731,14 +731,30 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
               </select>
             </label>
           </div>
-          <label class="check">
-            <input
-              type="checkbox"
-              [ngModel]="b.mostrarPrecio"
-              (ngModelChange)="patch({ mostrarPrecio: $event })"
-            />
-            Mostrar precio
-          </label>
+          <div class="fila">
+            <label>
+              Densidad
+              <select
+                [ngModel]="b.densidad ?? 'normal'"
+                (ngModelChange)="patch({ densidad: $event })"
+              >
+                <option value="normal">Normal</option>
+                <option value="compacta">Compacta</option>
+              </select>
+            </label>
+            <label class="check">
+              <input
+                type="checkbox"
+                [ngModel]="b.mostrarPrecio"
+                (ngModelChange)="patch({ mostrarPrecio: $event })"
+              />
+              Mostrar precio
+            </label>
+          </div>
+          <p class="ayuda">
+            Cada tarjeta abre la pagina propia del producto (con su descripcion larga y galeria,
+            editable en la pestaña Catalogo).
+          </p>
         }
         @case ('header') {
           <label class="check">

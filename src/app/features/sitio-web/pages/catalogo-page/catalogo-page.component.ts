@@ -65,8 +65,51 @@ import { SelectorImagenComponent } from '../../components/selector-imagen/select
                   (urlChange)="cambiarImagen(producto.id!, $event)"
                 />
               </div>
+              <button
+                mat-icon-button
+                [title]="'Ficha de tienda (galeria, badge, descripcion)'"
+                (click)="fichaAbierta.set(fichaAbierta() === producto.id ? null : producto.id!)"
+              >
+                <mat-icon>{{ fichaAbierta() === producto.id ? 'expand_less' : 'edit_note' }}</mat-icon>
+              </button>
             }
           </div>
+          @if (esVisible(producto.id!) && fichaAbierta() === producto.id) {
+            <div class="ficha">
+              <div class="campo">
+                <span class="etiqueta">Galeria (la 2da imagen aparece al pasar el mouse)</span>
+                <div class="galeria">
+                  @for (imagen of imagenesDe(producto.id!); track $index; let i = $index) {
+                    <div class="mini">
+                      <img [src]="imagen" alt="" />
+                      <button type="button" class="quitar" (click)="quitarImagen(producto.id!, i)">
+                        <mat-icon>close</mat-icon>
+                      </button>
+                    </div>
+                  }
+                  <app-selector-imagen (urlChange)="agregarImagen(producto.id!, $event)" />
+                </div>
+              </div>
+              <label>
+                Badge de la tarjeta (ej. "Nuevo", "Oferta")
+                <input
+                  maxlength="20"
+                  [value]="catalogoDe(producto.id!)?.badge ?? ''"
+                  (change)="guardarFicha(producto.id!, 'badge', $any($event.target).value)"
+                />
+              </label>
+              <label>
+                Descripcion larga (pagina propia del producto)
+                <textarea
+                  rows="5"
+                  maxlength="20000"
+                  placeholder="Cuenta todo sobre este producto: beneficios, materiales, medidas..."
+                  [value]="catalogoDe(producto.id!)?.descripcionLarga ?? ''"
+                  (change)="guardarFicha(producto.id!, 'descripcionLarga', $any($event.target).value)"
+                ></textarea>
+              </label>
+            </div>
+          }
         } @empty {
           <p class="vacio">No hay productos activos en el inventario.</p>
         }
@@ -136,6 +179,76 @@ import { SelectorImagenComponent } from '../../components/selector-imagen/select
       opacity: 0.6;
       padding: 32px;
     }
+    .ficha {
+      border: 1px solid #93c5fd;
+      border-top: none;
+      border-radius: 0 0 10px 10px;
+      margin-top: -8px;
+      padding: 16px 14px 14px;
+      background: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .ficha label,
+    .ficha .campo {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      font-weight: 600;
+      font-size: 0.85rem;
+    }
+    .ficha input,
+    .ficha textarea {
+      font: inherit;
+      font-weight: 400;
+      padding: 8px 10px;
+      border: 1px solid rgba(0, 0, 0, 0.15);
+      border-radius: 8px;
+      background: #fff;
+    }
+    .etiqueta {
+      font-size: 0.85rem;
+    }
+    .galeria {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: flex-start;
+    }
+    .mini {
+      position: relative;
+      width: 72px;
+      height: 72px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid rgba(0, 0, 0, 0.1);
+    }
+    .mini img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .mini .quitar {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      background: rgba(0, 0, 0, 0.55);
+      color: #fff;
+      border: none;
+      border-radius: 999px;
+      width: 20px;
+      height: 20px;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      padding: 0;
+    }
+    .mini .quitar mat-icon {
+      font-size: 14px;
+      width: 14px;
+      height: 14px;
+    }
   `,
 })
 export class CatalogoPageComponent {
@@ -145,6 +258,8 @@ export class CatalogoPageComponent {
 
   readonly filtro = signal('');
   readonly refrescando = signal(false);
+  /** Producto con la ficha de tienda expandida. */
+  readonly fichaAbierta = signal<string | null>(null);
 
   private readonly productos = toSignal(this.productosService.getProductos(), { initialValue: [] });
   private readonly catalogo = toSignal(this.catalogoService.getCatalogo(), {
@@ -164,6 +279,45 @@ export class CatalogoPageComponent {
 
   imagenDe(productoId: string): string | undefined {
     return this.catalogo()[productoId]?.imagenes?.[0];
+  }
+
+  catalogoDe(productoId: string): import('@winsuite/bloques').ProductoPublicado | undefined {
+    return this.catalogo()[productoId];
+  }
+
+  /** RTDB elimina arrays vacios; ademas puede devolver la lista como objeto indexado. */
+  imagenesDe(productoId: string): string[] {
+    const imagenes = this.catalogo()[productoId]?.imagenes;
+    if (Array.isArray(imagenes)) return imagenes;
+    return Object.values(imagenes ?? {});
+  }
+
+  async agregarImagen(productoId: string, url: string): Promise<void> {
+    if (!url) return;
+    await this.catalogoService.setImagenes(productoId, [...this.imagenesDe(productoId), url]);
+  }
+
+  async quitarImagen(productoId: string, indice: number): Promise<void> {
+    await this.catalogoService.setImagenes(
+      productoId,
+      this.imagenesDe(productoId).filter((_, i) => i !== indice),
+    );
+  }
+
+  async guardarFicha(
+    productoId: string,
+    campo: 'badge' | 'descripcionLarga',
+    valor: string,
+  ): Promise<void> {
+    const actual = this.catalogoDe(productoId);
+    try {
+      await this.catalogoService.setFichaTienda(productoId, {
+        badge: campo === 'badge' ? valor : actual?.badge,
+        descripcionLarga: campo === 'descripcionLarga' ? valor : actual?.descripcionLarga,
+      });
+    } catch {
+      this.snackBar.open('No se pudo guardar la ficha', 'OK', { duration: 4000 });
+    }
   }
 
   async alternarVisible(producto: Producto, visible: boolean): Promise<void> {

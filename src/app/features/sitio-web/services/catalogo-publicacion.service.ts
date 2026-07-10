@@ -55,6 +55,18 @@ export class CatalogoPublicacionService {
     });
   }
 
+  /** Ficha de tienda del producto: descripcion larga (pagina propia) y badge de la tarjeta. */
+  async setFichaTienda(
+    productoId: string,
+    ficha: { descripcionLarga?: string; badge?: string },
+  ): Promise<void> {
+    await update(ref(this.database, `${this.catalogoPath()}/${productoId}`), {
+      descripcionLarga: ficha.descripcionLarga?.trim() || null,
+      badge: ficha.badge?.trim() || null,
+      actualizadoEn: Date.now(),
+    });
+  }
+
   /**
    * Cambios multipath que refrescan nombre/precio/categoria de todos los productos ya
    * publicados desde el inventario actual. Los usa "Publicar" para no dejar precios viejos.
