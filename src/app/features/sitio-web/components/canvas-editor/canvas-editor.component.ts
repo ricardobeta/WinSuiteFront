@@ -14,6 +14,7 @@ import {
   Bloque,
   BloqueRenderComponent,
   EstilosBloque,
+  FormularioDef,
   PaginaDoc,
   Viewport,
   clasesItemBloque,
@@ -116,6 +117,7 @@ const SNAPS: { max: number; ancho: AnchoBloque }[] = [
               [nombreNegocio]="nombreNegocio()"
               [logoUrl]="logoUrl()"
               [paginas]="paginas()"
+              [formularios]="formularios()"
               (bloqueChange)="bloqueChange.emit($event)"
             />
           </div>
@@ -341,6 +343,8 @@ export class CanvasEditorComponent {
   readonly nombreNegocio = input<string>('');
   readonly logoUrl = input<string | undefined>(undefined);
   readonly paginas = input<PaginaDoc[]>([]);
+  /** Formularios prehechos de la empresa (para previsualizar el bloque formulario). */
+  readonly formularios = input<Record<string, FormularioDef>>({});
   /** Vista activa del editor (los resize/ocultar en tablet/movil van a overrides). */
   readonly viewport = input<Viewport>('desktop');
   /** Indice donde insertara el proximo bloque elegido de la paleta (null = al final). */

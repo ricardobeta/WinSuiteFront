@@ -21,6 +21,7 @@ import {
   Viewport,
 } from '@winsuite/bloques';
 import { CategoriasService } from '../../../inventario/services/categorias.service';
+import { FormulariosService } from '../../services/formularios.service';
 import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.component';
 
 /**
@@ -634,6 +635,26 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
           <label
             >Titulo<input [ngModel]="b.titulo" (ngModelChange)="patch({ titulo: $event })"
           /></label>
+          <label>
+            Formulario prehecho
+            <select
+              [ngModel]="b.formularioId"
+              (ngModelChange)="patch({ formularioId: $event, campos: undefined })"
+            >
+              @if (!formularioSeleccionadoExiste()) {
+                <option [value]="b.formularioId">— Elige un formulario —</option>
+              }
+              @for (formulario of formulariosEmpresa(); track formulario.formularioId) {
+                <option [value]="formulario.formularioId">{{ formulario.nombre }}</option>
+              }
+            </select>
+          </label>
+          @if (formulariosEmpresa().length === 0) {
+            <p class="ayuda">
+              Aun no tienes formularios prehechos. Crealos en la pestaña <b>Formularios</b> del
+              sitio; las respuestas llegan a su propia bandeja.
+            </p>
+          }
           <label
             >Texto del boton<input
               [ngModel]="b.textoBoton"
@@ -644,44 +665,12 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
               [ngModel]="b.mensajeExito"
               (ngModelChange)="patch({ mensajeExito: $event })"
           /></label>
-          <h4>Campos</h4>
-          @for (campo of b.campos; track campo.id; let i = $index) {
-            <div class="item-lista columna">
-              <input
-                placeholder="Etiqueta"
-                [ngModel]="campo.etiqueta"
-                (ngModelChange)="patchItem('campos', i, { etiqueta: $event })"
-              />
-              <select [ngModel]="campo.tipo" (ngModelChange)="cambiarTipoCampo(i, $event)">
-                <option value="texto">Texto</option>
-                <option value="email">Email</option>
-                <option value="telefono">Telefono</option>
-                <option value="textarea">Parrafo</option>
-                <option value="seleccion">Seleccion</option>
-              </select>
-              @if (campo.tipo === 'seleccion') {
-                <input
-                  placeholder="Opciones separadas por coma"
-                  [ngModel]="opcionesTexto(campo)"
-                  (ngModelChange)="patchItem('campos', i, { opciones: aOpciones($event) })"
-                />
-              }
-              <label class="check">
-                <input
-                  type="checkbox"
-                  [ngModel]="campo.requerido"
-                  (ngModelChange)="patchItem('campos', i, { requerido: $event })"
-                />
-                Obligatorio
-              </label>
-              <button type="button" class="quitar" (click)="quitarItem('campos', i)">
-                <mat-icon>close</mat-icon>
-              </button>
-            </div>
+          @if (b.campos?.length) {
+            <p class="ayuda">
+              Este bloque aun usa campos propios (version anterior). Al elegir un formulario
+              prehecho pasara a usar ese.
+            </p>
           }
-          <button type="button" class="agregar" (click)="agregarCampoFormulario()">
-            <mat-icon>add</mat-icon> Agregar campo
-          </button>
         }
         @case ('productos') {
           <label
@@ -1170,8 +1159,19 @@ export class PanelPropiedadesComponent {
   readonly viewport = input<Viewport>('desktop');
   readonly bloqueChange = output<Bloque>();
 
+  private readonly formulariosService = inject(FormulariosService);
+
   readonly categorias = toSignal(this.categoriasService.getCategorias(), { initialValue: [] });
   readonly productosCatalogo = computed(() => this.catalogo.productos());
+  readonly formulariosEmpresa = toSignal(this.formulariosService.getFormularios(), {
+    initialValue: [],
+  });
+
+  readonly formularioSeleccionadoExiste = computed(() => {
+    const bloque = this.bloque();
+    if (bloque.tipo !== 'formulario') return true;
+    return this.formulariosEmpresa().some((f) => f.formularioId === bloque.formularioId);
+  });
 
   readonly gradientes: (FondoGradiente & { nombre: string })[] = [
     { nombre: 'Oceano', desde: '#2563eb', hasta: '#06b6d4', angulo: 135 },
@@ -1436,35 +1436,4 @@ export class PanelPropiedadesComponent {
     }
   }
 
-  cambiarTipoCampo(indice: number, tipo: string): void {
-    if (tipo === 'seleccion') {
-      this.patchItem('campos', indice, { tipo, opciones: ['Opcion 1', 'Opcion 2'] });
-    } else {
-      const campo = { ...(this.b.campos[indice] as Record<string, unknown>) };
-      delete campo['opciones'];
-      const campos = [...(this.b.campos as object[])];
-      campos[indice] = { ...campo, tipo };
-      this.patch({ campos });
-    }
-  }
-
-  agregarCampoFormulario(): void {
-    this.agregarItem('campos', {
-      id: `c-${Date.now().toString(36)}`,
-      tipo: 'texto',
-      etiqueta: 'Nuevo campo',
-      requerido: false,
-    });
-  }
-
-  opcionesTexto(campo: { opciones?: string[] }): string {
-    return (campo.opciones ?? []).join(', ');
-  }
-
-  aOpciones(texto: string): string[] {
-    return texto
-      .split(',')
-      .map((opcion) => opcion.trim())
-      .filter(Boolean);
-  }
 }

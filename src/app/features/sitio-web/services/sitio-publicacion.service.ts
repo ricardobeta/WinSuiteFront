@@ -1,9 +1,10 @@
 import { Injectable, inject } from '@angular/core';
 import { Database, get, ref, update } from '@angular/fire/database';
-import { migrarPagina, temaSitioSchema, SitioConfig } from '@winsuite/bloques';
+import { FormularioDef, PaginaDoc, migrarPagina, temaSitioSchema, SitioConfig } from '@winsuite/bloques';
 import { AuthService } from '../../../core/services/auth.service';
 import { SitioBorradorService } from './sitio-borrador.service';
 import { CatalogoPublicacionService } from './catalogo-publicacion.service';
+import { FormulariosService } from './formularios.service';
 
 @Injectable({ providedIn: 'root' })
 export class SitioPublicacionService {
@@ -11,6 +12,7 @@ export class SitioPublicacionService {
   private readonly authService = inject(AuthService);
   private readonly borradorService = inject(SitioBorradorService);
   private readonly catalogoService = inject(CatalogoPublicacionService);
+  private readonly formulariosService = inject(FormulariosService);
 
   /**
    * Publica el borrador: valida con Zod (bloquea si falla), copia borrador -> publicado,
@@ -44,6 +46,8 @@ export class SitioPublicacionService {
         meta: { version: nuevaVersion, publicadoEn: ahora, publicadoPor: uid },
         tema: borrador.tema,
         paginas: paginasValidadas,
+        // Definiciones de formularios prehechos usados: el renderer no lee sitios_formularios.
+        formularios: await this.formulariosUsados(Object.values(paginasValidadas)),
       },
       [`publicaciones/${tenantId}/${sitioId}`]: { version: nuevaVersion, publicadoEn: ahora },
     };
@@ -54,5 +58,23 @@ export class SitioPublicacionService {
 
     await update(ref(this.database), cambios);
     return nuevaVersion;
+  }
+
+  /** Definiciones de los formularios prehechos referenciados por los bloques de las paginas. */
+  private async formulariosUsados(
+    paginas: PaginaDoc[],
+  ): Promise<Record<string, FormularioDef> | null> {
+    const ids = new Set<string>();
+    for (const pagina of paginas) {
+      for (const bloque of pagina.bloques) {
+        if (bloque.tipo === 'formulario') ids.add(bloque.formularioId);
+      }
+    }
+    if (ids.size === 0) return null;
+    const todos = await this.formulariosService.getFormulariosUnaVez();
+    const usados = Object.fromEntries(
+      Object.entries(todos).filter(([id]) => ids.has(id)),
+    );
+    return Object.keys(usados).length > 0 ? usados : null;
   }
 }

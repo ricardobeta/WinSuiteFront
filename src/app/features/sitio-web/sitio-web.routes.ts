@@ -51,6 +51,28 @@ export const SITIO_WEB_ROUTES: Routes = [
         data: { module: 'Sitio Web', page: 'Pedidos' },
       },
       {
+        path: 'formularios',
+        loadComponent: () =>
+          import('./pages/formularios-page/formularios-page.component').then(
+            (c) => c.FormulariosPageComponent,
+          ),
+        data: { module: 'Sitio Web', page: 'Formularios' },
+      },
+      {
+        path: 'formularios/:formId/respuestas',
+        loadComponent: () =>
+          import('./pages/formularios-page/respuestas-page.component').then(
+            (c) => c.RespuestasPageComponent,
+          ),
+        data: { module: 'Sitio Web', page: 'Respuestas' },
+      },
+      {
+        path: 'pagos',
+        loadComponent: () =>
+          import('./pages/pagos-page/pagos-page.component').then((c) => c.PagosPageComponent),
+        data: { module: 'Sitio Web', page: 'Pagos' },
+      },
+      {
         path: 'configuracion',
         loadComponent: () =>
           import('./pages/configuracion-page/configuracion-page.component').then(

@@ -2,14 +2,12 @@
   "rules": {
     ".read": false,
     ".write": false,
-
     "Negocio": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
         ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
       }
     },
-
     "tenant_users": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
@@ -19,7 +17,6 @@
         }
       }
     },
-
     "clientes": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
@@ -35,7 +32,6 @@
         }
       }
     },
-
     "Facturacion": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
@@ -49,7 +45,6 @@
         }
       }
     },
-
     "firmas": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
@@ -58,57 +53,59 @@
         }
       }
     },
-
     "archivos": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
-        ".indexOn": ["fechaEmision", "name"],
+        ".indexOn": [
+          "fechaEmision",
+          "name"
+        ],
         "$archivoId": {
           ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
         }
       }
     },
-
     "archivos_stats": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
         ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
       }
     },
-
     "sri_config": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
         ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
       }
     },
-
     "sri_descargas": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
         ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
       }
     },
-
     "sri_archivos_index": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
         ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
       }
     },
-
     "dashboard": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
         ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
       }
     },
-
     "auditoria": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
         "eventos": {
-          ".indexOn": ["timestamp", "module", "entityType", "entityId", "userId"],
+          ".indexOn": [
+            "timestamp",
+            "module",
+            "entityType",
+            "entityId",
+            "userId"
+          ],
           "$eventId": {
             ".write": "auth != null && !data.exists() && newData.exists() && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true && newData.child('actor').child('userId').val() === auth.uid && newData.child('userId').val() === auth.uid",
             ".validate": "newData.hasChildren(['tenantId', 'timestamp', 'userId', 'actor', 'action', 'origin', 'module', 'entityType', 'entityId', 'target', 'summary']) && newData.child('tenantId').val() === $tenantId && newData.child('timestamp').isNumber() && newData.child('summary').isString()"
@@ -116,11 +113,9 @@
         }
       }
     },
-
     "ventas": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
-
         "configuracion": {
           "ventas": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
@@ -129,25 +124,21 @@
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
-
         "secuencias": {
           "$secuenciaId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
-
         "sesiones": {
           "$sesionId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
-
         "documentos": {
           "$ventaId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
-
         "ventasItems": {
           "$ventaId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
@@ -156,7 +147,6 @@
             }
           }
         },
-
         "ventasPagos": {
           "$ventaId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
@@ -167,42 +157,35 @@
         }
       }
     },
-
     "servicios": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
         ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
-
         "lista": {
           ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
           "$servicioId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
-
         "configuracion": {
           ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
           ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
         }
       }
     },
-
     "inventario": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
-
         "almacenes": {
           "$almacenId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
-
         "categorias": {
           "$categoriaId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
-
         "camposPersonalizados": {
           "$entidad": {
             "$campoId": {
@@ -210,31 +193,26 @@
             }
           }
         },
-
         "configuracion": {
           "inventario": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
-
         "productos": {
           "$productoId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
-
         "proveedores": {
           "$proveedorId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
-
         "unidades": {
           "$unidadId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
-
         "kardex": {
           "$productoId": {
             "$movimientoId": {
@@ -242,7 +220,6 @@
             }
           }
         },
-
         "stock": {
           "$productoId": {
             "$almacenId": {
@@ -250,7 +227,6 @@
             }
           }
         },
-
         "recetasAuditoria": {
           "$recetaId": {
             "$auditoriaId": {
@@ -258,7 +234,6 @@
             }
           }
         },
-
         "locks": {
           "recetas": {
             "$almacenId": {
@@ -268,13 +243,11 @@
             }
           }
         },
-
         "ordenesCompra": {
           "$ordenId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
-
         "ordenesCompraItems": {
           "$ordenId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
@@ -283,13 +256,11 @@
             }
           }
         },
-
         "consecutivos": {
           "ordenesCompra": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
-
         "recepcionesOC": {
           "$recepcionId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
@@ -297,7 +268,6 @@
         }
       }
     },
-
     "nomina": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
@@ -327,7 +297,9 @@
           }
         },
         "rolesPago": {
-          ".indexOn": ["periodo"],
+          ".indexOn": [
+            "periodo"
+          ],
           "$rolId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
@@ -346,7 +318,6 @@
         }
       }
     },
-
     "contabilidad": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
@@ -455,45 +426,54 @@
         }
       }
     },
-
     "sitios": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
         ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
       }
     },
-
     "sitios_catalogo": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
         ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
       }
     },
-
+    "sitios_formularios": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+      }
+    },
+    "pagos_config": {
+      "$tenantId": {
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+      }
+    },
     "publicaciones": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
         ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
       }
     },
-
     "pedidos_web": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
-        ".indexOn": ["creadoEn", "estado"],
+        ".indexOn": [
+          "creadoEn",
+          "estado"
+        ],
         "$pedidoId": {
           ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
         }
       }
     },
-
     "form_submissions": {
       "$tenantId": {
         ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
         ".write": false
       }
     },
-
     "subdominios": {
       ".read": "auth != null",
       "$subdominio": {
@@ -501,7 +481,6 @@
         ".validate": "$subdominio.matches(/^[a-z0-9][a-z0-9-]{2,30}$/) && newData.hasChildren(['tenantId', 'sitioId', 'creadoEn'])"
       }
     },
-
     "dominios_custom": {
       ".read": "auth != null",
       "$dominioEscapado": {

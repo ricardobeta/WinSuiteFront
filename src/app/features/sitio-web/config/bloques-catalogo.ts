@@ -258,18 +258,13 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
     categoria: 'comercio',
     nombre: 'Formulario',
     icono: 'list_alt',
-    descripcion: 'Formulario personalizado de contacto o leads.',
+    descripcion: 'Muestra uno de tus formularios prehechos (pestaña Formularios).',
     crearPorDefecto: (id) => ({
       id,
       visible: true,
       tipo: 'formulario',
-      formularioId: id,
+      formularioId: id, // placeholder: el usuario elige un formulario prehecho en el panel
       titulo: 'Contactanos',
-      campos: [
-        { id: 'nombre', tipo: 'texto', etiqueta: 'Nombre', requerido: true },
-        { id: 'telefono', tipo: 'telefono', etiqueta: 'Telefono', requerido: true },
-        { id: 'mensaje', tipo: 'textarea', etiqueta: 'Mensaje', requerido: false },
-      ],
       textoBoton: 'Enviar',
       mensajeExito: 'Gracias, te contactaremos pronto.',
     }),

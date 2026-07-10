@@ -37,7 +37,9 @@ import {
   ArchivoSelectorDialogComponent,
   ArchivoSelectorDialogResult,
 } from '../../../../shared/components/archivo-selector-dialog/archivo-selector-dialog.component';
+import { toSignal } from '@angular/core/rxjs-interop';
 import { SitiosService } from '../../services/sitios.service';
+import { FormulariosService } from '../../services/formularios.service';
 import { SitioBorradorService } from '../../services/sitio-borrador.service';
 import { SitioPublicacionService } from '../../services/sitio-publicacion.service';
 import { EditorHistorialService } from '../../services/editor-historial.service';
@@ -204,6 +206,7 @@ const AUTOSAVE_MS = 1500;
                   [nombreNegocio]="config()?.nombre ?? ''"
                   [logoUrl]="c.tema.logoUrl"
                   [paginas]="listaPaginas()"
+                  [formularios]="formulariosMap()"
                   [viewport]="viewport()"
                   [puntoInsercion]="puntoInsercion()"
                   (puntoInsercionChange)="puntoInsercion.set($event)"
@@ -382,6 +385,15 @@ export class EditorPageComponent {
 
   readonly listaPaginas = computed<PaginaDoc[]>(() =>
     Object.values(this.contenido()?.paginas ?? {}),
+  );
+
+  private readonly formulariosService = inject(FormulariosService);
+  private readonly formularios = toSignal(this.formulariosService.getFormularios(), {
+    initialValue: [],
+  });
+  /** Formularios prehechos indexados por id (los consume el bloque formulario del canvas). */
+  readonly formulariosMap = computed(() =>
+    Object.fromEntries(this.formularios().map((f) => [f.formularioId, f])),
   );
 
   readonly bloquesActuales = computed<Bloque[]>(

@@ -29,6 +29,10 @@ import { SitiosService } from '../../services/sitios.service';
             ><mat-icon>receipt_long</mat-icon> Pedidos</a
           >
         }
+        <a routerLink="formularios" routerLinkActive="activo"
+          ><mat-icon>list_alt</mat-icon> Formularios</a
+        >
+        <a routerLink="pagos" routerLinkActive="activo"><mat-icon>payments</mat-icon> Pagos</a>
         <a routerLink="configuracion" routerLinkActive="activo"
           ><mat-icon>tune</mat-icon> Configuracion</a
         >
