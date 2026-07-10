@@ -62,6 +62,8 @@ export const PLANTILLAS_SITIO: PlantillaSitio[] = [
             subtitulo: 'Los mejores productos, al mejor precio.',
             alineacion: 'centro',
             cta: { texto: 'Ver productos', enlace: '#' },
+            estilos: { fondoGradiente: { desde: '#2563eb', hasta: '#06b6d4', angulo: 135 } },
+            estilosTexto: { titulo: { color: '#ffffff' }, subtitulo: { color: '#ffffff' } },
           },
           {
             id: nuevoIdBloque(),
@@ -79,6 +81,16 @@ export const PLANTILLAS_SITIO: PlantillaSitio[] = [
             tipo: 'metodos-pago',
             titulo: 'Metodos de pago',
             metodos: ['efectivo', 'transferencia'],
+            estilos: { anchoBloque: 'mitad' },
+          },
+          {
+            id: nuevoIdBloque(),
+            visible: true,
+            tipo: 'pago',
+            titulo: 'Paga en linea',
+            texto: 'Tarjeta, transferencia o QR: tu eliges.',
+            textoBoton: 'Pagar ahora',
+            estilos: { anchoBloque: 'mitad' },
           },
           {
             id: nuevoIdBloque(),
@@ -132,6 +144,7 @@ export const PLANTILLAS_SITIO: PlantillaSitio[] = [
             id: nuevoIdBloque(),
             visible: true,
             tipo: 'formulario',
+            // Placeholder: el usuario elige un formulario prehecho en el panel.
             formularioId: 'leads',
             titulo: 'Dejanos tus datos',
             campos: [
@@ -140,6 +153,7 @@ export const PLANTILLAS_SITIO: PlantillaSitio[] = [
             ],
             textoBoton: 'Enviar',
             mensajeExito: 'Gracias, te contactaremos pronto.',
+            estilos: { fondoGradiente: { desde: '#ecfdf5', hasta: '#ffffff', angulo: 180 } },
           },
           {
             id: nuevoIdBloque(),
