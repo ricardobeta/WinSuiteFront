@@ -1,13 +1,40 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList } from '@angular/cdk/drag-drop';
 import { MatIconModule } from '@angular/material/icon';
-import { Bloque, BloqueRenderComponent, PaginaDoc, claseAnchoBloque } from '@winsuite/bloques';
+import {
+  AnchoBloque,
+  Bloque,
+  BloqueRenderComponent,
+  EstilosBloque,
+  PaginaDoc,
+  Viewport,
+  clasesItemBloque,
+} from '@winsuite/bloques';
 import { DefinicionBloque } from '../../config/bloques-catalogo';
+
+/** Puntos de snap del resize de ancho por borde (fraccion del canvas -> anchoBloque). */
+const SNAPS: { max: number; ancho: AnchoBloque }[] = [
+  { max: 0.415, ancho: 'tercio' },
+  { max: 0.58, ancho: 'mitad' },
+  { max: 0.83, ancho: 'dosTercios' },
+  { max: Infinity, ancho: 'completo' },
+];
 
 /**
  * Canvas WYSIWYG: renderiza los bloques con el MISMO <ws-bloque-render> del renderer publico,
- * envueltos en un chrome de edicion (seleccionar, mover, duplicar, ocultar, eliminar).
+ * envueltos en un chrome de edicion (seleccionar, mover, duplicar, ocultar, eliminar,
+ * redimensionar ancho por el borde derecho, insertar entre bloques).
  * Recibe drops de la paleta (lista 'paleta-bloques') y reordena con drag & drop.
+ * El canvas lleva .ws-sitio => es un @container: las reglas responsive de la lib aplican
+ * segun el ANCHO DEL CANVAS (fidelidad 1:1 con el sitio publicado en cada vista).
  */
 @Component({
   selector: 'app-canvas-editor',
@@ -21,6 +48,9 @@ import { DefinicionBloque } from '../../config/bloques-catalogo';
       cdkDropListOrientation="mixed"
       [cdkDropListData]="bloques()"
       (cdkDropListDropped)="alSoltar($event)"
+      (pointermove)="moverResize($event)"
+      (pointerup)="soltarResize()"
+      (pointercancel)="soltarResize()"
     >
       @if (bloques().length === 0) {
         <div class="canvas-vacio ws-item">
@@ -30,12 +60,21 @@ import { DefinicionBloque } from '../../config/bloques-catalogo';
       }
       @for (bloque of bloques(); track bloque.id; let i = $index) {
         <div
-          class="envoltorio {{ claseAncho(bloque.estilos?.anchoBloque) }}"
+          class="envoltorio {{ clasesAncho(bloque) }}"
           cdkDrag
           [class.seleccionado]="bloque.id === seleccionId()"
-          [class.oculto]="!bloque.visible"
+          [class.oculto]="!bloque.visible || ocultoEnVista(bloque)"
           (click)="seleccionar.emit(bloque.id)"
         >
+          <button
+            type="button"
+            class="insertar"
+            title="Insertar bloque aqui"
+            [class.activo]="puntoInsercion() === i"
+            (click)="marcarInsercion(i, $event)"
+          >
+            <mat-icon>add</mat-icon>
+          </button>
           <div class="chrome">
             <span class="chrome-tipo">{{ bloque.tipo }}</span>
             <button type="button" cdkDragHandle title="Mover (arrastrar)">
@@ -71,7 +110,7 @@ import { DefinicionBloque } from '../../config/bloques-catalogo';
               <mat-icon>delete</mat-icon>
             </button>
           </div>
-          <div class="contenido-bloque" [class.desvanecido]="!bloque.visible">
+          <div class="contenido-bloque" [class.desvanecido]="!bloque.visible || ocultoEnVista(bloque)">
             <ws-bloque-render
               [bloque]="bloque"
               [nombreNegocio]="nombreNegocio()"
@@ -80,7 +119,30 @@ import { DefinicionBloque } from '../../config/bloques-catalogo';
               (bloqueChange)="bloqueChange.emit($event)"
             />
           </div>
+          @if (ocultoEnVista(bloque)) {
+            <span class="etiqueta-oculto">Oculto en esta vista</span>
+          }
+          <button
+            type="button"
+            class="asa-ancho"
+            title="Arrastrar para cambiar el ancho del bloque"
+            (pointerdown)="iniciarResize(bloque, $event)"
+          ></button>
+          @if (resize()?.bloqueId === bloque.id) {
+            <span class="guia-ancho">{{ etiquetaAncho(resize()!.ancho) }}</span>
+          }
         </div>
+      }
+      @if (bloques().length > 0) {
+        <button
+          type="button"
+          class="insertar-final ws-item"
+          [class.activo]="puntoInsercion() === bloques().length"
+          (click)="marcarInsercion(bloques().length, $event)"
+          title="Insertar bloque al final"
+        >
+          <mat-icon>add</mat-icon> Agregar bloque aqui
+        </button>
       }
     </div>
   `,
@@ -111,6 +173,57 @@ import { DefinicionBloque } from '../../config/bloques-catalogo';
     }
     .envoltorio.seleccionado {
       outline-color: #2563eb;
+    }
+    .insertar {
+      position: absolute;
+      top: -12px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 6;
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      border: none;
+      background: #2563eb;
+      color: #fff;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 0;
+    }
+    .envoltorio:hover .insertar,
+    .insertar.activo {
+      display: inline-flex;
+    }
+    .insertar.activo {
+      background: #16a34a;
+      display: inline-flex;
+    }
+    .insertar mat-icon {
+      font-size: 16px;
+      width: 16px;
+      height: 16px;
+    }
+    .insertar-final {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      margin: 0;
+      padding: 14px;
+      border: 1px dashed rgba(0, 0, 0, 0.25);
+      background: none;
+      color: #6b7280;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.85rem;
+    }
+    .insertar-final:hover,
+    .insertar-final.activo {
+      color: #2563eb;
+      border-color: #2563eb;
+      background: #eff6ff;
     }
     .chrome {
       position: absolute;
@@ -162,6 +275,54 @@ import { DefinicionBloque } from '../../config/bloques-catalogo';
     .contenido-bloque.desvanecido {
       opacity: 0.35;
     }
+    .etiqueta-oculto {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 4;
+      background: #1f2937;
+      color: #e5e7eb;
+      font-size: 0.72rem;
+      border-radius: 999px;
+      padding: 3px 12px;
+      pointer-events: none;
+    }
+    .asa-ancho {
+      position: absolute;
+      top: 50%;
+      right: -3px;
+      transform: translateY(-50%);
+      width: 8px;
+      height: 44px;
+      border-radius: 6px;
+      border: none;
+      background: #2563eb;
+      cursor: ew-resize;
+      opacity: 0;
+      transition: opacity 0.12s ease;
+      z-index: 6;
+      padding: 0;
+      touch-action: none;
+    }
+    .envoltorio:hover .asa-ancho,
+    .envoltorio.seleccionado .asa-ancho {
+      opacity: 0.9;
+    }
+    .guia-ancho {
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 7;
+      background: #2563eb;
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      border-radius: 999px;
+      padding: 3px 12px;
+      pointer-events: none;
+    }
     .cdk-drag-preview {
       opacity: 0.85;
     }
@@ -173,22 +334,47 @@ import { DefinicionBloque } from '../../config/bloques-catalogo';
   `,
 })
 export class CanvasEditorComponent {
+  private readonly host = inject<ElementRef<HTMLElement>>(ElementRef);
+
   readonly bloques = input.required<Bloque[]>();
   readonly seleccionId = input<string | null>(null);
   readonly nombreNegocio = input<string>('');
   readonly logoUrl = input<string | undefined>(undefined);
   readonly paginas = input<PaginaDoc[]>([]);
-
-  protected readonly claseAncho = claseAnchoBloque;
+  /** Vista activa del editor (los resize/ocultar en tablet/movil van a overrides). */
+  readonly viewport = input<Viewport>('desktop');
+  /** Indice donde insertara el proximo bloque elegido de la paleta (null = al final). */
+  readonly puntoInsercion = input<number | null>(null);
 
   readonly seleccionar = output<string>();
-  /** Ediciones inline hechas dentro del bloque (textos, elementos de columnas). */
+  /** Ediciones inline hechas dentro del bloque (textos, elementos, resize). */
   readonly bloqueChange = output<Bloque>();
   readonly reordenar = output<{ desde: number; hasta: number }>();
   readonly soltarNuevo = output<{ definicion: DefinicionBloque; indice: number }>();
   readonly duplicar = output<string>();
   readonly eliminar = output<string>();
   readonly toggleVisible = output<string>();
+  readonly puntoInsercionChange = output<number | null>();
+
+  /** Resize de ancho en curso (para la guia visual). */
+  readonly resize = signal<{ bloqueId: string; ancho: AnchoBloque } | null>(null);
+  private bloqueEnResize: Bloque | null = null;
+
+  // El colapso responsive lo maneja el @container; aqui evitamos display:none (ws-*-oculto)
+  // para poder mostrar el bloque desvanecido con la etiqueta "oculto en esta vista".
+  clasesAncho(bloque: Bloque): string {
+    return clasesItemBloque(bloque.estilos).replace(/\s?ws-[tm]-oculto/g, '');
+  }
+
+  ocultoEnVista(bloque: Bloque): boolean {
+    const vista = this.viewport();
+    if (vista === 'desktop') return false;
+    return !!bloque.estilos?.responsive?.[vista]?.ocultar;
+  }
+
+  etiquetaAncho(ancho: AnchoBloque): string {
+    return { completo: '100%', mitad: '50%', tercio: '33%', dosTercios: '66%' }[ancho];
+  }
 
   alSoltar(evento: CdkDragDrop<Bloque[]>): void {
     if (evento.previousContainer.id === 'paleta-bloques') {
@@ -211,5 +397,59 @@ export class CanvasEditorComponent {
   accion(salida: { emit: (id: string) => void }, bloqueId: string, evento: Event): void {
     evento.stopPropagation();
     salida.emit(bloqueId);
+  }
+
+  marcarInsercion(indice: number, evento: Event): void {
+    evento.stopPropagation();
+    this.puntoInsercionChange.emit(this.puntoInsercion() === indice ? null : indice);
+  }
+
+  // --- Resize de ancho por el borde derecho (snap a completo/mitad/tercio/dosTercios) ---
+
+  iniciarResize(bloque: Bloque, evento: PointerEvent): void {
+    evento.preventDefault();
+    evento.stopPropagation();
+    this.bloqueEnResize = bloque;
+    this.resize.set({ bloqueId: bloque.id, ancho: this.anchoActual(bloque.estilos) });
+    (evento.target as HTMLElement).setPointerCapture?.(evento.pointerId);
+  }
+
+  moverResize(evento: PointerEvent): void {
+    const bloque = this.bloqueEnResize;
+    if (!bloque) return;
+    evento.preventDefault();
+    const canvas = this.host.nativeElement.querySelector('.canvas') as HTMLElement;
+    const rect = canvas.getBoundingClientRect();
+    const fraccion = (evento.clientX - rect.left) / rect.width;
+    const ancho = SNAPS.find((snap) => fraccion <= snap.max)!.ancho;
+    if (this.resize()?.ancho !== ancho) this.resize.set({ bloqueId: bloque.id, ancho });
+  }
+
+  soltarResize(): void {
+    const bloque = this.bloqueEnResize;
+    const resize = this.resize();
+    this.bloqueEnResize = null;
+    this.resize.set(null);
+    if (!bloque || !resize) return;
+    if (resize.ancho === this.anchoActual(bloque.estilos)) return;
+    this.bloqueChange.emit({ ...bloque, estilos: this.conAncho(bloque.estilos, resize.ancho) });
+  }
+
+  private anchoActual(estilos?: EstilosBloque): AnchoBloque {
+    const vista = this.viewport();
+    if (vista !== 'desktop') {
+      const override = estilos?.responsive?.[vista]?.anchoBloque;
+      if (override) return override;
+    }
+    return estilos?.anchoBloque ?? 'completo';
+  }
+
+  /** En desktop muta la base; en tablet/movil escribe el override de esa vista. */
+  private conAncho(estilos: EstilosBloque | undefined, ancho: AnchoBloque): EstilosBloque {
+    const vista = this.viewport();
+    if (vista === 'desktop') return { ...estilos, anchoBloque: ancho };
+    const responsive = { ...estilos?.responsive };
+    responsive[vista] = { ...responsive[vista], anchoBloque: ancho };
+    return { ...estilos, responsive };
   }
 }

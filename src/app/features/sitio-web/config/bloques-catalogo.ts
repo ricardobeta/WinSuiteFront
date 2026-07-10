@@ -1,14 +1,26 @@
 import { Bloque, TipoBloque } from '@winsuite/bloques';
 
+export type CategoriaBloque = 'estructura' | 'contenido' | 'comercio' | 'avanzado';
+
+export const CATEGORIAS_BLOQUES: { id: CategoriaBloque; nombre: string }[] = [
+  { id: 'estructura', nombre: 'Estructura' },
+  { id: 'contenido', nombre: 'Contenido' },
+  { id: 'comercio', nombre: 'Comercio' },
+  { id: 'avanzado', nombre: 'Avanzado' },
+];
+
 /**
  * Catalogo de bloques disponibles en la paleta del editor (patron DASHBOARD_WIDGETS).
  * `crearPorDefecto` fabrica la instancia inicial al soltar/agregar el bloque.
+ * NOTA: el bloque 'columnas' salio de la paleta (redundante con bloques lado a lado +
+ * pizarron); el renderer y los schemas lo siguen soportando para sitios existentes.
  */
 export interface DefinicionBloque {
   tipo: TipoBloque;
   nombre: string;
   icono: string;
   descripcion: string;
+  categoria: CategoriaBloque;
   /** Solo disponible en sitios tipo ecommerce. */
   soloEcommerce?: boolean;
   crearPorDefecto: (id: string) => Bloque;
@@ -17,6 +29,7 @@ export interface DefinicionBloque {
 export const BLOQUES_CATALOGO: DefinicionBloque[] = [
   {
     tipo: 'header',
+    categoria: 'estructura',
     nombre: 'Encabezado',
     icono: 'web_asset',
     descripcion: 'Logo, navegacion y carrito.',
@@ -32,6 +45,7 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
   },
   {
     tipo: 'hero',
+    categoria: 'estructura',
     nombre: 'Banner principal',
     icono: 'panorama',
     descripcion: 'Titulo grande con imagen de fondo y boton.',
@@ -47,6 +61,7 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
   },
   {
     tipo: 'carrusel',
+    categoria: 'contenido',
     nombre: 'Carrusel',
     icono: 'view_carousel',
     descripcion: 'Imagenes rotativas con titulo y enlace.',
@@ -60,6 +75,7 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
   },
   {
     tipo: 'productos',
+    categoria: 'comercio',
     nombre: 'Productos',
     icono: 'shopping_bag',
     descripcion: 'Vitrina de productos del inventario.',
@@ -76,45 +92,8 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
     }),
   },
   {
-    tipo: 'columnas',
-    nombre: 'Columnas',
-    icono: 'view_column',
-    descripcion: 'Seccion con 2-4 columnas: combina textos, imagenes y botones a tu gusto.',
-    crearPorDefecto: (id) => ({
-      id,
-      visible: true,
-      tipo: 'columnas',
-      columnas: [
-        {
-          id: `${id}-c1`,
-          elementos: [
-            { id: `${id}-e1`, tipo: 'texto', contenido: 'Escribe aqui tu contenido...' },
-            {
-              id: `${id}-e2`,
-              tipo: 'boton',
-              texto: 'Saber mas',
-              enlace: '#',
-              variante: 'primario',
-            },
-          ],
-        },
-        {
-          id: `${id}-c2`,
-          elementos: [
-            {
-              id: `${id}-e3`,
-              tipo: 'imagen',
-              url: 'https://placehold.co/600x400?text=Imagen',
-              alt: 'Imagen',
-            },
-          ],
-        },
-      ],
-      alineacionVertical: 'centro',
-    }),
-  },
-  {
     tipo: 'lienzo',
+    categoria: 'estructura',
     nombre: 'Pizarron',
     icono: 'gesture',
     descripcion: 'Lienzo libre: arrastra textos, imagenes y botones a cualquier posicion.',
@@ -165,6 +144,7 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
   },
   {
     tipo: 'texto',
+    categoria: 'contenido',
     nombre: 'Texto',
     icono: 'notes',
     descripcion: 'Parrafo de texto libre.',
@@ -178,6 +158,7 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
   },
   {
     tipo: 'imagen',
+    categoria: 'contenido',
     nombre: 'Imagen',
     icono: 'image',
     descripcion: 'Imagen a lo ancho del contenido.',
@@ -191,6 +172,7 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
   },
   {
     tipo: 'galeria',
+    categoria: 'contenido',
     nombre: 'Galeria',
     icono: 'grid_view',
     descripcion: 'Cuadricula de imagenes.',
@@ -208,6 +190,7 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
   },
   {
     tipo: 'video',
+    categoria: 'contenido',
     nombre: 'Video',
     icono: 'smart_display',
     descripcion: 'Video de YouTube incrustado.',
@@ -221,6 +204,7 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
   },
   {
     tipo: 'boton',
+    categoria: 'contenido',
     nombre: 'Boton',
     icono: 'smart_button',
     descripcion: 'Boton de llamada a la accion.',
@@ -237,6 +221,7 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
   },
   {
     tipo: 'testimonios',
+    categoria: 'contenido',
     nombre: 'Testimonios',
     icono: 'reviews',
     descripcion: 'Comentarios de clientes con estrellas.',
@@ -256,6 +241,7 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
   },
   {
     tipo: 'metodos-pago',
+    categoria: 'comercio',
     nombre: 'Metodos de pago',
     icono: 'payments',
     descripcion: 'Formas de pago que aceptas.',
@@ -269,6 +255,7 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
   },
   {
     tipo: 'formulario',
+    categoria: 'comercio',
     nombre: 'Formulario',
     icono: 'list_alt',
     descripcion: 'Formulario personalizado de contacto o leads.',
@@ -289,6 +276,7 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
   },
   {
     tipo: 'mapa',
+    categoria: 'contenido',
     nombre: 'Mapa y contacto',
     icono: 'location_on',
     descripcion: 'Ubicacion, direccion y horario.',
@@ -304,6 +292,7 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
   },
   {
     tipo: 'footer',
+    categoria: 'estructura',
     nombre: 'Pie de pagina',
     icono: 'call_to_action',
     descripcion: 'Texto legal y redes sociales.',
@@ -314,6 +303,36 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
       texto: '© Mi negocio. Todos los derechos reservados.',
       redes: [],
       estilos: { paddingY: 'compacto' },
+    }),
+  },
+  {
+    tipo: 'pago',
+    categoria: 'comercio',
+    nombre: 'Boton de pago',
+    icono: 'point_of_sale',
+    descripcion: 'Lleva a tu pagina de pago (configura los metodos en la pestaña Pagos).',
+    crearPorDefecto: (id) => ({
+      id,
+      visible: true,
+      tipo: 'pago',
+      titulo: 'Paga en linea',
+      texto: 'Elige tu metodo de pago preferido: tarjeta, transferencia o QR.',
+      textoBoton: 'Pagar ahora',
+    }),
+  },
+  {
+    tipo: 'html',
+    categoria: 'avanzado',
+    nombre: 'HTML / JS',
+    icono: 'code',
+    descripcion: 'Incrusta codigo de terceros: contadores, cuentas regresivas, widgets.',
+    crearPorDefecto: (id) => ({
+      id,
+      visible: true,
+      tipo: 'html',
+      codigo:
+        '<div style="font-family: sans-serif; text-align: center; padding: 20px;">Pega aqui tu codigo HTML/JS</div>',
+      altura: 200,
     }),
   },
 ];

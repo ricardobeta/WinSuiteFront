@@ -15,6 +15,8 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 import {
+  BarraTextoComponent,
+  BarraTextoService,
   Bloque,
   CATALOGO_PRODUCTOS,
   ContenidoSitio,
@@ -22,8 +24,11 @@ import {
   PICKER_IMAGEN,
   PaginaDoc,
   PickerImagen,
+  SCHEMA_VERSION_SITIO,
   SitioConfig,
   TemaSitio,
+  VIEWPORT_ACTIVO,
+  Viewport,
   slugify,
   temaACssVars,
   urlGoogleFonts,
@@ -43,8 +48,6 @@ import { CanvasEditorComponent } from '../../components/canvas-editor/canvas-edi
 import { PanelPropiedadesComponent } from '../../components/panel-propiedades/panel-propiedades.component';
 import { PanelTemaComponent } from '../../components/panel-tema/panel-tema.component';
 
-type Viewport = 'desktop' | 'tablet' | 'movil';
-
 const AUTOSAVE_MS = 1500;
 
 @Component({
@@ -55,6 +58,8 @@ const AUTOSAVE_MS = 1500;
     CatalogoEditorAdapter,
     { provide: CATALOGO_PRODUCTOS, useExisting: CatalogoEditorAdapter },
     { provide: MODO_RENDER, useValue: 'editor' },
+    // Vista activa compartida con los bloques de la lib (edicion responsive por vista).
+    { provide: VIEWPORT_ACTIVO, useFactory: () => signal<Viewport>('desktop') },
     {
       // Los bloques piden imagenes con este puerto: abre el popup compartido de archivos
       // de winsuite (buscar/reutilizar/subir) y resuelve con la URL elegida.
@@ -89,7 +94,11 @@ const AUTOSAVE_MS = 1500;
     CanvasEditorComponent,
     PanelPropiedadesComponent,
     PanelTemaComponent,
+    BarraTextoComponent,
   ],
+  host: {
+    '(document:keydown)': 'alTeclear($event)',
+  },
   template: `
     <div class="editor">
       <div class="toolbar">
@@ -147,6 +156,9 @@ const AUTOSAVE_MS = 1500;
         >
           <mat-icon>smartphone</mat-icon>
         </button>
+        @if (viewport() !== 'desktop') {
+          <span class="badge-vista">Editando vista {{ viewport() }}</span>
+        }
 
         <span class="estado-guardado">
           @if (guardando()) {
@@ -192,6 +204,9 @@ const AUTOSAVE_MS = 1500;
                   [nombreNegocio]="config()?.nombre ?? ''"
                   [logoUrl]="c.tema.logoUrl"
                   [paginas]="listaPaginas()"
+                  [viewport]="viewport()"
+                  [puntoInsercion]="puntoInsercion()"
+                  (puntoInsercionChange)="puntoInsercion.set($event)"
                   (seleccionar)="seleccionId.set($event)"
                   (bloqueChange)="actualizarBloque($event)"
                   (reordenar)="reordenarBloque($event.desde, $event.hasta)"
@@ -217,6 +232,7 @@ const AUTOSAVE_MS = 1500;
               <app-panel-propiedades
                 [bloque]="bloque"
                 [paginas]="listaPaginas()"
+                [viewport]="viewport()"
                 (bloqueChange)="actualizarBloque($event)"
               />
             } @else {
@@ -228,6 +244,9 @@ const AUTOSAVE_MS = 1500;
           }
         </aside>
       </div>
+
+      <!-- Barra de formato flotante: se abre al enfocar cualquier texto del canvas -->
+      <ws-barra-texto />
     </div>
   `,
   styles: `
@@ -268,6 +287,17 @@ const AUTOSAVE_MS = 1500;
       color: #2563eb;
       background: #eff6ff;
       border-radius: 8px;
+    }
+    .badge-vista {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #1d4ed8;
+      background: #eff6ff;
+      border-radius: 999px;
+      padding: 4px 10px;
+      margin-left: 4px;
     }
     .estado-guardado {
       margin-left: auto;
@@ -339,8 +369,11 @@ export class EditorPageComponent {
   readonly contenido = signal<ContenidoSitio | null>(null);
   readonly paginaActualId = signal('home');
   readonly seleccionId = signal<string | null>(null);
-  readonly viewport = signal<Viewport>('desktop');
+  /** Vista activa; es el MISMO signal que inyectan los bloques via VIEWPORT_ACTIVO. */
+  readonly viewport = inject(VIEWPORT_ACTIVO) as ReturnType<typeof signal<Viewport>>;
+  private readonly barraTexto = inject(BarraTextoService);
   readonly panel = signal<'propiedades' | 'tema'>('propiedades');
+  readonly puntoInsercion = signal<number | null>(null);
   readonly guardando = signal(false);
   readonly pendienteGuardar = signal(false);
   readonly publicando = signal(false);
@@ -398,11 +431,46 @@ export class EditorPageComponent {
       if (enlace.href !== url) enlace.href = url;
     });
 
+    // La barra de texto flotante se cierra al cambiar de bloque, pagina o vista.
+    effect(() => {
+      this.seleccionId();
+      this.paginaActualId();
+      this.viewport();
+      this.barraTexto.cerrar();
+    });
+
     // Guardado inmediato al salir del editor si quedo algo pendiente.
     this.destroyRef.onDestroy(() => {
       if (this.timerAutosave) clearTimeout(this.timerAutosave);
       if (this.pendienteGuardar()) void this.guardarAhora();
+      this.barraTexto.cerrar();
     });
+  }
+
+  /** Atajos: Supr elimina, Ctrl+D duplica, Ctrl+Z/Ctrl+Y deshacer/rehacer. */
+  alTeclear(evento: KeyboardEvent): void {
+    const objetivo = evento.target as HTMLElement;
+    // Nunca interceptar mientras se escribe (inputs del panel o textos contenteditable).
+    if (
+      objetivo.isContentEditable ||
+      ['INPUT', 'TEXTAREA', 'SELECT'].includes(objetivo.tagName)
+    ) {
+      return;
+    }
+    const ctrl = evento.ctrlKey || evento.metaKey;
+    if (ctrl && evento.key.toLowerCase() === 'z' && !evento.shiftKey) {
+      evento.preventDefault();
+      this.deshacer();
+    } else if (ctrl && (evento.key.toLowerCase() === 'y' || (evento.key.toLowerCase() === 'z' && evento.shiftKey))) {
+      evento.preventDefault();
+      this.rehacer();
+    } else if (ctrl && evento.key.toLowerCase() === 'd' && this.seleccionId()) {
+      evento.preventDefault();
+      this.duplicarBloque(this.seleccionId()!);
+    } else if (evento.key === 'Delete' && this.seleccionId()) {
+      evento.preventDefault();
+      this.eliminarBloque(this.seleccionId()!);
+    }
   }
 
   private async cargar(sitioId: string): Promise<void> {
@@ -470,8 +538,10 @@ export class EditorPageComponent {
     }
   }
 
+  /** Click en la paleta: inserta en el punto marcado con "+" (o al final). */
   agregarBloque(definicion: DefinicionBloque): void {
-    this.insertarBloque(definicion, this.bloquesActuales().length);
+    const indice = this.puntoInsercion() ?? this.bloquesActuales().length;
+    this.insertarBloque(definicion, indice);
   }
 
   insertarBloque(definicion: DefinicionBloque, indice: number): void {
@@ -482,6 +552,7 @@ export class EditorPageComponent {
       return copia;
     });
     this.seleccionId.set(bloque.id);
+    this.puntoInsercion.set(null);
   }
 
   reordenarBloque(desde: number, hasta: number): void {
@@ -530,6 +601,7 @@ export class EditorPageComponent {
   cambiarPagina(evento: Event): void {
     this.paginaActualId.set((evento.target as HTMLSelectElement).value);
     this.seleccionId.set(null);
+    this.puntoInsercion.set(null);
   }
 
   nuevaPagina(): void {
@@ -537,7 +609,7 @@ export class EditorPageComponent {
     if (!titulo?.trim()) return;
     const id = `p-${Date.now().toString(36)}`;
     const pagina: PaginaDoc = {
-      schemaVersion: 1,
+      schemaVersion: SCHEMA_VERSION_SITIO,
       id,
       slug: slugify(titulo),
       titulo: titulo.trim(),

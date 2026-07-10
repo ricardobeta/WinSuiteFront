@@ -1,9 +1,25 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { SlicePipe } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatIconModule } from '@angular/material/icon';
-import { Bloque, CATALOGO_PRODUCTOS, PaginaDoc } from '@winsuite/bloques';
+import {
+  Bloque,
+  CATALOGO_PRODUCTOS,
+  FondoGradiente,
+  OverridesResponsive,
+  PaginaDoc,
+  Viewport,
+} from '@winsuite/bloques';
 import { CategoriasService } from '../../../inventario/services/categorias.service';
 import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.component';
 
@@ -175,19 +191,20 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
             </select>
           </label>
           <h4>Formato</h4>
+          <p class="ayuda">Tip: haz click sobre el texto en el canvas y usa la barra flotante.</p>
           <div class="fila">
             <label>
-              Tamano
-              <select
-                [ngModel]="b.estiloTexto?.tamano ?? 'normal'"
-                (ngModelChange)="patchEstiloTexto({ tamano: $event })"
-              >
-                <option value="sm">Pequeno</option>
-                <option value="normal">Normal</option>
-                <option value="lg">Grande</option>
-                <option value="xl">Muy grande</option>
-                <option value="2xl">Gigante</option>
-              </select>
+              Tamano (px)
+              <input
+                type="number"
+                min="10"
+                max="120"
+                placeholder="17"
+                [ngModel]="b.estiloTexto?.tamanoPx"
+                (ngModelChange)="
+                  patchEstiloTexto({ tamanoPx: $event ? numero($event) : undefined, tamano: undefined })
+                "
+              />
             </label>
             <label>
               Color
@@ -238,16 +255,19 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
               <div class="item-lista columna">
                 <span class="mini-titulo">Texto: "{{ elemento.contenido | slice: 0 : 24 }}"</span>
                 <div class="fila">
-                  <select
-                    [ngModel]="elemento.estiloTexto?.tamano ?? 'normal'"
-                    (ngModelChange)="patchEstiloElementoLienzo(ei, { tamano: $event })"
-                  >
-                    <option value="sm">Pequeno</option>
-                    <option value="normal">Normal</option>
-                    <option value="lg">Grande</option>
-                    <option value="xl">Muy grande</option>
-                    <option value="2xl">Gigante</option>
-                  </select>
+                  <input
+                    type="number"
+                    min="10"
+                    max="120"
+                    placeholder="Tamano px"
+                    [ngModel]="elemento.estiloTexto?.tamanoPx"
+                    (ngModelChange)="
+                      patchEstiloElementoLienzo(ei, {
+                        tamanoPx: $event ? numero($event) : undefined,
+                        tamano: undefined,
+                      })
+                    "
+                  />
                   <input
                     type="color"
                     [ngModel]="elemento.estiloTexto?.color ?? '#1f2937'"
@@ -383,6 +403,56 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
           >
             Usar colores del tema
           </button>
+        }
+        @case ('html') {
+          <p class="ayuda">
+            Pega aqui el codigo HTML/JS de un servicio externo (contadores, cuentas regresivas,
+            widgets). Por seguridad corre aislado en el sitio publicado; en el editor solo se
+            muestra un marcador.
+          </p>
+          <label>
+            Codigo HTML/JS
+            <textarea
+              rows="10"
+              class="codigo"
+              spellcheck="false"
+              [ngModel]="b.codigo"
+              (ngModelChange)="patch({ codigo: $event })"
+            ></textarea>
+          </label>
+          <label>
+            Alto del recuadro ({{ b.altura }}px)
+            <input
+              type="range"
+              min="40"
+              max="1200"
+              step="20"
+              [ngModel]="b.altura"
+              (ngModelChange)="patch({ altura: numero($event) })"
+            />
+          </label>
+        }
+        @case ('pago') {
+          <p class="ayuda">
+            Este boton lleva a la pagina de pago de tu sitio (/pago), que muestra los metodos que
+            configures en la pestaña <b>Pagos</b>.
+          </p>
+          <label
+            >Titulo<input [ngModel]="b.titulo" (ngModelChange)="patch({ titulo: $event })"
+          /></label>
+          <label>
+            Texto
+            <textarea
+              rows="2"
+              [ngModel]="b.texto"
+              (ngModelChange)="patch({ texto: $event })"
+            ></textarea>
+          </label>
+          <label
+            >Texto del boton<input
+              [ngModel]="b.textoBoton"
+              (ngModelChange)="patch({ textoBoton: $event })"
+          /></label>
         }
         @case ('video') {
           <label>
@@ -768,50 +838,106 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       }
 
       <h4>Seccion</h4>
+      @if (viewport() !== 'desktop') {
+        <div class="badge-vista">
+          <mat-icon>{{ viewport() === 'movil' ? 'smartphone' : 'tablet_mac' }}</mat-icon>
+          <span
+            >Editando vista <b>{{ viewport() }}</b
+            >: ancho, espaciado y visibilidad se guardan solo para esta vista.</span
+          >
+        </div>
+        <label class="check">
+          <input
+            type="checkbox"
+            [ngModel]="overridesVp().ocultar ?? false"
+            (ngModelChange)="patchOverride({ ocultar: $event || undefined })"
+          />
+          Ocultar bloque en esta vista
+        </label>
+      }
+
       <label>
         Fondo
-        <div class="fila-fondo">
+        <select [ngModel]="tipoFondo()" (ngModelChange)="cambiarTipoFondo($event)">
+          <option value="tema">Del tema</option>
+          <option value="color">Color</option>
+          <option value="gradiente">Gradiente</option>
+          <option value="imagen">Imagen</option>
+        </select>
+      </label>
+      @switch (tipoFondo()) {
+        @case ('color') {
           <input
             type="color"
+            class="color-grande"
             [ngModel]="b.estilos?.fondo ?? '#ffffff'"
             (ngModelChange)="patchEstilos({ fondo: $event })"
           />
-          <button type="button" class="agregar" (click)="patchEstilos({ fondo: undefined })">
-            Fondo del tema
-          </button>
-        </div>
-      </label>
-      <div class="campo">
-        <span>Imagen de fondo</span>
-        <app-selector-imagen
-          [url]="b.estilos?.fondoImagenUrl"
-          (urlChange)="patchEstilos({ fondoImagenUrl: $event })"
-        />
-        @if (b.estilos?.fondoImagenUrl) {
-          <label class="check">
-            <input
-              type="checkbox"
-              [ngModel]="b.estilos?.fondoVelo ?? false"
-              (ngModelChange)="patchEstilos({ fondoVelo: $event || undefined })"
-            />
-            Oscurecer fondo (texto mas legible)
-          </label>
-          <button
-            type="button"
-            class="agregar"
-            (click)="patchEstilos({ fondoImagenUrl: undefined, fondoVelo: undefined })"
-          >
-            Quitar imagen de fondo
-          </button>
         }
-      </div>
+        @case ('gradiente') {
+          <div class="presets">
+            @for (preset of gradientes; track preset.nombre) {
+              <button
+                type="button"
+                class="preset"
+                [style.background]="cssGradiente(preset)"
+                [title]="preset.nombre"
+                (click)="aplicarGradiente(preset)"
+              ></button>
+            }
+          </div>
+          <div class="fila">
+            <label>
+              Desde
+              <input
+                type="color"
+                [ngModel]="b.estilos?.fondoGradiente?.desde ?? '#2563eb'"
+                (ngModelChange)="patchGradiente({ desde: $event })"
+              />
+            </label>
+            <label>
+              Hasta
+              <input
+                type="color"
+                [ngModel]="b.estilos?.fondoGradiente?.hasta ?? '#9333ea'"
+                (ngModelChange)="patchGradiente({ hasta: $event })"
+              />
+            </label>
+          </div>
+          <label>
+            Angulo ({{ b.estilos?.fondoGradiente?.angulo ?? 135 }}°)
+            <input
+              type="range"
+              min="0"
+              max="360"
+              step="15"
+              [ngModel]="b.estilos?.fondoGradiente?.angulo ?? 135"
+              (ngModelChange)="patchGradiente({ angulo: numero($event) })"
+            />
+          </label>
+        }
+        @case ('imagen') {
+          <div class="campo">
+            <app-selector-imagen
+              [url]="b.estilos?.fondoImagenUrl"
+              (urlChange)="patchEstilos({ fondoImagenUrl: $event })"
+            />
+            <label class="check">
+              <input
+                type="checkbox"
+                [ngModel]="b.estilos?.fondoVelo ?? false"
+                (ngModelChange)="patchEstilos({ fondoVelo: $event || undefined })"
+              />
+              Oscurecer fondo (texto mas legible)
+            </label>
+          </div>
+        }
+      }
+
       <div class="fila">
         <label>
           Espaciado
-          <select
-            [ngModel]="b.estilos?.paddingY ?? 'normal'"
-            (ngModelChange)="patchEstilos({ paddingY: $event })"
-          >
+          <select [ngModel]="espaciadoVp()" (ngModelChange)="cambiarEspaciado($event)">
             <option value="compacto">Compacto</option>
             <option value="normal">Normal</option>
             <option value="amplio">Amplio</option>
@@ -831,19 +957,22 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       </div>
       <label>
         Ancho del bloque (bloques lado a lado)
-        <select
-          [ngModel]="b.estilos?.anchoBloque ?? 'completo'"
-          (ngModelChange)="patchEstilos({ anchoBloque: $event })"
-        >
+        <select [ngModel]="anchoBloqueVp()" (ngModelChange)="cambiarAnchoBloque($event)">
           <option value="completo">Completo (100%)</option>
           <option value="mitad">Mitad (50%)</option>
           <option value="tercio">Un tercio (33%)</option>
           <option value="dosTercios">Dos tercios (66%)</option>
         </select>
       </label>
+      @if (viewport() !== 'desktop' && tieneOverridesVp()) {
+        <button type="button" class="agregar" (click)="quitarOverridesVp()">
+          <mat-icon>restart_alt</mat-icon> Restablecer esta vista como escritorio
+        </button>
+      }
       <p class="ayuda">
         Con "Mitad" o "Un tercio", el bloque se coloca junto al siguiente. En celulares bajan
-        automaticamente uno debajo de otro.
+        automaticamente uno debajo de otro (salvo que lo ajustes en la vista movil). Tambien puedes
+        arrastrar el borde derecho del bloque en el canvas.
       </p>
     </div>
   `,
@@ -985,6 +1114,50 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       opacity: 0.5;
       font-size: 0.75rem;
     }
+    .badge-vista {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #eff6ff;
+      color: #1d4ed8;
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-size: 0.78rem;
+    }
+    .badge-vista mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+    .color-grande {
+      width: 100%;
+      height: 34px;
+      padding: 2px;
+      border: 1px solid rgba(0, 0, 0, 0.15);
+      border-radius: 6px;
+      background: #fff;
+    }
+    .presets {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 5px;
+    }
+    .preset {
+      aspect-ratio: 1;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      border-radius: 6px;
+      cursor: pointer;
+      padding: 0;
+    }
+    .preset:hover {
+      outline: 2px solid #2563eb;
+      outline-offset: 1px;
+    }
+    .codigo {
+      font-family: monospace;
+      font-size: 0.78rem;
+    }
   `,
 })
 export class PanelPropiedadesComponent {
@@ -993,10 +1166,147 @@ export class PanelPropiedadesComponent {
 
   readonly bloque = input.required<Bloque>();
   readonly paginas = input<PaginaDoc[]>([]);
+  /** Vista activa del editor: en tablet/movil los ajustes responsive van a overrides. */
+  readonly viewport = input<Viewport>('desktop');
   readonly bloqueChange = output<Bloque>();
 
   readonly categorias = toSignal(this.categoriasService.getCategorias(), { initialValue: [] });
   readonly productosCatalogo = computed(() => this.catalogo.productos());
+
+  readonly gradientes: (FondoGradiente & { nombre: string })[] = [
+    { nombre: 'Oceano', desde: '#2563eb', hasta: '#06b6d4', angulo: 135 },
+    { nombre: 'Atardecer', desde: '#f97316', hasta: '#e11d48', angulo: 135 },
+    { nombre: 'Uva', desde: '#7c3aed', hasta: '#db2777', angulo: 135 },
+    { nombre: 'Bosque', desde: '#059669', hasta: '#84cc16', angulo: 135 },
+    { nombre: 'Noche', desde: '#0f172a', hasta: '#334155', angulo: 160 },
+    { nombre: 'Dorado', desde: '#f59e0b', hasta: '#fef3c7', angulo: 135 },
+    { nombre: 'Rosa', desde: '#fda4af', hasta: '#fdf2f8', angulo: 160 },
+    { nombre: 'Menta', desde: '#a7f3d0', hasta: '#ecfeff', angulo: 160 },
+  ];
+
+  /** Tipo de fondo elegido manualmente (mientras aun no hay datos que lo delaten). */
+  private readonly tipoFondoManual = signal<'tema' | 'color' | 'gradiente' | 'imagen' | null>(null);
+
+  constructor() {
+    // Al cambiar de bloque seleccionado, el tipo de fondo vuelve a derivarse de sus datos.
+    effect(() => {
+      this.bloque().id;
+      this.tipoFondoManual.set(null);
+    });
+  }
+
+  tipoFondo(): 'tema' | 'color' | 'gradiente' | 'imagen' {
+    const manual = this.tipoFondoManual();
+    if (manual) return manual;
+    const estilos = this.bloque().estilos;
+    if (estilos?.fondoImagenUrl) return 'imagen';
+    if (estilos?.fondoGradiente) return 'gradiente';
+    if (estilos?.fondo) return 'color';
+    return 'tema';
+  }
+
+  cambiarTipoFondo(tipo: 'tema' | 'color' | 'gradiente' | 'imagen'): void {
+    this.tipoFondoManual.set(tipo);
+    if (tipo === 'tema') {
+      this.patchEstilos({
+        fondo: undefined,
+        fondoGradiente: undefined,
+        fondoImagenUrl: undefined,
+        fondoVelo: undefined,
+      });
+    } else if (tipo === 'color') {
+      this.patchEstilos({ fondoGradiente: undefined, fondoImagenUrl: undefined, fondoVelo: undefined });
+    } else if (tipo === 'gradiente') {
+      const { nombre: _n, ...preset } = this.gradientes[0];
+      this.patchEstilos({ fondoGradiente: preset, fondoImagenUrl: undefined, fondoVelo: undefined });
+    } else {
+      this.patchEstilos({ fondoGradiente: undefined });
+    }
+  }
+
+  cssGradiente(gradiente: FondoGradiente): string {
+    return `linear-gradient(${gradiente.angulo}deg, ${gradiente.desde}, ${gradiente.hasta})`;
+  }
+
+  aplicarGradiente(preset: FondoGradiente & { nombre: string }): void {
+    const { nombre: _n, ...gradiente } = preset;
+    this.patchEstilos({ fondoGradiente: gradiente });
+  }
+
+  patchGradiente(cambios: Partial<FondoGradiente>): void {
+    const actual = this.bloque().estilos?.fondoGradiente ?? {
+      desde: '#2563eb',
+      hasta: '#9333ea',
+      angulo: 135,
+    };
+    this.patchEstilos({ fondoGradiente: { ...actual, ...cambios } });
+  }
+
+  // --- Overrides responsive de la vista activa (tablet/movil) ---
+
+  overridesVp(): OverridesResponsive {
+    const vista = this.viewport();
+    if (vista === 'desktop') return {};
+    return this.bloque().estilos?.responsive?.[vista] ?? {};
+  }
+
+  tieneOverridesVp(): boolean {
+    return Object.keys(this.overridesVp()).length > 0;
+  }
+
+  patchOverride(cambios: Partial<OverridesResponsive>): void {
+    const vista = this.viewport();
+    if (vista === 'desktop') return;
+    const override: Record<string, unknown> = { ...this.overridesVp(), ...cambios };
+    for (const clave of Object.keys(override)) {
+      if (override[clave] === undefined) delete override[clave];
+    }
+    const responsive = { ...this.bloque().estilos?.responsive };
+    if (Object.keys(override).length > 0) {
+      responsive[vista] = override as OverridesResponsive;
+    } else {
+      delete responsive[vista];
+    }
+    this.patchEstilos({
+      responsive: Object.keys(responsive).length > 0 ? responsive : undefined,
+    });
+  }
+
+  quitarOverridesVp(): void {
+    const vista = this.viewport();
+    if (vista === 'desktop') return;
+    const responsive = { ...this.bloque().estilos?.responsive };
+    delete responsive[vista];
+    this.patchEstilos({
+      responsive: Object.keys(responsive).length > 0 ? responsive : undefined,
+    });
+  }
+
+  espaciadoVp(): string {
+    if (this.viewport() === 'desktop') return this.b.estilos?.paddingY ?? 'normal';
+    return this.overridesVp().paddingY ?? this.b.estilos?.paddingY ?? 'normal';
+  }
+
+  cambiarEspaciado(valor: 'compacto' | 'normal' | 'amplio'): void {
+    if (this.viewport() === 'desktop') {
+      this.patchEstilos({ paddingY: valor });
+    } else {
+      this.patchOverride({ paddingY: valor });
+    }
+  }
+
+  anchoBloqueVp(): string {
+    if (this.viewport() === 'desktop') return this.b.estilos?.anchoBloque ?? 'completo';
+    return this.overridesVp().anchoBloque ?? this.b.estilos?.anchoBloque ?? 'completo';
+  }
+
+  cambiarAnchoBloque(valor: 'completo' | 'mitad' | 'tercio' | 'dosTercios'): void {
+    if (this.viewport() === 'desktop') {
+      this.patchEstilos({ anchoBloque: valor });
+    } else {
+      this.patchOverride({ anchoBloque: valor });
+    }
+  }
 
   readonly metodosDisponibles = [
     { id: 'efectivo' as const, nombre: 'Efectivo' },
