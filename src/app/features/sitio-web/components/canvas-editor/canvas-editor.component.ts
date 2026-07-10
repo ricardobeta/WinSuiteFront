@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { CdkDrag, CdkDragDrop, CdkDragHandle, CdkDropList } from '@angular/cdk/drag-drop';
 import { MatIconModule } from '@angular/material/icon';
-import { Bloque, BloqueRenderComponent, PaginaDoc } from '@winsuite/bloques';
+import { Bloque, BloqueRenderComponent, PaginaDoc, claseAnchoBloque } from '@winsuite/bloques';
 import { DefinicionBloque } from '../../config/bloques-catalogo';
 
 /**
@@ -15,21 +15,22 @@ import { DefinicionBloque } from '../../config/bloques-catalogo';
   imports: [CdkDropList, CdkDrag, CdkDragHandle, MatIconModule, BloqueRenderComponent],
   template: `
     <div
-      class="canvas ws-sitio"
+      class="canvas ws-sitio ws-fila"
       cdkDropList
       id="canvas-bloques"
+      cdkDropListOrientation="mixed"
       [cdkDropListData]="bloques()"
       (cdkDropListDropped)="alSoltar($event)"
     >
       @if (bloques().length === 0) {
-        <div class="canvas-vacio">
+        <div class="canvas-vacio ws-item">
           <mat-icon>swipe_left</mat-icon>
           <p>Arrastra bloques desde la paleta o haz click en uno para agregarlo.</p>
         </div>
       }
       @for (bloque of bloques(); track bloque.id; let i = $index) {
         <div
-          class="envoltorio"
+          class="envoltorio {{ claseAncho(bloque.estilos?.anchoBloque) }}"
           cdkDrag
           [class.seleccionado]="bloque.id === seleccionId()"
           [class.oculto]="!bloque.visible"
@@ -177,6 +178,8 @@ export class CanvasEditorComponent {
   readonly nombreNegocio = input<string>('');
   readonly logoUrl = input<string | undefined>(undefined);
   readonly paginas = input<PaginaDoc[]>([]);
+
+  protected readonly claseAncho = claseAnchoBloque;
 
   readonly seleccionar = output<string>();
   /** Ediciones inline hechas dentro del bloque (textos, elementos de columnas). */

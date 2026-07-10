@@ -818,7 +818,7 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
           </select>
         </label>
         <label>
-          Ancho
+          Ancho del contenido
           <select
             [ngModel]="b.estilos?.anchoContenido ?? 'normal'"
             (ngModelChange)="patchEstilos({ anchoContenido: $event })"
@@ -829,6 +829,22 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
           </select>
         </label>
       </div>
+      <label>
+        Ancho del bloque (bloques lado a lado)
+        <select
+          [ngModel]="b.estilos?.anchoBloque ?? 'completo'"
+          (ngModelChange)="patchEstilos({ anchoBloque: $event })"
+        >
+          <option value="completo">Completo (100%)</option>
+          <option value="mitad">Mitad (50%)</option>
+          <option value="tercio">Un tercio (33%)</option>
+          <option value="dosTercios">Dos tercios (66%)</option>
+        </select>
+      </label>
+      <p class="ayuda">
+        Con "Mitad" o "Un tercio", el bloque se coloca junto al siguiente. En celulares bajan
+        automaticamente uno debajo de otro.
+      </p>
     </div>
   `,
   styles: `
