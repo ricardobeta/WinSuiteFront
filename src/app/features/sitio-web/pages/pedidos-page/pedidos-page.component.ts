@@ -31,11 +31,21 @@ import { PedidosWebService } from '../../services/pedidos-web.service';
                   [class]="'estado-' + pedido.estado"
                 >
                   <option value="nuevo">Nuevo</option>
+                  <option value="pagado">Pagado</option>
                   <option value="confirmado">Confirmado</option>
                   <option value="entregado">Entregado</option>
                   <option value="cancelado">Cancelado</option>
                 </select>
               </div>
+              @if (pedido.pago; as pago) {
+                <div class="pago-info">
+                  💳 Pagado con {{ pago.metodo }}
+                  @if (pago.autorizacion) {
+                    · autorizacion {{ pago.autorizacion }}
+                  }
+                  · {{ pago.pagadoEn | date: 'dd/MM/yyyy HH:mm' }}
+                </div>
+              }
               <div class="detalle">
                 <span>📞 {{ pedido.cliente.telefono }}</span>
                 @if (pedido.cliente.direccion) {
@@ -101,6 +111,19 @@ import { PedidosWebService } from '../../services/pedidos-web.service';
     }
     .estado-nuevo {
       background: #fef3c7;
+    }
+    .estado-pagado {
+      background: #dcfce7;
+      font-weight: 700;
+    }
+    .pago-info {
+      margin-top: 6px;
+      font-size: 0.82rem;
+      color: #15803d;
+      background: #f0fdf4;
+      border-radius: 8px;
+      padding: 5px 10px;
+      display: inline-block;
     }
     .estado-confirmado {
       background: #dbeafe;
