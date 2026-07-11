@@ -4,9 +4,12 @@ import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
+import { firstValueFrom } from 'rxjs';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { CampoFormulario, FormularioDef } from '@winsuite/bloques';
 import { FormulariosService } from '../../services/formularios.service';
+import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-sitio.component';
 
 /**
  * Formularios prehechos de la empresa: lista + editor de campos. El widget 'formulario'
@@ -332,6 +335,7 @@ import { FormulariosService } from '../../services/formularios.service';
 export class FormulariosPageComponent {
   private readonly formulariosService = inject(FormulariosService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
 
   readonly formularios = toSignal(this.formulariosService.getFormularios(), { initialValue: [] });
   readonly seleccionId = signal<string | null>(null);
@@ -348,8 +352,11 @@ export class FormulariosPageComponent {
     this.sucio.set(true);
   }
 
-  crear(): void {
-    const nombre = prompt('Nombre del formulario (ej. Contacto):');
+  async crear(): Promise<void> {
+    const nombre = await firstValueFrom(this.dialog.open(DialogoSitioComponent, {
+      data: { titulo: 'Nuevo formulario', etiqueta: 'Nombre del formulario', valor: 'Contacto', requerido: true, maxLength: 80 },
+      width: '460px',
+    }).afterClosed());
     if (!nombre?.trim()) return;
     const formulario = this.formulariosService.crearFormulario(nombre.trim());
     void this.formulariosService
@@ -417,12 +424,14 @@ export class FormulariosPageComponent {
     if (f) void this.guardarBorrador(f);
   }
 
-  eliminar(): void {
+  async eliminar(): Promise<void> {
     const f = this.borrador();
     if (!f) return;
-    if (!confirm(`¿Eliminar el formulario "${f.nombre}"? Los bloques que lo usen quedaran vacios.`)) {
-      return;
-    }
+    const confirmado = await firstValueFrom(this.dialog.open(DialogoSitioComponent, {
+      data: { titulo: 'Eliminar formulario', mensaje: `¿Eliminar el formulario "${f.nombre}"? Los bloques que lo usen quedarán vacíos.`, confirmar: 'Eliminar', peligro: true },
+      width: '500px',
+    }).afterClosed());
+    if (!confirmado) return;
     void this.formulariosService
       .eliminar(f.formularioId)
       .then(() => this.seleccionId.set(null))

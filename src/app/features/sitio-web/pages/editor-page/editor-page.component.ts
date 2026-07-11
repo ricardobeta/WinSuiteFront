@@ -49,6 +49,7 @@ import { PaletaBloquesComponent } from '../../components/paleta-bloques/paleta-b
 import { CanvasEditorComponent } from '../../components/canvas-editor/canvas-editor.component';
 import { PanelPropiedadesComponent } from '../../components/panel-propiedades/panel-propiedades.component';
 import { PanelTemaComponent } from '../../components/panel-tema/panel-tema.component';
+import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-sitio.component';
 
 const AUTOSAVE_MS = 1500;
 
@@ -362,6 +363,7 @@ export class EditorPageComponent {
   private readonly borradorService = inject(SitioBorradorService);
   private readonly publicacionService = inject(SitioPublicacionService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
   private readonly documento = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly historial = inject(EditorHistorialService);
@@ -492,13 +494,45 @@ export class EditorPageComponent {
     ]);
     this.config.set(config);
     if (borrador) {
-      this.contenido.set(borrador);
-      this.historial.reiniciar(borrador);
-      const primeraPagina = Object.keys(borrador.paginas)[0];
-      if (!borrador.paginas[this.paginaActualId()] && primeraPagina) {
+      const preparado = this.asegurarPaginasSistema(borrador, config?.tipo === 'ecommerce');
+      this.contenido.set(preparado);
+      this.historial.reiniciar(preparado);
+      const primeraPagina = Object.keys(preparado.paginas)[0];
+      if (!preparado.paginas[this.paginaActualId()] && primeraPagina) {
         this.paginaActualId.set(primeraPagina);
       }
+      if (preparado !== borrador) this.programarAutosave();
     }
+  }
+
+  private asegurarPaginasSistema(contenido: ContenidoSitio, incluirProducto: boolean): ContenidoSitio {
+    const paginas = { ...contenido.paginas };
+    let cambio = false;
+    const header = (): Bloque => ({
+      id: nuevoIdBloque(), visible: true, tipo: 'header', mostrarLogo: true,
+      enlaces: [], mostrarCarrito: incluirProducto, estilos: { paddingY: 'compacto' },
+    });
+    const footer = (): Bloque => ({
+      id: nuevoIdBloque(), visible: true, tipo: 'footer', texto: '© Mi negocio', redes: [],
+      estilos: { paddingY: 'compacto' },
+    });
+    if (incluirProducto && !paginas['__producto']) {
+      paginas['__producto'] = {
+        schemaVersion: SCHEMA_VERSION_SITIO, id: '__producto', slug: '__producto',
+        titulo: 'Diseño de producto', actualizadoEn: Date.now(),
+        bloques: [header(), { id: '__zona-producto', visible: true, tipo: 'sistema-producto' }, footer()],
+      };
+      cambio = true;
+    }
+    if (!paginas['__pago']) {
+      paginas['__pago'] = {
+        schemaVersion: SCHEMA_VERSION_SITIO, id: '__pago', slug: '__pago',
+        titulo: 'Diseño de pago', actualizadoEn: Date.now(),
+        bloques: [header(), { id: '__zona-pago', visible: true, tipo: 'sistema-pago' }, footer()],
+      };
+      cambio = true;
+    }
+    return cambio ? { ...contenido, paginas } : contenido;
   }
 
   /** Toda mutacion pasa por aqui: nuevo contenido -> historial -> autosave con debounce. */
@@ -577,6 +611,7 @@ export class EditorPageComponent {
   }
 
   duplicarBloque(bloqueId: string): void {
+    if (bloqueId.startsWith('__zona-')) return;
     this.mutarBloques((bloques) => {
       const indice = bloques.findIndex((bloque) => bloque.id === bloqueId);
       if (indice < 0) return bloques;
@@ -588,11 +623,16 @@ export class EditorPageComponent {
   }
 
   eliminarBloque(bloqueId: string): void {
+    if (bloqueId.startsWith('__zona-')) {
+      this.snackBar.open('La zona funcional de esta página no se puede eliminar', 'OK', { duration: 3000 });
+      return;
+    }
     if (this.seleccionId() === bloqueId) this.seleccionId.set(null);
     this.mutarBloques((bloques) => bloques.filter((bloque) => bloque.id !== bloqueId));
   }
 
   alternarVisible(bloqueId: string): void {
+    if (bloqueId.startsWith('__zona-')) return;
     this.mutarBloques((bloques) =>
       bloques.map((bloque) =>
         bloque.id === bloqueId ? { ...bloque, visible: !bloque.visible } : bloque,
@@ -616,8 +656,13 @@ export class EditorPageComponent {
     this.puntoInsercion.set(null);
   }
 
-  nuevaPagina(): void {
-    const titulo = prompt('Nombre de la nueva pagina:');
+  async nuevaPagina(): Promise<void> {
+    const titulo = await firstValueFrom(
+      this.dialog.open(DialogoSitioComponent, {
+        data: { titulo: 'Nueva página', etiqueta: 'Nombre de la página', requerido: true, maxLength: 80 },
+        width: '460px',
+      }).afterClosed(),
+    );
     if (!titulo?.trim()) return;
     const id = `p-${Date.now().toString(36)}`;
     const pagina: PaginaDoc = {

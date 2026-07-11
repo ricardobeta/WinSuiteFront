@@ -56,7 +56,10 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
       titulo: 'Tu titulo aqui',
       subtitulo: 'Describe tu propuesta de valor en una frase.',
       alineacion: 'centro',
-      cta: { texto: 'Conocer mas', enlace: '#' },
+      cta: {
+        texto: 'Conocer más', enlace: '#', variante: 'primario',
+        colorFondo: '#f59e0b', colorTexto: '#ffffff',
+      },
     }),
   },
   {
@@ -251,6 +254,10 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
       tipo: 'metodos-pago',
       titulo: 'Metodos de pago',
       metodos: ['efectivo', 'transferencia'],
+      cta: {
+        texto: 'Pagar ahora', enlace: '/pago', variante: 'primario',
+        colorFondo: '#f59e0b', colorTexto: '#ffffff',
+      },
     }),
   },
   {

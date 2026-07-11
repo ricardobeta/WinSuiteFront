@@ -68,6 +68,11 @@ export class SitioPublicacionService {
     for (const pagina of paginas) {
       for (const bloque of pagina.bloques) {
         if (bloque.tipo === 'formulario') ids.add(bloque.formularioId);
+        if (bloque.tipo === 'lienzo') {
+          for (const elemento of bloque.elementos) {
+            if (elemento.tipo === 'formulario') ids.add(elemento.formularioId);
+          }
+        }
       }
     }
     if (ids.size === 0) return null;

@@ -73,6 +73,28 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
             <label
               >Enlace<input [ngModel]="b.cta.enlace" (ngModelChange)="patchCta({ enlace: $event })"
             /></label>
+            <label>Estilo
+              <select [ngModel]="b.cta.variante ?? 'primario'"
+                (ngModelChange)="patchCta({ variante: $event })">
+                <option value="primario">Primario</option>
+                <option value="secundario">Secundario</option>
+              </select>
+            </label>
+            <h4>Colores del botón principal</h4>
+            <div class="fila">
+              <label>Fondo
+                <input type="color" [ngModel]="b.cta.colorFondo ?? '#f59e0b'"
+                  (ngModelChange)="patchCta({ colorFondo: $event })" />
+              </label>
+              <label>Texto
+                <input type="color" [ngModel]="b.cta.colorTexto ?? '#ffffff'"
+                  (ngModelChange)="patchCta({ colorTexto: $event, estiloTexto: limpiarColorTexto(b.cta.estiloTexto) })" />
+              </label>
+            </div>
+            <button type="button" class="agregar"
+              (click)="patchCta({ colorFondo: undefined, colorTexto: undefined, estiloTexto: limpiarColorTexto(b.cta.estiloTexto) })">
+              Usar colores automáticos
+            </button>
           }
         }
         @case ('columnas') {
@@ -240,6 +262,20 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
             Arrastra cada elemento desde su manija azul ✥. Los textos se editan escribiendo sobre
             ellos; usa − / ＋ sobre el elemento para el ancho.
           </p>
+          <div class="fila">
+            <label class="check">
+              <input type="checkbox" [ngModel]="b.cuadricula?.activa ?? false"
+                (ngModelChange)="patchCuadricula({ activa: $event })" /> Mostrar cuadrícula
+            </label>
+            <label class="check">
+              <input type="checkbox" [ngModel]="b.cuadricula?.ajustar ?? false"
+                (ngModelChange)="patchCuadricula({ ajustar: $event })" /> Ajustar
+            </label>
+          </div>
+          <label>Tamaño de cuadrícula
+            <input type="number" min="4" max="100" [ngModel]="b.cuadricula?.tamano ?? 20"
+              (ngModelChange)="patchCuadricula({ tamano: numero($event) })" />
+          </label>
           <label>
             Alto del lienzo ({{ b.altura }}px)
             <input
@@ -252,6 +288,16 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
             />
           </label>
           @for (elemento of b.elementos; track elemento.id; let ei = $index) {
+            <div class="fila controles-elemento">
+              <label class="check"><input type="checkbox" [ngModel]="elemento.bloqueado ?? false"
+                (ngModelChange)="patchElementoLienzo(ei, { bloqueado: $event || undefined })" /> Bloquear</label>
+              <label class="check"><input type="checkbox" [ngModel]="elemento.mantenerProporcion ?? false"
+                (ngModelChange)="patchElementoLienzo(ei, { mantenerProporcion: $event || undefined })" /> Proporción</label>
+              @if (viewport() !== 'desktop') {
+                <label class="check"><input type="checkbox" [ngModel]="elemento.ocultoEn?.[viewport()] ?? false"
+                  (ngModelChange)="patchVisibilidadElemento(ei, $event)" /> Ocultar aquí</label>
+              }
+            </div>
             @if (elemento.tipo === 'texto') {
               <div class="item-lista columna">
                 <span class="mini-titulo">Texto: "{{ elemento.contenido | slice: 0 : 24 }}"</span>
@@ -339,6 +385,32 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
                   [url]="elemento.url"
                   (urlChange)="patchElementoLienzo(ei, { url: $event })"
                 />
+              </div>
+            } @else if (elemento.tipo === 'formulario') {
+              <div class="item-lista columna">
+                <span class="mini-titulo">Formulario</span>
+                <label>Formulario prehecho
+                  <select [ngModel]="elemento.formularioId"
+                    (ngModelChange)="patchElementoLienzo(ei, { formularioId: $event, campos: undefined })">
+                    <option value="seleccionar-formulario">— Elige un formulario —</option>
+                    @for (formulario of formulariosEmpresa(); track formulario.formularioId) {
+                      <option [value]="formulario.formularioId">{{ formulario.nombre }}</option>
+                    }
+                  </select>
+                </label>
+                <label>Título<input [ngModel]="elemento.titulo"
+                  (ngModelChange)="patchElementoLienzo(ei, { titulo: $event })" /></label>
+                <label>Texto del botón<input [ngModel]="elemento.textoBoton"
+                  (ngModelChange)="patchElementoLienzo(ei, { textoBoton: $event })" /></label>
+                <label>Mensaje de éxito<input [ngModel]="elemento.mensajeExito"
+                  (ngModelChange)="patchElementoLienzo(ei, { mensajeExito: $event })" /></label>
+              </div>
+            } @else if (elemento.tipo === 'html') {
+              <div class="item-lista columna">
+                <span class="mini-titulo">HTML / JavaScript aislado</span>
+                <p class="ayuda">Se ejecuta únicamente al publicar, dentro de un iframe sandbox.</p>
+                <textarea rows="8" maxlength="20000" [ngModel]="elemento.codigo"
+                  (ngModelChange)="patchElementoLienzo(ei, { codigo: $event })"></textarea>
               </div>
             }
           }
@@ -630,6 +702,36 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
               (ngModelChange)="patch({ nota: $event })"
             ></textarea>
           </label>
+          <h4>Botón de pago</h4>
+          <label>Texto
+            <input [ngModel]="b.cta?.texto ?? 'Pagar ahora'"
+              (ngModelChange)="patchCta({ texto: $event })" />
+          </label>
+          <label>Enlace
+            <input [ngModel]="b.cta?.enlace ?? '/pago'"
+              (ngModelChange)="patchCta({ enlace: $event })" />
+          </label>
+          <label>Estilo
+            <select [ngModel]="b.cta?.variante ?? 'primario'"
+              (ngModelChange)="patchCta({ variante: $event })">
+              <option value="primario">Primario</option>
+              <option value="secundario">Secundario</option>
+            </select>
+          </label>
+          <div class="fila">
+            <label>Fondo
+              <input type="color" [ngModel]="b.cta?.colorFondo ?? '#f59e0b'"
+                (ngModelChange)="patchCta({ colorFondo: $event })" />
+            </label>
+            <label>Texto
+              <input type="color" [ngModel]="b.cta?.colorTexto ?? '#ffffff'"
+                (ngModelChange)="patchCta({ colorTexto: $event, estiloTexto: limpiarColorTexto(b.cta?.estiloTexto) })" />
+            </label>
+          </div>
+          <button type="button" class="agregar"
+            (click)="patchCta({ colorFondo: undefined, colorTexto: undefined, estiloTexto: limpiarColorTexto(b.cta?.estiloTexto) })">
+            Usar colores automáticos
+          </button>
         }
         @case ('formulario') {
           <label
@@ -1386,6 +1488,19 @@ export class PanelPropiedadesComponent {
     this.patch({ elementos });
   }
 
+  patchCuadricula(cambios: object): void {
+    this.patch({
+      cuadricula: { activa: false, tamano: 20, ajustar: false, ...(this.b.cuadricula ?? {}), ...cambios },
+    });
+  }
+
+  patchVisibilidadElemento(indice: number, oculto: boolean): void {
+    const elemento = this.b.elementos[indice] as { ocultoEn?: object };
+    this.patchElementoLienzo(indice, {
+      ocultoEn: { ...(elemento.ocultoEn ?? {}), [this.viewport()]: oculto },
+    });
+  }
+
   patchEstiloElementoLienzo(indice: number, cambios: object): void {
     const elemento = this.b.elementos[indice] as { estiloTexto?: object };
     const estiloTexto = { ...(elemento.estiloTexto ?? {}), ...cambios };
@@ -1421,7 +1536,17 @@ export class PanelPropiedadesComponent {
   }
 
   toggleCta(mostrar: boolean): void {
-    this.patch({ cta: mostrar ? { texto: 'Conocer mas', enlace: '#' } : undefined });
+    this.patch({
+      cta: mostrar
+        ? { texto: 'Conocer más', enlace: '#', variante: 'primario', colorFondo: '#f59e0b', colorTexto: '#ffffff' }
+        : undefined,
+    });
+  }
+
+  limpiarColorTexto(estilo?: Record<string, unknown>): Record<string, unknown> | undefined {
+    if (!estilo) return undefined;
+    const { color: _color, ...resto } = estilo;
+    return Object.keys(resto).length ? resto : undefined;
   }
 
   patchCta(cambios: object): void {

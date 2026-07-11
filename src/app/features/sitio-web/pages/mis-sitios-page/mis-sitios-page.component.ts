@@ -4,8 +4,11 @@ import { toSignal } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
+import { firstValueFrom } from 'rxjs';
 import { SitiosService } from '../../services/sitios.service';
 import { ResumenSitio } from '../../models/sitio-web.models';
+import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-sitio.component';
 
 @Component({
   selector: 'app-mis-sitios-page',
@@ -179,14 +182,20 @@ import { ResumenSitio } from '../../models/sitio-web.models';
 export class MisSitiosPageComponent {
   private readonly sitiosService = inject(SitiosService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
 
   readonly sitios = toSignal(this.sitiosService.getSitios());
   readonly eliminando = signal(false);
 
   async eliminar(sitio: ResumenSitio): Promise<void> {
-    const confirmado = confirm(
-      `¿Eliminar "${sitio.config.nombre}"? El sitio publicado dejara de estar disponible y se liberara el subdominio ${sitio.config.subdominio}.`,
-    );
+    const confirmado = await firstValueFrom(this.dialog.open(DialogoSitioComponent, {
+      data: {
+        titulo: 'Eliminar sitio',
+        mensaje: `¿Eliminar "${sitio.config.nombre}"? El sitio publicado dejará de estar disponible y se liberará el subdominio ${sitio.config.subdominio}.`,
+        confirmar: 'Eliminar sitio', peligro: true,
+      },
+      width: '520px',
+    }).afterClosed());
     if (!confirmado || this.eliminando()) return;
     this.eliminando.set(true);
     try {

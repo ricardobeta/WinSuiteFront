@@ -12,6 +12,7 @@
     "deploy:hosting:direct": "firebase deploy --only hosting:dashboard",
     "watch": "ng build --watch --configuration development",
     "test": "ng test"
+    ,"check:bloques": "node scripts/check-bloques-sync.cjs"
   },
   "private": true,
   "packageManager": "npm@11.11.0",

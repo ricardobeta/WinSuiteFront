@@ -66,9 +66,17 @@ type EstadoSubdominio =
               [class.seleccionada]="plantilla()?.id === p.id"
               (click)="elegirPlantilla(p)"
             >
-              <div class="muestra" [style.background]="p.colorPreview"></div>
+              <div class="muestra" [style.background]="'linear-gradient(135deg,' + p.colorPreview + ',' + (p.colorSecundario ?? p.colorPreview) + ')'">
+                <div class="mini-navegacion"><span></span><span></span><span></span></div>
+                <mat-icon>{{ p.icono ?? 'web' }}</mat-icon>
+                <div class="mini-contenido"><b></b><i></i><i></i></div>
+              </div>
+              @if (p.categoria) { <span class="categoria">{{ p.categoria }}</span> }
               <h3>{{ p.nombre }}</h3>
               <p>{{ p.descripcion }}</p>
+              @if (p.etiquetas?.length) {
+                <div class="etiquetas">@for (e of p.etiquetas; track e) { <span>{{ e }}</span> }</div>
+              }
             </button>
           }
         </div>
@@ -215,10 +223,21 @@ type EstadoSubdominio =
       font-size: 0.9rem;
     }
     .muestra {
-      height: 90px;
+      height: 128px;
       border-radius: 8px;
-      opacity: 0.85;
+      position: relative;
+      overflow: hidden;
+      color: white;
     }
+    .muestra > mat-icon { position: absolute; right: 18px; top: 44px; font-size: 42px; width: 42px; height: 42px; opacity: 0.9; color: white; }
+    .mini-navegacion { height: 24px; padding: 7px 10px; display: flex; gap: 5px; background: rgba(255,255,255,.14); }
+    .mini-navegacion span { width: 18px; height: 3px; border-radius: 3px; background: rgba(255,255,255,.7); }
+    .mini-contenido { position: absolute; left: 14px; bottom: 18px; display: grid; gap: 6px; }
+    .mini-contenido b, .mini-contenido i { display: block; height: 5px; border-radius: 4px; background: white; }
+    .mini-contenido b { width: 100px; height: 9px; } .mini-contenido i { width: 72px; opacity: .65; }
+    .categoria { display: inline-block; margin-top: 12px; color: #2563eb; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+    .etiquetas { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
+    .etiquetas span { padding: 3px 8px; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: .72rem; }
     .formulario {
       display: flex;
       flex-direction: column;

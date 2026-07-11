@@ -11,11 +11,14 @@ import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
+import { firstValueFrom } from 'rxjs';
 import { SUBDOMINIO_REGEX, SitioConfig } from '@winsuite/bloques';
 import { SitiosService } from '../../services/sitios.service';
 import { SitioConfigService } from '../../services/sitio-config.service';
 import { DominioCustomService } from '../../services/dominio-custom.service';
 import { SelectorImagenComponent } from '../../components/selector-imagen/selector-imagen.component';
+import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-sitio.component';
 
 @Component({
   selector: 'app-configuracion-page',
@@ -279,6 +282,7 @@ export class ConfiguracionPageComponent {
   private readonly configService = inject(SitioConfigService);
   private readonly dominioService = inject(DominioCustomService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
 
   readonly sitioId = input.required<string>();
 
@@ -386,7 +390,12 @@ export class ConfiguracionPageComponent {
 
   async quitarDominio(dominio: string): Promise<void> {
     const config = this.config();
-    if (!config || !confirm(`¿Quitar el dominio ${dominio} de este sitio?`)) return;
+    if (!config) return;
+    const confirmado = await firstValueFrom(this.dialog.open(DialogoSitioComponent, {
+      data: { titulo: 'Quitar dominio', mensaje: `¿Quitar el dominio ${dominio} de este sitio?`, confirmar: 'Quitar', peligro: true },
+      width: '480px',
+    }).afterClosed());
+    if (!confirmado) return;
     await this.dominioService.quitar(config.sitioId, dominio);
     await this.cargar(config.sitioId);
     this.snackBar.open('Dominio eliminado', 'OK', { duration: 3000 });
