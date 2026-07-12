@@ -12,6 +12,7 @@ import { FormsModule } from '@angular/forms';
 import { SlicePipe } from '@angular/common';
 import { toSignal } from '@angular/core/rxjs-interop';
 import { MatIconModule } from '@angular/material/icon';
+import { MatExpansionModule } from '@angular/material/expansion';
 import {
   Bloque,
   CATALOGO_PRODUCTOS,
@@ -31,10 +32,16 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
 @Component({
   selector: 'app-panel-propiedades',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, SlicePipe, MatIconModule, SelectorImagenComponent],
+  imports: [FormsModule, SlicePipe, MatIconModule, MatExpansionModule, SelectorImagenComponent],
   template: `
     <div class="panel">
       <h3>Propiedades · {{ bloque().tipo }}</h3>
+
+      <mat-accordion multi displayMode="flat">
+      <mat-expansion-panel expanded>
+        <mat-expansion-panel-header>
+          <mat-panel-title><mat-icon>edit_note</mat-icon> Contenido</mat-panel-title>
+        </mat-expansion-panel-header>
 
       @if (variantesDelBloque().length > 1) {
         <div class="campo">
@@ -654,6 +661,99 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
             </div>
           }
         }
+        @case ('faq') {
+          <p class="ayuda">
+            Escribe directamente sobre las preguntas y respuestas en el canvas; ahi mismo puedes
+            agregar o quitar preguntas. En el sitio publicado se muestran plegadas.
+          </p>
+        }
+        @case ('cta') {
+          <label
+            >Enlace del boton<input
+              placeholder="/pago o https://wa.me/..."
+              [ngModel]="b.enlace"
+              (ngModelChange)="patch({ enlace: $event })"
+          /></label>
+          <p class="ayuda">El titulo, texto y boton se editan sobre el bloque.</p>
+        }
+        @case ('caracteristicas') {
+          <label>
+            Columnas
+            <select [ngModel]="b.columnas" (ngModelChange)="patch({ columnas: numero($event) })">
+              <option [ngValue]="2">2</option>
+              <option [ngValue]="3">3</option>
+              <option [ngValue]="4">4</option>
+            </select>
+          </label>
+          <p class="ayuda">
+            El icono es un emoji: haz click sobre el y cambialo (Win + . abre el selector de
+            emojis). Textos editables sobre el bloque.
+          </p>
+        }
+        @case ('logos') {
+          <label class="check">
+            <input
+              type="checkbox"
+              [ngModel]="b.gris !== false"
+              (ngModelChange)="patch({ gris: $event })"
+            />
+            Logos en escala de grises (color al pasar el mouse)
+          </label>
+          <p class="ayuda">Agrega o cambia logos con los controles sobre cada imagen.</p>
+        }
+        @case ('estadisticas') {
+          <p class="ayuda">
+            Edita cifras y etiquetas sobre el bloque. En el sitio publicado los numeros se animan
+            al entrar en pantalla ("+500" cuenta desde 0).
+          </p>
+        }
+        @case ('equipo') {
+          <label>
+            Columnas
+            <select [ngModel]="b.columnas" (ngModelChange)="patch({ columnas: numero($event) })">
+              <option [ngValue]="2">2</option>
+              <option [ngValue]="3">3</option>
+              <option [ngValue]="4">4</option>
+            </select>
+          </label>
+          <p class="ayuda">Foto con el boton 📷 sobre cada persona; nombre y cargo, en el bloque.</p>
+        }
+        @case ('countdown') {
+          <label>
+            Fecha y hora objetivo
+            <input
+              type="datetime-local"
+              [ngModel]="fechaLocal(b.fecha)"
+              (ngModelChange)="patch({ fecha: aTimestamp($event) })"
+            />
+          </label>
+          <label
+            >Mensaje al terminar<input
+              [ngModel]="b.mensajeFin"
+              (ngModelChange)="patch({ mensajeFin: $event })"
+          /></label>
+        }
+        @case ('espaciador') {
+          <label>
+            Alto ({{ b.altura }}px)
+            <input
+              type="range"
+              min="8"
+              max="300"
+              step="4"
+              [ngModel]="b.altura"
+              (ngModelChange)="patch({ altura: numero($event) })"
+            />
+          </label>
+          <label class="check">
+            <input
+              type="checkbox"
+              [ngModel]="b.linea ?? false"
+              (ngModelChange)="patch({ linea: $event || undefined })"
+            />
+            Mostrar linea divisoria
+          </label>
+        }
         @case ('video') {
           <label>
             ID del video de YouTube
@@ -1071,7 +1171,12 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
         }
       }
 
-      <h4>Seccion</h4>
+      </mat-expansion-panel>
+
+      <mat-expansion-panel>
+        <mat-expansion-panel-header>
+          <mat-panel-title><mat-icon>palette</mat-icon> Seccion y fondo</mat-panel-title>
+        </mat-expansion-panel-header>
       @if (viewport() !== 'desktop') {
         <div class="badge-vista">
           <mat-icon>{{ viewport() === 'movil' ? 'smartphone' : 'tablet_mac' }}</mat-icon>
@@ -1198,7 +1303,12 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
           <option value="dosTercios">Dos tercios (66%)</option>
         </select>
       </label>
-      <h4>Divisores de seccion</h4>
+      </mat-expansion-panel>
+
+      <mat-expansion-panel>
+        <mat-expansion-panel-header>
+          <mat-panel-title><mat-icon>waves</mat-icon> Divisores de seccion</mat-panel-title>
+        </mat-expansion-panel-header>
       @for (posicion of ['divisorArriba', 'divisorAbajo']; track posicion) {
         <div class="campo">
           <span>{{ posicion === 'divisorArriba' ? 'Divisor superior' : 'Divisor inferior' }}</span>
@@ -1258,6 +1368,8 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
         automaticamente uno debajo de otro (salvo que lo ajustes en la vista movil). Tambien puedes
         arrastrar el borde derecho del bloque en el canvas.
       </p>
+      </mat-expansion-panel>
+      </mat-accordion>
     </div>
   `,
   styles: `
@@ -1441,6 +1553,35 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
     .codigo {
       font-family: monospace;
       font-size: 0.78rem;
+    }
+    mat-expansion-panel {
+      box-shadow: none !important;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 10px !important;
+      background: #fff;
+    }
+    mat-panel-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.88rem;
+      font-weight: 700;
+    }
+    mat-panel-title mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
+      color: #2563eb;
+    }
+    :host ::ng-deep .mat-expansion-panel-body {
+      padding: 4px 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    :host ::ng-deep .mat-expansion-panel-header {
+      padding: 0 14px;
+      height: 44px;
     }
     .variantes {
       display: flex;
@@ -1741,6 +1882,18 @@ export class PanelPropiedadesComponent {
 
   numero(valor: unknown): number {
     return Number(valor);
+  }
+
+  /** timestamp (ms) -> valor de <input type=datetime-local> en hora local. */
+  fechaLocal(timestamp: number): string {
+    const fecha = new Date(timestamp || Date.now());
+    const dosDigitos = (n: number): string => String(n).padStart(2, '0');
+    return `${fecha.getFullYear()}-${dosDigitos(fecha.getMonth() + 1)}-${dosDigitos(fecha.getDate())}T${dosDigitos(fecha.getHours())}:${dosDigitos(fecha.getMinutes())}`;
+  }
+
+  aTimestamp(valor: string): number {
+    const ms = new Date(valor).getTime();
+    return Number.isFinite(ms) ? ms : Date.now();
   }
 
   patch(cambios: object): void {

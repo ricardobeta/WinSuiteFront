@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { CdkDrag, CdkDragPlaceholder, CdkDropList } from '@angular/cdk/drag-drop';
 import { MatIconModule } from '@angular/material/icon';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { CATEGORIAS_BLOQUES, DefinicionBloque } from '../../config/bloques-catalogo';
 
 /**
@@ -10,7 +11,7 @@ import { CATEGORIAS_BLOQUES, DefinicionBloque } from '../../config/bloques-catal
 @Component({
   selector: 'app-paleta-bloques',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CdkDropList, CdkDrag, CdkDragPlaceholder, MatIconModule],
+  imports: [CdkDropList, CdkDrag, CdkDragPlaceholder, MatIconModule, MatTooltipModule],
   template: `
     <div class="buscador">
       <mat-icon>search</mat-icon>
@@ -38,7 +39,8 @@ import { CATEGORIAS_BLOQUES, DefinicionBloque } from '../../config/bloques-catal
             cdkDrag
             [cdkDragData]="definicion"
             (click)="agregar.emit(definicion)"
-            [title]="definicion.descripcion"
+            [matTooltip]="definicion.descripcion"
+            matTooltipPosition="right"
           >
             <mat-icon>{{ definicion.icono }}</mat-icon>
             <span class="textos">

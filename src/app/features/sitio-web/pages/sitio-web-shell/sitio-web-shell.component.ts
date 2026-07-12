@@ -8,41 +8,80 @@ import {
 } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
+import { MatTabsModule } from '@angular/material/tabs';
 import { SitiosService } from '../../services/sitios.service';
 
 /** Shell del sitio seleccionado: tabs Editor | Catalogo* | Pedidos* | Configuracion (*solo ecommerce). */
 @Component({
   selector: 'app-sitio-web-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [RouterLink, RouterLinkActive, RouterOutlet, MatIconModule],
+  imports: [RouterLink, RouterLinkActive, RouterOutlet, MatIconModule, MatTabsModule],
   template: `
     <div class="shell">
-      <nav class="tabs">
+      <div class="barra">
         <a routerLink="/workspace/sitio-web" class="volver" aria-label="Mis sitios">
           <mat-icon>arrow_back</mat-icon>
         </a>
         <span class="nombre">{{ config()?.nombre ?? '...' }}</span>
-        <a routerLink="editor" routerLinkActive="activo"><mat-icon>edit</mat-icon> Editor</a>
-        @if (esEcommerce()) {
-          <a routerLink="catalogo" routerLinkActive="activo"><mat-icon>sell</mat-icon> Catalogo</a>
-          <a routerLink="pedidos" routerLinkActive="activo"
-            ><mat-icon>receipt_long</mat-icon> Pedidos</a
+        <nav mat-tab-nav-bar [tabPanel]="panelTabs" class="tabs-nav">
+          <a
+            mat-tab-link
+            routerLink="editor"
+            routerLinkActive
+            #rlEditor="routerLinkActive"
+            [active]="rlEditor.isActive"
+            ><mat-icon>edit</mat-icon>&nbsp;Editor</a
           >
-        }
-        <a routerLink="formularios" routerLinkActive="activo"
-          ><mat-icon>list_alt</mat-icon> Formularios</a
-        >
-        <a routerLink="pagos" routerLinkActive="activo"><mat-icon>payments</mat-icon> Pagos</a>
-        <a routerLink="configuracion" routerLinkActive="activo"
-          ><mat-icon>tune</mat-icon> Configuracion</a
-        >
+          @if (esEcommerce()) {
+            <a
+              mat-tab-link
+              routerLink="catalogo"
+              routerLinkActive
+              #rlCatalogo="routerLinkActive"
+              [active]="rlCatalogo.isActive"
+              ><mat-icon>sell</mat-icon>&nbsp;Catalogo</a
+            >
+            <a
+              mat-tab-link
+              routerLink="pedidos"
+              routerLinkActive
+              #rlPedidos="routerLinkActive"
+              [active]="rlPedidos.isActive"
+              ><mat-icon>receipt_long</mat-icon>&nbsp;Pedidos</a
+            >
+          }
+          <a
+            mat-tab-link
+            routerLink="formularios"
+            routerLinkActive
+            #rlFormularios="routerLinkActive"
+            [active]="rlFormularios.isActive"
+            ><mat-icon>list_alt</mat-icon>&nbsp;Formularios</a
+          >
+          <a
+            mat-tab-link
+            routerLink="pagos"
+            routerLinkActive
+            #rlPagos="routerLinkActive"
+            [active]="rlPagos.isActive"
+            ><mat-icon>payments</mat-icon>&nbsp;Pagos</a
+          >
+          <a
+            mat-tab-link
+            routerLink="configuracion"
+            routerLinkActive
+            #rlConfig="routerLinkActive"
+            [active]="rlConfig.isActive"
+            ><mat-icon>tune</mat-icon>&nbsp;Configuracion</a
+          >
+        </nav>
         @if (config(); as c) {
           <span class="dominio">{{ c.subdominio }}.winsuit.app</span>
         }
-      </nav>
-      <div class="contenido">
-        <router-outlet />
       </div>
+      <mat-tab-nav-panel #panelTabs class="contenido">
+        <router-outlet />
+      </mat-tab-nav-panel>
     </div>
   `,
   styles: `
@@ -55,14 +94,26 @@ import { SitiosService } from '../../services/sitios.service';
       flex-direction: column;
       height: 100%;
     }
-    .tabs {
+    .barra {
       display: flex;
       align-items: center;
       gap: 4px;
-      padding: 6px 16px;
+      padding: 0 16px;
       border-bottom: 1px solid rgba(0, 0, 0, 0.08);
       background: #fff;
       flex-wrap: wrap;
+    }
+    .tabs-nav {
+      --mat-tab-header-divider-height: 0;
+    }
+    .tabs-nav a {
+      min-width: 0;
+      padding: 0 14px;
+    }
+    .tabs-nav mat-icon {
+      font-size: 18px;
+      width: 18px;
+      height: 18px;
     }
     .volver {
       display: inline-flex;
@@ -77,26 +128,6 @@ import { SitiosService } from '../../services/sitios.service';
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-    }
-    .tabs a:not(.volver) {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 8px 14px;
-      border-radius: 8px;
-      text-decoration: none;
-      color: inherit;
-      font-weight: 500;
-      font-size: 0.92rem;
-    }
-    .tabs a mat-icon {
-      font-size: 18px;
-      width: 18px;
-      height: 18px;
-    }
-    .tabs a.activo {
-      background: #eff6ff;
-      color: #2563eb;
     }
     .dominio {
       margin-left: auto;

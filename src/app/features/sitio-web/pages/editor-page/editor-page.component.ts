@@ -13,6 +13,7 @@ import {
 } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatDialog } from '@angular/material/dialog';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
@@ -95,6 +96,7 @@ const AUTOSAVE_MS = 1500;
   imports: [
     MatIconModule,
     MatButtonModule,
+    MatTooltipModule,
     PaletaBloquesComponent,
     CanvasEditorComponent,
     PanelPropiedadesComponent,
@@ -112,7 +114,7 @@ const AUTOSAVE_MS = 1500;
             <option [value]="pagina.id">{{ pagina.titulo }}</option>
           }
         </select>
-        <button mat-icon-button title="Nueva pagina" (click)="nuevaPagina()">
+        <button mat-icon-button matTooltip="Nueva pagina" (click)="nuevaPagina()">
           <mat-icon>note_add</mat-icon>
         </button>
 
@@ -120,7 +122,7 @@ const AUTOSAVE_MS = 1500;
 
         <button
           mat-icon-button
-          title="Deshacer"
+          matTooltip="Deshacer (Ctrl+Z)"
           [disabled]="!historial.puedeDeshacer()"
           (click)="deshacer()"
         >
@@ -128,7 +130,7 @@ const AUTOSAVE_MS = 1500;
         </button>
         <button
           mat-icon-button
-          title="Rehacer"
+          matTooltip="Rehacer (Ctrl+Y)"
           [disabled]="!historial.puedeRehacer()"
           (click)="rehacer()"
         >
@@ -139,7 +141,7 @@ const AUTOSAVE_MS = 1500;
 
         <button
           mat-icon-button
-          title="Escritorio"
+          matTooltip="Vista escritorio"
           [class.activo]="viewport() === 'desktop'"
           (click)="viewport.set('desktop')"
         >
@@ -147,7 +149,7 @@ const AUTOSAVE_MS = 1500;
         </button>
         <button
           mat-icon-button
-          title="Tablet"
+          matTooltip="Vista tablet"
           [class.activo]="viewport() === 'tablet'"
           (click)="viewport.set('tablet')"
         >
@@ -155,7 +157,7 @@ const AUTOSAVE_MS = 1500;
         </button>
         <button
           mat-icon-button
-          title="Movil"
+          matTooltip="Vista movil"
           [class.activo]="viewport() === 'movil'"
           (click)="viewport.set('movil')"
         >
