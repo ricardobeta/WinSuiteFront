@@ -36,6 +36,38 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
     <div class="panel">
       <h3>Propiedades · {{ bloque().tipo }}</h3>
 
+      @if (variantesDelBloque().length > 1) {
+        <div class="campo">
+          <span>Diseño</span>
+          <div class="variantes">
+            @for (opcion of variantesDelBloque(); track opcion.id) {
+              <button
+                type="button"
+                class="variante-btn"
+                [class.activa]="varianteActual() === opcion.id"
+                [title]="opcion.nombre"
+                (click)="patch({ variante: opcion.id })"
+              >
+                <mat-icon>{{ opcion.icono }}</mat-icon>
+                <small>{{ opcion.nombre }}</small>
+              </button>
+            }
+          </div>
+        </div>
+        @if (b.tipo === 'hero' && varianteActual() === 'partido') {
+          <label>
+            Lado de la imagen
+            <select
+              [ngModel]="b.imagenLado ?? 'derecha'"
+              (ngModelChange)="patch({ imagenLado: $event })"
+            >
+              <option value="derecha">Derecha</option>
+              <option value="izquierda">Izquierda</option>
+            </select>
+          </label>
+        }
+      }
+
       @switch (bloque().tipo) {
         @case ('hero') {
           <label
@@ -526,6 +558,101 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
               [ngModel]="b.textoBoton"
               (ngModelChange)="patch({ textoBoton: $event })"
           /></label>
+        }
+        @case ('planes') {
+          <p class="ayuda">
+            Los nombres, precios y caracteristicas se editan escribiendo sobre el bloque. Usa ★
+            sobre una card para destacarla.
+          </p>
+          <div class="fila">
+            <label>
+              Orientacion
+              <select
+                [ngModel]="b.orientacion"
+                (ngModelChange)="patch({ orientacion: $event })"
+              >
+                <option value="vertical">Vertical (cards)</option>
+                <option value="horizontal">Horizontal (filas)</option>
+              </select>
+            </label>
+            @if (b.orientacion === 'vertical') {
+              <label>
+                Columnas
+                <select
+                  [ngModel]="b.columnas ?? 3"
+                  (ngModelChange)="patch({ columnas: numero($event) })"
+                >
+                  <option [ngValue]="2">2</option>
+                  <option [ngValue]="3">3</option>
+                  <option [ngValue]="4">4</option>
+                </select>
+              </label>
+            }
+          </div>
+          @for (plan of b.planes; track plan.id; let i = $index) {
+            <div class="item-lista columna">
+              <span class="mini-titulo">{{ plan.nombre }}</span>
+              <div class="fila">
+                <label>
+                  Precio (vacio = sin precio)
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    [ngModel]="plan.precio"
+                    (ngModelChange)="patchPlan(i, { precio: $event === null ? undefined : numero($event) })"
+                  />
+                </label>
+                <label>
+                  Periodo
+                  <input
+                    maxlength="30"
+                    placeholder="/mes"
+                    [ngModel]="plan.periodo"
+                    (ngModelChange)="patchPlan(i, { periodo: $event || undefined })"
+                  />
+                </label>
+              </div>
+              <input
+                placeholder="Enlace del boton (ej. /pago o https://wa.me/...)"
+                [ngModel]="plan.ctaEnlace"
+                (ngModelChange)="patchPlan(i, { ctaEnlace: $event || undefined })"
+              />
+              <div class="fila">
+                <label>
+                  Fondo card
+                  <input
+                    type="color"
+                    [ngModel]="plan.colorFondo ?? '#ffffff'"
+                    (ngModelChange)="patchPlan(i, { colorFondo: $event })"
+                  />
+                </label>
+                <label>
+                  Texto card
+                  <input
+                    type="color"
+                    [ngModel]="plan.colorTexto ?? '#1c1c1c'"
+                    (ngModelChange)="patchPlan(i, { colorTexto: $event })"
+                  />
+                </label>
+              </div>
+              <button
+                type="button"
+                class="agregar"
+                (click)="patchPlan(i, { colorFondo: undefined, colorTexto: undefined })"
+              >
+                Usar colores del tema
+              </button>
+              <button
+                type="button"
+                class="quitar"
+                [disabled]="b.planes.length <= 1"
+                (click)="quitarItem('planes', i)"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            </div>
+          }
         }
         @case ('video') {
           <label>
@@ -1071,6 +1198,56 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
           <option value="dosTercios">Dos tercios (66%)</option>
         </select>
       </label>
+      <h4>Divisores de seccion</h4>
+      @for (posicion of ['divisorArriba', 'divisorAbajo']; track posicion) {
+        <div class="campo">
+          <span>{{ posicion === 'divisorArriba' ? 'Divisor superior' : 'Divisor inferior' }}</span>
+          <div class="fila">
+            <select
+              [ngModel]="divisorDe(posicion)?.tipo ?? ''"
+              (ngModelChange)="cambiarTipoDivisor(posicion, $event)"
+            >
+              <option value="">Ninguno</option>
+              <option value="onda">Onda</option>
+              <option value="diagonal">Diagonal</option>
+              <option value="curva">Curva</option>
+            </select>
+            @if (divisorDe(posicion); as divisor) {
+              <input
+                type="color"
+                [ngModel]="divisor.color"
+                (ngModelChange)="patchDivisor(posicion, { color: $event })"
+              />
+            }
+          </div>
+          @if (divisorDe(posicion); as divisor) {
+            <label>
+              Alto ({{ divisor.altura ?? 60 }}px)
+              <input
+                type="range"
+                min="20"
+                max="200"
+                step="10"
+                [ngModel]="divisor.altura ?? 60"
+                (ngModelChange)="patchDivisor(posicion, { altura: numero($event) })"
+              />
+            </label>
+            <label class="check">
+              <input
+                type="checkbox"
+                [ngModel]="divisor.voltear ?? false"
+                (ngModelChange)="patchDivisor(posicion, { voltear: $event || undefined })"
+              />
+              Voltear horizontalmente
+            </label>
+          }
+        </div>
+      }
+      <p class="ayuda">
+        Tip: usa como color del divisor el fondo de la seccion vecina para lograr el efecto de
+        "ola" entre bloques.
+      </p>
+
       @if (viewport() !== 'desktop' && tieneOverridesVp()) {
         <button type="button" class="agregar" (click)="quitarOverridesVp()">
           <mat-icon>restart_alt</mat-icon> Restablecer esta vista como escritorio
@@ -1265,6 +1442,45 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       font-family: monospace;
       font-size: 0.78rem;
     }
+    .variantes {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+    }
+    .variante-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+      padding: 8px 10px;
+      min-width: 62px;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      border-radius: 8px;
+      background: #fff;
+      cursor: pointer;
+      font: inherit;
+    }
+    .variante-btn small {
+      font-size: 0.68rem;
+      font-weight: 600;
+      opacity: 0.75;
+    }
+    .variante-btn mat-icon {
+      font-size: 20px;
+      width: 20px;
+      height: 20px;
+      color: #6b7280;
+    }
+    .variante-btn:hover {
+      border-color: #93c5fd;
+    }
+    .variante-btn.activa {
+      border-color: #2563eb;
+      background: #eff6ff;
+    }
+    .variante-btn.activa mat-icon {
+      color: #2563eb;
+    }
   `,
 })
 export class PanelPropiedadesComponent {
@@ -1304,6 +1520,45 @@ export class PanelPropiedadesComponent {
 
   /** Tipo de fondo elegido manualmente (mientras aun no hay datos que lo delaten). */
   private readonly tipoFondoManual = signal<'tema' | 'color' | 'gradiente' | 'imagen' | null>(null);
+
+  /** Variantes de diseño disponibles por tipo de bloque (selector visual "Diseño"). */
+  private readonly VARIANTES: Record<string, { id: string; nombre: string; icono: string }[]> = {
+    hero: [
+      { id: 'centrado', nombre: 'Centrado', icono: 'format_align_center' },
+      { id: 'partido', nombre: '50 / 50', icono: 'vertical_split' },
+      { id: 'tarjeta', nombre: 'Tarjeta', icono: 'branding_watermark' },
+    ],
+    testimonios: [
+      { id: 'tarjetas', nombre: 'Tarjetas', icono: 'view_module' },
+      { id: 'cita', nombre: 'Cita', icono: 'format_quote' },
+      { id: 'compacto', nombre: 'Lista', icono: 'view_list' },
+    ],
+    galeria: [
+      { id: 'grilla', nombre: 'Grilla', icono: 'grid_view' },
+      { id: 'mosaico', nombre: 'Mosaico', icono: 'dashboard' },
+    ],
+    formulario: [
+      { id: 'simple', nombre: 'Simple', icono: 'article' },
+      { id: 'tarjeta', nombre: 'Tarjeta', icono: 'wysiwyg' },
+    ],
+    footer: [
+      { id: 'centrado', nombre: 'Centrado', icono: 'align_horizontal_center' },
+      { id: 'columnas', nombre: 'Columnas', icono: 'view_column' },
+    ],
+    productos: [
+      { id: 'tarjetas', nombre: 'Tarjetas', icono: 'grid_view' },
+      { id: 'lista', nombre: 'Lista', icono: 'view_list' },
+    ],
+  };
+
+  variantesDelBloque(): { id: string; nombre: string; icono: string }[] {
+    return this.VARIANTES[this.bloque().tipo] ?? [];
+  }
+
+  varianteActual(): string {
+    const primera = this.variantesDelBloque()[0];
+    return (this.b.variante as string) ?? primera?.id ?? '';
+  }
 
   constructor() {
     // Al cambiar de bloque seleccionado, el tipo de fondo vuelve a derivarse de sus datos.
@@ -1390,6 +1645,33 @@ export class PanelPropiedadesComponent {
     });
   }
 
+  // --- Divisores de seccion ---
+
+  divisorDe(posicion: string): { tipo: string; color: string; altura?: number; voltear?: boolean } | undefined {
+    return (this.b.estilos ?? {})[posicion];
+  }
+
+  cambiarTipoDivisor(posicion: string, tipo: string): void {
+    if (!tipo) {
+      this.patchEstilos({ [posicion]: undefined });
+      return;
+    }
+    const actual = this.divisorDe(posicion);
+    this.patchEstilos({
+      [posicion]: { tipo, color: actual?.color ?? '#ffffff', altura: actual?.altura ?? 60 },
+    });
+  }
+
+  patchDivisor(posicion: string, cambios: object): void {
+    const actual = this.divisorDe(posicion);
+    if (!actual) return;
+    const nuevo = { ...actual, ...cambios } as Record<string, unknown>;
+    for (const clave of Object.keys(nuevo)) {
+      if (nuevo[clave] === undefined) delete nuevo[clave];
+    }
+    this.patchEstilos({ [posicion]: nuevo });
+  }
+
   quitarOverridesVp(): void {
     const vista = this.viewport();
     if (vista === 'desktop') return;
@@ -1455,6 +1737,19 @@ export class PanelPropiedadesComponent {
       }
     }
     this.patch({ estilos });
+  }
+
+  patchPlan(indice: number, cambios: object): void {
+    const planes = (this.b.planes as Record<string, unknown>[]).map((plan, i) => {
+      if (i !== indice) return plan;
+      const nuevo = { ...plan, ...cambios } as Record<string, unknown>;
+      // Las claves puestas explicitamente en undefined se eliminan (RTDB las rechaza).
+      for (const clave of Object.keys(nuevo)) {
+        if (nuevo[clave] === undefined) delete nuevo[clave];
+      }
+      return nuevo;
+    });
+    this.patch({ planes });
   }
 
   patchItem(campo: string, indice: number, cambios: object): void {
