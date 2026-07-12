@@ -3,11 +3,13 @@ import {
   Component,
   DOCUMENT,
   DestroyRef,
+  ElementRef,
   computed,
   effect,
   inject,
   input,
   signal,
+  viewChild,
 } from '@angular/core';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
@@ -226,7 +228,7 @@ const AUTOSAVE_MS = 1500;
           </div>
         </main>
 
-        <aside class="lateral derecha">
+        <aside class="lateral derecha" #panelDerecho>
           @if (panel() === 'tema') {
             @if (contenido(); as c) {
               <app-panel-tema [tema]="c.tema" (temaChange)="actualizarTema($event)" />
@@ -314,11 +316,18 @@ const AUTOSAVE_MS = 1500;
       display: grid;
       grid-template-columns: 220px 1fr 300px;
       min-height: 0;
+      align-items: start;
     }
     .lateral {
       background: #fff;
       overflow-y: auto;
       min-height: 0;
+      /* Fijo con scroll propio aunque un ancestro rompa la cadena de alturas:
+         sticky respecto al scroller del workspace. */
+      position: sticky;
+      top: 0;
+      height: calc(100vh - 118px);
+      max-height: calc(100vh - 118px);
     }
     .lateral.izquierda {
       border-right: 1px solid rgba(0, 0, 0, 0.08);
@@ -369,6 +378,8 @@ export class EditorPageComponent {
   protected readonly historial = inject(EditorHistorialService);
 
   readonly sitioId = input.required<string>();
+
+  private readonly panelDerecho = viewChild<ElementRef<HTMLElement>>('panelDerecho');
 
   readonly config = signal<SitioConfig | null>(null);
   readonly contenido = signal<ContenidoSitio | null>(null);
@@ -451,6 +462,12 @@ export class EditorPageComponent {
       this.paginaActualId();
       this.viewport();
       this.barraTexto.cerrar();
+    });
+
+    // Al seleccionar otro bloque, el panel de propiedades vuelve arriba.
+    effect(() => {
+      this.seleccionId();
+      this.panelDerecho()?.nativeElement.scrollTo({ top: 0 });
     });
 
     // Guardado inmediato al salir del editor si quedo algo pendiente.

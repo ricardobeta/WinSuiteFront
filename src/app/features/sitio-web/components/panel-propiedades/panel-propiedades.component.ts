@@ -1565,11 +1565,18 @@ export class PanelPropiedadesComponent {
     return (this.b.variante as string) ?? primera?.id ?? '';
   }
 
+  private ultimoBloqueId = '';
+
   constructor() {
-    // Al cambiar de bloque seleccionado, el tipo de fondo vuelve a derivarse de sus datos.
+    // Al cambiar DE BLOQUE seleccionado, el tipo de fondo vuelve a derivarse de sus datos.
+    // Ojo: el effect corre en cada edicion del bloque (la señal input cambia de referencia);
+    // sin el guard por id, elegir "Color"/"Imagen" rebotaba a "Del tema" al instante.
     effect(() => {
-      this.bloque().id;
-      this.tipoFondoManual.set(null);
+      const id = this.bloque().id;
+      if (id !== this.ultimoBloqueId) {
+        this.ultimoBloqueId = id;
+        this.tipoFondoManual.set(null);
+      }
     });
   }
 
@@ -1593,7 +1600,13 @@ export class PanelPropiedadesComponent {
         fondoVelo: undefined,
       });
     } else if (tipo === 'color') {
-      this.patchEstilos({ fondoGradiente: undefined, fondoImagenUrl: undefined, fondoVelo: undefined });
+      // Setear un color de entrada hace visible el picker y deja el estado consistente.
+      this.patchEstilos({
+        fondo: this.b.estilos?.fondo ?? '#ffffff',
+        fondoGradiente: undefined,
+        fondoImagenUrl: undefined,
+        fondoVelo: undefined,
+      });
     } else if (tipo === 'gradiente') {
       const { nombre: _n, ...preset } = this.gradientes[0];
       this.patchEstilos({ fondoGradiente: preset, fondoImagenUrl: undefined, fondoVelo: undefined });
