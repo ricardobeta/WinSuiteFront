@@ -168,6 +168,17 @@ export interface AsientoContableLinea {
   haber: number;
 }
 
+/** Datos del auxiliar CxP que acompanan a un asiento manual que acredita la cuenta de control. */
+export interface CuentaPorPagarManualAsiento {
+  proveedorId: string;
+  proveedorNombre: string;
+  proveedorIdentificacion: string;
+  fechaVencimiento: string;
+  referencia: string;
+  montoOriginal: number;
+  documentoPorPagarId?: string | null;
+}
+
 export interface AsientoContable {
   id?: string;
   numero?: string | null;
@@ -187,6 +198,7 @@ export interface AsientoContable {
   totalHaber: number;
   diferencia: number;
   asientoReversadoId?: string | null;
+  cuentaPorPagarManual?: CuentaPorPagarManualAsiento | null;
   creadoEn?: number;
   actualizadoEn?: number;
   creadoPor?: string | null;

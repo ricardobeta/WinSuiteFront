@@ -10,11 +10,17 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { firstValueFrom } from 'rxjs';
 
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { dateAIso, isoADate } from '../../../../shared/utils/fecha-input.util';
+import { Proveedor } from '../../../inventario/models/inventario.models';
+import { ProveedoresService } from '../../../inventario/services/proveedores.service';
 import { CuentaContableAutocompleteComponent } from '../../components/cuenta-contable-autocomplete/cuenta-contable-autocomplete.component';
-import { AsientoContable, AsientoContableLinea, CuentaContable, EstadoAsiento, TipoAsiento } from '../../models/contabilidad.models';
+import { AsientoContable, AsientoContableLinea, CuentaContable, CuentaPorPagarManualAsiento, EstadoAsiento, TipoAsiento } from '../../models/contabilidad.models';
+import { ConfiguracionCuentasPorPagar } from '../../models/cuentas-por-pagar.models';
 import { AsientosContablesService } from '../../services/asientos-contables.service';
+import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service';
 import { PlanCuentasService } from '../../services/plan-cuentas.service';
 
 @Component({
@@ -58,6 +64,7 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
               [matDatepicker]="pickerFecha"
               [ngModel]="fechaComoDate()"
               (ngModelChange)="actualizarFecha($event)"
+              (input)="limpiarFechaSiVacia('asiento', $event)"
               [disabled]="!editable()"
             />
             <mat-datepicker-toggle matIconSuffix [for]="pickerFecha"></mat-datepicker-toggle>
@@ -105,6 +112,41 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
         </mat-form-field>
       </section>
 
+      @if (requiereCxP()) {
+        <section class="surface-card cxp-card">
+          <div>
+            <h3>Cuenta por pagar vinculada</h3>
+            <p>El asiento acredita la cuenta configurada de CxP. Completa los datos del auxiliar antes de aprobar.</p>
+          </div>
+          <div class="grid-4">
+            <mat-form-field appearance="outline">
+              <mat-label>Proveedor</mat-label>
+              <mat-select [ngModel]="cxpProveedorId()" (ngModelChange)="seleccionarProveedorCxP($event)" [disabled]="!editable()">
+                <mat-option value="">Selecciona un proveedor</mat-option>
+                @for (proveedor of proveedores(); track proveedor.id) {
+                  <mat-option [value]="proveedor.id">{{ proveedor.nombre }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Identificacion</mat-label>
+              <input matInput [value]="cxpProveedorIdentificacion()" readonly />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Fecha de vencimiento</mat-label>
+              <input matInput [matDatepicker]="cxpVencimientoPicker" [ngModel]="cxpFechaVencimientoDate()" (ngModelChange)="actualizarFechaVencimientoCxP($event)" (input)="limpiarFechaSiVacia('cxp', $event)" [disabled]="!editable()" />
+              <mat-datepicker-toggle matIconSuffix [for]="cxpVencimientoPicker"></mat-datepicker-toggle>
+              <mat-datepicker #cxpVencimientoPicker></mat-datepicker>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Referencia de la obligacion</mat-label>
+              <input matInput [ngModel]="cxpReferencia()" (ngModelChange)="cxpReferencia.set($event)" [readonly]="!editable()" />
+            </mat-form-field>
+          </div>
+          <p class="cxp-total">Monto de la obligacion: <strong>{{ montoCxP() | number:'1.2-2' }}</strong></p>
+        </section>
+      }
+
       <section class="surface-card lines-card">
         <div class="section-toolbar">
           <h3>Lineas contables</h3>
@@ -121,6 +163,18 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
             </div>
           }
         </div>
+
+        @if (editable()) {
+          <div class="general-description">
+            <mat-form-field appearance="outline">
+              <mat-label>Descripcion general de lineas</mat-label>
+              <input matInput [ngModel]="descripcionGeneral()" (ngModelChange)="descripcionGeneral.set($event)" />
+            </mat-form-field>
+            <button mat-stroked-button type="button" (click)="aplicarDescripcionGeneral()" [disabled]="!descripcionGeneral().trim()">
+              Aplicar a todas
+            </button>
+          </div>
+        }
 
         <div class="lines-table">
           <div class="line-row line-head">
@@ -213,11 +267,15 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
     .page-header h2 { margin: 0; font-size: 1.45rem; }
     .page-header p { margin: .35rem 0 0; color: var(--muted-foreground); }
     .eyebrow { margin: 0 0 .35rem; text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; color: var(--primary); }
-    .form-card, .lines-card { padding: 1.25rem; display: grid; gap: 1rem; background: var(--tc-surface-container-lowest); }
+    .form-card, .lines-card, .cxp-card { padding: 1.25rem; display: grid; gap: 1rem; background: var(--tc-surface-container-lowest); }
+    .cxp-card h3, .cxp-card p { margin: 0; }
+    .cxp-card p { color: var(--muted-foreground); }
+    .cxp-total { text-align: right; }
     .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
     .section-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
     .section-toolbar h3 { margin: 0; }
     .toolbar-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
+    .general-description { display: grid; grid-template-columns: minmax(260px, 1fr) auto; gap: .75rem; align-items: start; }
     .lines-table { display: grid; gap: .6rem; }
     .line-row { display: grid; grid-template-columns: minmax(320px, 1.35fr) minmax(180px, 1fr) 130px 130px 48px; gap: .65rem; align-items: start; }
     .line-head { font-size: .78rem; text-transform: uppercase; color: var(--muted-foreground); padding: 0 .25rem; }
@@ -242,6 +300,8 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
 export class AsientoFormComponent implements OnInit {
   private readonly service = inject(AsientosContablesService);
   private readonly planCuentasService = inject(PlanCuentasService);
+  private readonly cuentasPorPagarService = inject(CuentasPorPagarService);
+  private readonly proveedoresService = inject(ProveedoresService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
@@ -259,6 +319,14 @@ export class AsientoFormComponent implements OnInit {
   ]);
   protected readonly importeInputs = signal<Record<string, string>>({});
   protected readonly cuentas = signal<CuentaContable[]>([]);
+  protected readonly proveedores = signal<Proveedor[]>([]);
+  protected readonly configuracionCxP = signal<ConfiguracionCuentasPorPagar | null>(null);
+  protected readonly descripcionGeneral = signal('');
+  protected readonly cxpProveedorId = signal('');
+  protected readonly cxpProveedorNombre = signal('');
+  protected readonly cxpProveedorIdentificacion = signal('');
+  protected readonly cxpFechaVencimiento = signal(this.service.fechaHoy());
+  protected readonly cxpReferencia = signal('');
   protected readonly guardando = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly asientoReversadoId = signal<string | null>(null);
@@ -286,9 +354,31 @@ export class AsientoFormComponent implements OnInit {
   });
   protected readonly diferencia = computed(() => this.service.roundToTwo(this.totalDebe() - this.totalHaber()));
   protected readonly fechaComoDate = computed(() => this.parseFecha(this.fecha()));
+  protected readonly cxpFechaVencimientoDate = computed(() => isoADate(this.cxpFechaVencimiento()));
+  protected readonly montoCxP = computed(() => {
+    const cuentaId = this.configuracionCxP()?.cuentaPorPagarDefaultId;
+    if (!cuentaId) {
+      return 0;
+    }
+    const neto = this.lineas()
+      .filter((linea) => linea.cuentaId === cuentaId)
+      .reduce((total, linea) => total + Number(linea.haber || 0) - Number(linea.debe || 0), 0);
+    return this.service.roundToTwo(Math.max(0, neto));
+  });
+  protected readonly requiereCxP = computed(() => {
+    const config = this.configuracionCxP();
+    return !!config?.habilitarCuentasPorPagar && !!config.fuenteManual && !!config.cuentaPorPagarDefaultId && this.montoCxP() > 0;
+  });
 
   async ngOnInit(): Promise<void> {
-    this.cuentas.set(await this.planCuentasService.getCuentasOnce());
+    const [cuentas, proveedores, configCxP] = await Promise.all([
+      this.planCuentasService.getCuentasOnce(),
+      firstValueFrom(this.proveedoresService.getProveedores()),
+      this.cuentasPorPagarService.getConfiguracionOnce()
+    ]);
+    this.cuentas.set(cuentas);
+    this.proveedores.set(proveedores);
+    this.configuracionCxP.set(configCxP);
 
     const asientoInicial = history.state?.['asientoInicial'] as AsientoContable | undefined;
     if (asientoInicial) {
@@ -337,6 +427,42 @@ export class AsientoFormComponent implements OnInit {
 
   protected actualizarLinea(index: number, campo: 'descripcion', value: string): void {
     this.lineas.update((lineas) => lineas.map((linea, i) => i === index ? { ...linea, [campo]: value } : linea));
+  }
+
+  protected aplicarDescripcionGeneral(): void {
+    const descripcion = this.descripcionGeneral().trim();
+    if (descripcion) {
+      this.lineas.update((lineas) => lineas.map((linea) => ({ ...linea, descripcion })));
+    }
+  }
+
+  protected seleccionarProveedorCxP(proveedorId: string): void {
+    this.cxpProveedorId.set(proveedorId);
+    const proveedor = this.proveedores().find((item) => item.id === proveedorId);
+    this.cxpProveedorNombre.set(proveedor?.nombre ?? '');
+    this.cxpProveedorIdentificacion.set(proveedor?.ruc ?? '');
+    if (proveedor) {
+      const fecha = isoADate(this.fecha()) ?? new Date();
+      fecha.setDate(fecha.getDate() + Number(proveedor.diasCredito ?? 0));
+      this.cxpFechaVencimiento.set(dateAIso(fecha));
+    }
+  }
+
+  protected actualizarFechaVencimientoCxP(fecha: Date | null): void {
+    if (fecha) {
+      this.cxpFechaVencimiento.set(dateAIso(fecha));
+    }
+  }
+
+  protected limpiarFechaSiVacia(campo: 'asiento' | 'cxp', event: Event): void {
+    if ((event.target as HTMLInputElement).value.trim() !== '') {
+      return;
+    }
+    if (campo === 'asiento') {
+      this.fecha.set('');
+    } else {
+      this.cxpFechaVencimiento.set('');
+    }
   }
 
   protected importeInputValue(linea: AsientoContableLinea, campo: 'debe' | 'haber'): string {
@@ -426,12 +552,23 @@ export class AsientoFormComponent implements OnInit {
 
     try {
       const asiento = this.construirAsiento();
+      if (accion === 'APROBADO' && this.requiereCxP() && !this.datosCxPCompletos()) {
+        throw new Error('Completa proveedor, vencimiento y referencia de la cuenta por pagar.');
+      }
       const id = accion === 'APROBADO'
         ? await this.service.aprobarAsiento(asiento)
         : await this.service.guardarBorrador(asiento);
 
       if (accion === 'APROBADO' && this.asientoReversadoId()) {
         await this.service.marcarReversado(this.asientoReversadoId()!);
+      }
+
+      if (accion === 'APROBADO' && asiento.cuentaPorPagarManual) {
+        const aprobado = await this.service.getAsientoById(id) ?? asiento;
+        await this.cuentasPorPagarService.sincronizarDesdeAsientoManual(id, {
+          asiento: aprobado,
+          datos: asiento.cuentaPorPagarManual
+        });
       }
 
       this.mostrarMensaje(accion === 'APROBADO' ? 'Asiento aprobado.' : 'Borrador guardado.', accion === 'APROBADO' ? 'check_circle' : 'save');
@@ -463,7 +600,8 @@ export class AsientoFormComponent implements OnInit {
       totalDebe: this.totalDebe(),
       totalHaber: this.totalHaber(),
       diferencia: this.diferencia(),
-      asientoReversadoId: this.asientoReversadoId()
+      asientoReversadoId: this.asientoReversadoId(),
+      cuentaPorPagarManual: this.construirDatosCxP()
     };
   }
 
@@ -477,7 +615,34 @@ export class AsientoFormComponent implements OnInit {
     this.estado.set(asiento.estado);
     this.asientoReversadoId.set(asiento.asientoReversadoId ?? null);
     this.lineas.set(asiento.lineas.length > 0 ? asiento.lineas : [this.service.crearLineaVacia(), this.service.crearLineaVacia()]);
+    const cxp = asiento.cuentaPorPagarManual;
+    this.cxpProveedorId.set(cxp?.proveedorId ?? '');
+    this.cxpProveedorNombre.set(cxp?.proveedorNombre ?? '');
+    this.cxpProveedorIdentificacion.set(cxp?.proveedorIdentificacion ?? '');
+    this.cxpFechaVencimiento.set(cxp?.fechaVencimiento ?? asiento.fecha);
+    this.cxpReferencia.set(cxp?.referencia ?? asiento.referencia ?? '');
     this.importeInputs.set({});
+  }
+
+  private construirDatosCxP(): CuentaPorPagarManualAsiento | null {
+    if (!this.requiereCxP()) {
+      return null;
+    }
+    return {
+      proveedorId: this.cxpProveedorId(),
+      proveedorNombre: this.cxpProveedorNombre().trim(),
+      proveedorIdentificacion: this.cxpProveedorIdentificacion().trim(),
+      fechaVencimiento: this.cxpFechaVencimiento(),
+      referencia: this.cxpReferencia().trim(),
+      montoOriginal: this.montoCxP()
+    };
+  }
+
+  private datosCxPCompletos(): boolean {
+    return !!this.cxpProveedorId()
+      && !!this.cxpProveedorNombre().trim()
+      && !!this.cxpFechaVencimiento()
+      && !!this.cxpReferencia().trim();
   }
 
   private importeInputKey(lineId: string, campo: 'debe' | 'haber'): string {

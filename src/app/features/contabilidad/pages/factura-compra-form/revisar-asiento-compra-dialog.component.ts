@@ -57,6 +57,14 @@ export interface RevisarAsientoCompraResult {
     <mat-dialog-content>
       <p class="doc">{{ data.proveedor }} · {{ data.documento }}</p>
 
+      <div class="general-description">
+        <mat-form-field appearance="outline">
+          <mat-label>Descripcion general de lineas</mat-label>
+          <input matInput [ngModel]="descripcionGeneral()" (ngModelChange)="descripcionGeneral.set($event)" />
+        </mat-form-field>
+        <button mat-stroked-button type="button" (click)="aplicarDescripcionGeneral()" [disabled]="!descripcionGeneral().trim()">Aplicar a todas</button>
+      </div>
+
       @if (!data.factura.alimentaInventario) {
         <mat-form-field appearance="outline" class="tipo-gasto-field">
           <mat-label>Tipo de gasto</mat-label>
@@ -150,6 +158,7 @@ export interface RevisarAsientoCompraResult {
   styles: [`
     .doc { margin: 0 0 1rem; color: var(--muted-foreground); }
     .tipo-gasto-field { width: 100%; margin-bottom: .5rem; }
+    .general-description { display: grid; grid-template-columns: minmax(260px, 1fr) auto; gap: .75rem; align-items: start; margin-bottom: .75rem; }
     .lines-table { display: grid; gap: .6rem; min-width: min(860px, 82vw); }
     .line-row { display: grid; grid-template-columns: minmax(240px, 1.3fr) minmax(160px, 1fr) 120px 120px 48px; gap: .6rem; align-items: start; }
     .line-row.sin-cuenta { outline: 1px dashed color-mix(in srgb, #b3261e 55%, transparent); outline-offset: 4px; border-radius: .5rem; }
@@ -177,6 +186,7 @@ export class RevisarAsientoCompraDialogComponent implements OnInit {
   protected readonly tipoGastoId = signal<string | null>(null);
   protected readonly cargando = signal(false);
   protected readonly importeInputs = signal<Record<string, string>>({});
+  protected readonly descripcionGeneral = signal('');
 
   protected readonly totalDebe = computed(() => this.round2(this.lineas().reduce((t, l) => t + Number(l.debe || 0), 0)));
   protected readonly totalHaber = computed(() => this.round2(this.lineas().reduce((t, l) => t + Number(l.haber || 0), 0)));
@@ -214,6 +224,16 @@ export class RevisarAsientoCompraDialogComponent implements OnInit {
 
   protected actualizarDescripcion(index: number, value: string): void {
     this.lineas.update((lineas) => lineas.map((linea, i) => i === index ? { ...linea, descripcion: value } : linea));
+  }
+
+  protected aplicarDescripcionGeneral(): void {
+    const descripcion = this.descripcionGeneral().trim();
+    if (descripcion) {
+      this.lineas.update((lineas) => lineas.map((linea) => ({
+        ...linea,
+        descripcion: this.descripcionConFactura(descripcion)
+      })));
+    }
   }
 
   protected importeInput(linea: AsientoContableLinea, campo: 'debe' | 'haber'): string {

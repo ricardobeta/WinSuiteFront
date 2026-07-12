@@ -118,15 +118,21 @@ import { ARCHIVO_MAX_TOTAL_BYTES, ArchivoItem, ArchivosUsage } from '../../../..
             </mat-select>
           </mat-form-field>
 
-          <mat-form-field appearance="outline" class="range-field">
-            <mat-label>Rango de fechas</mat-label>
-            <mat-date-range-input [rangePicker]="picker" formGroupName="dateRange">
-              <input matStartDate placeholder="Desde" formControlName="from" />
-              <input matEndDate placeholder="Hasta" formControlName="to" />
-            </mat-date-range-input>
-            <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
-            <mat-date-range-picker #picker></mat-date-range-picker>
-          </mat-form-field>
+          <div class="date-range-fields" formGroupName="dateRange">
+            <mat-form-field appearance="outline">
+              <mat-label>Fecha desde</mat-label>
+              <input matInput [matDatepicker]="fromPicker" formControlName="from" />
+              <mat-datepicker-toggle matIconSuffix [for]="fromPicker"></mat-datepicker-toggle>
+              <mat-datepicker #fromPicker></mat-datepicker>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Fecha hasta</mat-label>
+              <input matInput [matDatepicker]="toPicker" formControlName="to" />
+              <mat-datepicker-toggle matIconSuffix [for]="toPicker"></mat-datepicker-toggle>
+              <mat-datepicker #toPicker></mat-datepicker>
+            </mat-form-field>
+          </div>
 
           <button mat-stroked-button type="button" (click)="clearFilters()">
             Limpiar
@@ -314,8 +320,11 @@ import { ARCHIVO_MAX_TOTAL_BYTES, ArchivoItem, ArchivosUsage } from '../../../..
         align-items: end;
       }
 
-      .range-field {
-        min-width: 250px;
+      .date-range-fields {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(180px, 1fr));
+        gap: 1rem;
+        grid-column: span 2;
       }
 
       .table-card {
@@ -392,6 +401,11 @@ import { ARCHIVO_MAX_TOTAL_BYTES, ArchivoItem, ArchivosUsage } from '../../../..
       }
 
       @media (max-width: 900px) {
+        .date-range-fields {
+          grid-template-columns: 1fr;
+          grid-column: span 1;
+        }
+
         .table-header {
           flex-direction: column;
           align-items: flex-start;

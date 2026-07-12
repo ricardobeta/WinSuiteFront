@@ -167,6 +167,7 @@ export interface ArchivoSelectorDialogResult {
           <mat-divider />
           <app-archivo-uploader
             [sourceModule]="data.sourceModule ?? 'archivos'"
+            [extensions]="data.extensions ?? null"
             (uploaded)="onUploaded($event)"
             (failed)="onUploadFailed($event)"
           />

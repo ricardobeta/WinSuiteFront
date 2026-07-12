@@ -377,13 +377,17 @@ interface UploadView {
 export class ArchivoUploaderComponent implements OnInit {
   @Input() sourceModule = 'archivos';
   @Input() disabled = false;
+  @Input() extensions: string[] | null = null;
 
   @Output() uploaded = new EventEmitter<ArchivoItem>();
   @Output() failed = new EventEmitter<{ file: File; error: string }>();
 
   protected readonly maxFileBytes = ARCHIVO_MAX_FILE_BYTES;
   protected readonly maxTotalBytes = ARCHIVO_MAX_TOTAL_BYTES;
-  protected readonly accept = '.xls,.xlsx,.csv,image/*';
+  protected get accept(): string {
+    const extensions = this.extensions?.length ? this.extensions : [...ARCHIVO_ALLOWED_EXTENSIONS];
+    return extensions.map((extension) => `.${extension.toLowerCase()}`).join(',');
+  }
 
   protected readonly usage = signal<ArchivosUsage>({ totalBytes: 0, totalCount: 0 });
   protected readonly uploads = signal<UploadView[]>([]);
@@ -501,7 +505,9 @@ export class ArchivoUploaderComponent implements OnInit {
   }
 
   private handleFiles(files: File[]): void {
-    const allowedExtensions = new Set(ARCHIVO_ALLOWED_EXTENSIONS);
+    const allowedExtensions = new Set(
+      (this.extensions?.length ? this.extensions : [...ARCHIVO_ALLOWED_EXTENSIONS]).map((extension) => extension.toLowerCase())
+    );
 
     files.forEach((file) => {
       if (file.size > this.maxFileBytes) {
@@ -517,7 +523,7 @@ export class ArchivoUploaderComponent implements OnInit {
       }
 
       const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
-      if (!extension || !allowedExtensions.has(extension as (typeof ARCHIVO_ALLOWED_EXTENSIONS)[number])) {
+      if (!extension || !allowedExtensions.has(extension)) {
         const errorMessage = 'Tipo de archivo no permitido.';
         this.failed.emit({ file, error: errorMessage });
         this.pushUpload({

@@ -64,8 +64,12 @@ interface ChecklistItem {
         </mat-form-field>
         <div class="period-count">
           <mat-icon>fact_check</mat-icon>
-          <span>{{ facturasPeriodo().length }} factura(s) en el período</span>
+          <span>{{ periodoBuscado() ? facturasPeriodo().length + ' factura(s) en el período' : 'Busca las facturas del período seleccionado' }}</span>
         </div>
+        <button mat-raised-button color="primary" type="button" (click)="buscarFacturas()" [disabled]="buscando()">
+          <mat-icon>search</mat-icon>
+          {{ buscando() ? 'Buscando...' : 'Buscar facturas' }}
+        </button>
         <div class="borradores-toggle">
           <mat-slide-toggle [checked]="incluirBorradores()" (change)="setIncluirBorradores($event.checked)">
             Incluir borradores
@@ -108,7 +112,7 @@ interface ChecklistItem {
         </ul>
 
         <div class="actions">
-          <button mat-flat-button color="primary" (click)="generar()" [disabled]="generando() || facturasPeriodo().length === 0">
+          <button mat-flat-button color="primary" (click)="generar()" [disabled]="generando() || !periodoBuscado() || facturasPeriodo().length === 0">
             <mat-icon>build</mat-icon>
             {{ generando() ? 'Generando…' : 'Generar XML ATS' }}
           </button>
@@ -181,6 +185,8 @@ export class AtsGenerarComponent {
   private readonly mesSignal = signal(this.hoy.getMonth() + 1);
 
   protected readonly generando = signal(false);
+  protected readonly buscando = signal(false);
+  protected readonly periodoBuscado = signal<string | null>(null);
   protected readonly resultado = signal<AtsResult | null>(null);
   // Por defecto solo se incluyen las REGISTRADA; el usuario puede activar los borradores.
   protected readonly incluirBorradores = signal(false);
@@ -200,7 +206,23 @@ export class AtsGenerarComponent {
 
   protected setIncluirBorradores(value: boolean): void {
     this.incluirBorradores.set(value);
+    this.invalidarBusqueda();
+  }
+
+  protected async buscarFacturas(): Promise<void> {
+    this.buscando.set(true);
     this.resultado.set(null);
+    try {
+      const facturas = await this.facturasService.getFacturasCompraPorPeriodo(this.anio.value, this.mes.value);
+      this.facturas.set(facturas);
+      this.periodoBuscado.set(this.clavePeriodo());
+    } catch (error: unknown) {
+      this.facturas.set([]);
+      this.periodoBuscado.set(null);
+      this.toast(error instanceof Error ? error.message : 'No se pudieron buscar las facturas del periodo.', 'error');
+    } finally {
+      this.buscando.set(false);
+    }
   }
 
   protected readonly totalBase = computed(() => this.facturasPeriodo().reduce((t, f) => t + Number(f.baseImpGrav ?? 0) + Number(f.baseImponible ?? 0), 0));
@@ -239,13 +261,15 @@ export class AtsGenerarComponent {
   });
 
   constructor() {
-    this.facturasService.getFacturasCompra().pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((facturas) => this.facturas.set(facturas));
-    this.anio.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((v) => { this.anioSignal.set(v); this.resultado.set(null); });
-    this.mes.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((v) => { this.mesSignal.set(v); this.resultado.set(null); });
+    this.anio.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((v) => { this.anioSignal.set(v); this.invalidarBusqueda(); });
+    this.mes.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((v) => { this.mesSignal.set(v); this.invalidarBusqueda(); });
   }
 
   protected generar(): void {
+    if (this.periodoBuscado() !== this.clavePeriodo()) {
+      this.toast('Busca las facturas del periodo antes de generar el ATS.', 'error');
+      return;
+    }
     this.generando.set(true);
     this.atsService.generar(this.anio.value, this.mes.value, this.incluirBorradores()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (res) => {
@@ -281,5 +305,15 @@ export class AtsGenerarComponent {
       horizontalPosition: 'end',
       verticalPosition: 'top'
     });
+  }
+
+  private invalidarBusqueda(): void {
+    this.facturas.set([]);
+    this.periodoBuscado.set(null);
+    this.resultado.set(null);
+  }
+
+  private clavePeriodo(): string {
+    return `${this.anio.value}-${String(this.mes.value).padStart(2, '0')}-${this.incluirBorradores() ? 'con-borradores' : 'registradas'}`;
   }
 }

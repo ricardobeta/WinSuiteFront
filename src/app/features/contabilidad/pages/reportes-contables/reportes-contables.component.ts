@@ -16,6 +16,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { CuentaContableAutocompleteComponent } from '../../components/cuenta-contable-autocomplete/cuenta-contable-autocomplete.component';
 import {
   BalanceComprobacionFila,
   BalanceComprobacionResultado,
@@ -55,7 +56,8 @@ type GrupoEstadoFinanciero = {
     MatSnackBarModule,
     MatTableModule,
     MatTabsModule,
-    MatTooltipModule
+    MatTooltipModule,
+    CuentaContableAutocompleteComponent
   ],
   template: `
     <section class="reportes-page">
@@ -120,18 +122,14 @@ type GrupoEstadoFinanciero = {
                   </button>
                 </mat-form-field>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Cuenta</mat-label>
-                  <mat-select [(ngModel)]="diarioFiltros.cuentaId">
-                    <mat-option value="">Todas</mat-option>
-                    @for (cuenta of cuentasMovimiento(); track cuenta.id) {
-                      <mat-option [value]="cuenta.id">{{ cuenta.codigo }} - {{ cuenta.nombre }}</mat-option>
-                    }
-                  </mat-select>
-                  <button mat-icon-button matIconSuffix type="button" matTooltipPosition="above" [matTooltip]="ayudaReportes.cuenta" aria-label="Ayuda cuenta diario">
-                    <mat-icon>help_outline</mat-icon>
-                  </button>
-                </mat-form-field>
+                <app-cuenta-contable-autocomplete
+                  [cuentas]="cuentasMovimiento()"
+                  [cuentaId]="diarioFiltros.cuentaId || null"
+                  [mostrarNumero]="false"
+                  [compact]="true"
+                  label="Cuenta (todas si queda vacio)"
+                  (cuentaSeleccionada)="diarioFiltros.cuentaId = $event?.id ?? ''"
+                />
 
                 <mat-form-field appearance="outline" class="span-2">
                   <mat-label>Buscar</mat-label>
@@ -218,18 +216,14 @@ type GrupoEstadoFinanciero = {
                   <mat-datepicker #mayorHastaPicker></mat-datepicker>
                 </mat-form-field>
 
-                <mat-form-field appearance="outline">
-                  <mat-label>Cuenta</mat-label>
-                  <mat-select [(ngModel)]="mayorFiltros.cuentaId">
-                    <mat-option value="">Por grupo/tipo</mat-option>
-                    @for (cuenta of cuentasMovimiento(); track cuenta.id) {
-                      <mat-option [value]="cuenta.id">{{ cuenta.codigo }} - {{ cuenta.nombre }}</mat-option>
-                    }
-                  </mat-select>
-                  <button mat-icon-button matIconSuffix type="button" matTooltipPosition="above" [matTooltip]="ayudaReportes.cuentaMayor" aria-label="Ayuda cuenta mayor">
-                    <mat-icon>help_outline</mat-icon>
-                  </button>
-                </mat-form-field>
+                <app-cuenta-contable-autocomplete
+                  [cuentas]="cuentasMovimiento()"
+                  [cuentaId]="mayorFiltros.cuentaId || null"
+                  [mostrarNumero]="false"
+                  [compact]="true"
+                  label="Cuenta (por grupo si queda vacio)"
+                  (cuentaSeleccionada)="mayorFiltros.cuentaId = $event?.id ?? ''"
+                />
 
                 <mat-form-field appearance="outline">
                   <mat-label>Grupo / tipo</mat-label>

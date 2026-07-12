@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -12,6 +13,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { dateAIso, isoADate } from '../../../../shared/utils/fecha-input.util';
 import { Proveedor } from '../../../inventario/models/inventario.models';
 import { ProveedoresService } from '../../../inventario/services/proveedores.service';
 import { CuentaContableAutocompleteComponent } from '../../components/cuenta-contable-autocomplete/cuenta-contable-autocomplete.component';
@@ -32,6 +34,7 @@ const DIA_MS = 24 * 60 * 60 * 1000;
     RouterLink,
     MatButtonModule,
     MatDialogModule,
+    MatDatepickerModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -73,12 +76,16 @@ const DIA_MS = 24 * 60 * 60 * 1000;
 
           <mat-form-field appearance="outline">
             <mat-label>Fecha de emision</mat-label>
-            <input matInput type="date" [ngModel]="fechaEmision()" (ngModelChange)="fechaEmision.set($event)" />
+            <input matInput [matDatepicker]="emisionPicker" [ngModel]="fechaEmisionDate()" (ngModelChange)="actualizarFechaEmision($event)" (input)="limpiarFechaSiVacia('emision', $event)" />
+            <mat-datepicker-toggle matIconSuffix [for]="emisionPicker"></mat-datepicker-toggle>
+            <mat-datepicker #emisionPicker></mat-datepicker>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
             <mat-label>Fecha de vencimiento</mat-label>
-            <input matInput type="date" [ngModel]="fechaVencimiento()" (ngModelChange)="fechaVencimiento.set($event)" />
+            <input matInput [matDatepicker]="vencimientoPicker" [ngModel]="fechaVencimientoDate()" (ngModelChange)="actualizarFechaVencimiento($event)" (input)="limpiarFechaSiVacia('vencimiento', $event)" />
+            <mat-datepicker-toggle matIconSuffix [for]="vencimientoPicker"></mat-datepicker-toggle>
+            <mat-datepicker #vencimientoPicker></mat-datepicker>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
@@ -150,6 +157,8 @@ export class CuentaPorPagarFormComponent implements OnInit {
   protected readonly proveedorIdentificacion = signal('');
   protected readonly fechaEmision = signal(this.hoyIso());
   protected readonly fechaVencimiento = signal(this.hoyIso());
+  protected readonly fechaEmisionDate = computed(() => isoADate(this.fechaEmision()));
+  protected readonly fechaVencimientoDate = computed(() => isoADate(this.fechaVencimiento()));
   protected readonly monto = signal<number | null>(null);
   protected readonly glosa = signal('');
   protected readonly cuentaContrapartidaId = signal('');
@@ -158,6 +167,8 @@ export class CuentaPorPagarFormComponent implements OnInit {
 
   protected readonly puedeGuardar = computed(() =>
     this.proveedorNombre().trim().length > 0
+    && !!this.fechaEmision()
+    && !!this.fechaVencimiento()
     && Number(this.monto() ?? 0) > 0
     && this.glosa().trim().length > 0
     && !!this.cuentaContrapartidaId());
@@ -175,6 +186,24 @@ export class CuentaPorPagarFormComponent implements OnInit {
       this.proveedorIdentificacion.set(proveedor.ruc ?? '');
       const emision = new Date(this.fechaEmision()).getTime();
       this.fechaVencimiento.set(this.isoDesde(emision + Number(proveedor.diasCredito ?? 0) * DIA_MS));
+    }
+  }
+
+  protected actualizarFechaEmision(fecha: Date | null): void {
+    if (fecha) {
+      this.fechaEmision.set(dateAIso(fecha));
+    }
+  }
+
+  protected actualizarFechaVencimiento(fecha: Date | null): void {
+    if (fecha) {
+      this.fechaVencimiento.set(dateAIso(fecha));
+    }
+  }
+
+  protected limpiarFechaSiVacia(campo: 'emision' | 'vencimiento', event: Event): void {
+    if ((event.target as HTMLInputElement).value.trim() === '') {
+      (campo === 'emision' ? this.fechaEmision : this.fechaVencimiento).set('');
     }
   }
 

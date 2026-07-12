@@ -11,24 +11,25 @@ import { provideRouter, withComponentInputBinding, withRouterConfig } from '@ang
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import {
+  DateAdapter,
   MAT_DATE_FORMATS,
   MAT_DATE_LOCALE,
   MatDateFormats,
-  provideNativeDateAdapter,
 } from '@angular/material/core';
 
 import { routes } from './app.routes';
 import { environment } from '../environments/environment';
 import { AuthInterceptor } from './core/interceptors/auth.interceptor';
+import { EcuadorDateAdapter } from './shared/adapters/ecuador-date.adapter';
 
 // Ecuador usa el formato de fecha día/mes/año. Con el adaptador nativo, estas opciones de Intl
 // (junto con MAT_DATE_LOCALE 'es-EC') hacen que los datepickers muestren y parseen dd/mm/aaaa.
 const ES_EC_DATE_FORMATS: MatDateFormats = {
   parse: {
-    dateInput: { year: 'numeric', month: 'numeric', day: 'numeric' },
+    dateInput: 'DD/MM/YYYY',
   },
   display: {
-    dateInput: { year: 'numeric', month: '2-digit', day: '2-digit' },
+    dateInput: 'DD/MM/YYYY',
     monthYearLabel: { year: 'numeric', month: 'short' },
     dateA11yLabel: { year: 'numeric', month: 'long', day: 'numeric' },
     monthYearA11yLabel: { year: 'numeric', month: 'long' },
@@ -48,7 +49,7 @@ export const appConfig: ApplicationConfig = {
     provideHttpClient(withInterceptorsFromDi()),
     { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-outlined' } },
-    provideNativeDateAdapter(),
+    { provide: DateAdapter, useClass: EcuadorDateAdapter },
     { provide: LOCALE_ID, useValue: 'es-EC' },
     { provide: MAT_DATE_LOCALE, useValue: 'es-EC' },
     { provide: MAT_DATE_FORMATS, useValue: ES_EC_DATE_FORMATS },

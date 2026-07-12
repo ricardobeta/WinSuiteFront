@@ -5,7 +5,7 @@ import { Observable } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { ProveedoresService } from '../../inventario/services/proveedores.service';
 import { FacturaCompra } from '../models/compras.models';
-import { AsientoContableLinea } from '../models/contabilidad.models';
+import { AsientoContable, AsientoContableLinea, CuentaPorPagarManualAsiento } from '../models/contabilidad.models';
 import {
   AgingProveedor,
   ConfiguracionCuentasPorPagar,
@@ -27,6 +27,11 @@ export interface CrearDocumentoManualInput {
   moneda: string;
   glosa: string;
   montoOriginal: number;
+}
+
+export interface SincronizarCxPDesdeAsientoInput {
+  asiento: AsientoContable;
+  datos: CuentaPorPagarManualAsiento;
 }
 
 export interface RegistrarPagoInput {
@@ -265,6 +270,62 @@ export class CuentasPorPagarService {
       actualizadoEn: timestamp
     };
     await set(documentoRef, nuevo);
+    return documentoId;
+  }
+
+  /**
+   * Crea el documento auxiliar de un asiento ya aprobado sin volver a contabilizarlo.
+   * El id determinista vuelve la operacion segura ante reintentos.
+   */
+  async sincronizarDesdeAsientoManual(asientoId: string, input: SincronizarCxPDesdeAsientoInput): Promise<string> {
+    const documentoId = `asiento-${asientoId}`;
+    const documentoRef = ref(this.database, `${this.getTenantPath()}/documentosPorPagar/${documentoId}`);
+    const existente = await get(documentoRef);
+    if (existente.exists()) {
+      return documentoId;
+    }
+
+    const config = await this.getConfiguracionOnce();
+    if (!config.habilitarCuentasPorPagar || !config.fuenteManual) {
+      return documentoId;
+    }
+
+    const monto = this.round2(input.datos.montoOriginal);
+    if (monto <= 0) {
+      throw new Error('El credito neto de la cuenta por pagar debe ser mayor a cero.');
+    }
+
+    const fechaEmision = this.timestampDesdeIsoLocal(input.asiento.fecha);
+    const fechaVencimiento = this.timestampDesdeIsoLocal(input.datos.fechaVencimiento);
+    await this.validarPeriodo(fechaEmision);
+
+    const timestamp = Date.now();
+    const numero = await this.generarNumeroDocumento();
+    const nuevo: DocumentoPorPagar = {
+      numero,
+      origenTipo: 'MANUAL',
+      origenId: asientoId,
+      origenNumero: input.datos.referencia || input.asiento.numero || numero,
+      proveedorId: input.datos.proveedorId,
+      proveedorNombre: input.datos.proveedorNombre,
+      proveedorIdentificacion: input.datos.proveedorIdentificacion,
+      fechaEmision,
+      fechaVencimiento,
+      moneda: 'USD',
+      glosa: input.asiento.glosa,
+      montoOriginal: monto,
+      saldoPendiente: monto,
+      estadoPago: 'PENDIENTE',
+      asientoId,
+      creadoPor: this.authService.currentUser()?.uid ?? 'sistema',
+      creadoEn: timestamp,
+      actualizadoEn: timestamp
+    };
+
+    await update(ref(this.database), {
+      [`${this.getTenantPath()}/documentosPorPagar/${documentoId}`]: nuevo,
+      [`${this.getTenantPath()}/asientos/${asientoId}/cuentaPorPagarManual/documentoPorPagarId`]: documentoId
+    });
     return documentoId;
   }
 
@@ -542,6 +603,15 @@ export class CuentasPorPagarService {
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     return `${year}-${month}-${day}`;
+  }
+
+  private timestampDesdeIsoLocal(iso: string): number {
+    const [year, month, day] = iso.split('-').map(Number);
+    const date = new Date(year, month - 1, day);
+    if (!year || !month || !day || Number.isNaN(date.getTime())) {
+      throw new Error('La fecha de la cuenta por pagar no es valida.');
+    }
+    return date.getTime();
   }
 
   private normalizarConfiguracion(value: unknown): ConfiguracionCuentasPorPagar {

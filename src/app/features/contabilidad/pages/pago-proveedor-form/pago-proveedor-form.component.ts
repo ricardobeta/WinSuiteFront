@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -12,6 +13,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { dateAIso, isoADate } from '../../../../shared/utils/fecha-input.util';
 import { CuentaContableAutocompleteComponent } from '../../components/cuenta-contable-autocomplete/cuenta-contable-autocomplete.component';
 import { RevisarAsientoData, RevisarAsientoDialogComponent } from '../../components/revisar-asiento-dialog/revisar-asiento-dialog.component';
 import { AsientoContableLinea, CuentaContable } from '../../models/contabilidad.models';
@@ -35,6 +37,7 @@ interface ProveedorConSaldo {
     RouterLink,
     MatButtonModule,
     MatDialogModule,
+    MatDatepickerModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -70,7 +73,9 @@ interface ProveedorConSaldo {
 
           <mat-form-field appearance="outline">
             <mat-label>Fecha del pago</mat-label>
-            <input matInput type="date" [ngModel]="fecha()" (ngModelChange)="fecha.set($event)" />
+            <input matInput [matDatepicker]="pagoPicker" [ngModel]="fechaDate()" (ngModelChange)="actualizarFecha($event)" (input)="limpiarFechaSiVacia($event)" />
+            <mat-datepicker-toggle matIconSuffix [for]="pagoPicker"></mat-datepicker-toggle>
+            <mat-datepicker #pagoPicker></mat-datepicker>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
@@ -202,6 +207,7 @@ export class PagoProveedorFormComponent implements OnInit {
 
   protected readonly proveedorClave = signal<string | null>(null);
   protected readonly fecha = signal(this.hoyIso());
+  protected readonly fechaDate = computed(() => isoADate(this.fecha()));
   protected readonly metodoPago = signal<MetodoPagoProveedor>('TRANSFERENCIA');
   protected readonly referencia = signal('');
   protected readonly cuentaOrigenId = signal('');
@@ -231,7 +237,7 @@ export class PagoProveedorFormComponent implements OnInit {
 
   protected readonly montoTotal = computed(() => this.round2(Object.values(this.abonos()).reduce((suma, monto) => suma + Number(monto || 0), 0)));
 
-  protected readonly puedeGuardar = computed(() => this.montoTotal() > 0 && !!this.cuentaOrigenId() && !!this.proveedorClave());
+  protected readonly puedeGuardar = computed(() => this.montoTotal() > 0 && !!this.fecha() && !!this.cuentaOrigenId() && !!this.proveedorClave());
 
   async ngOnInit(): Promise<void> {
     this.cuentas.set(await this.planCuentasService.getCuentasOnce());
@@ -248,6 +254,18 @@ export class PagoProveedorFormComponent implements OnInit {
   protected seleccionarProveedor(clave: string | null): void {
     this.proveedorClave.set(clave);
     this.abonos.set({});
+  }
+
+  protected actualizarFecha(fecha: Date | null): void {
+    if (fecha) {
+      this.fecha.set(dateAIso(fecha));
+    }
+  }
+
+  protected limpiarFechaSiVacia(event: Event): void {
+    if ((event.target as HTMLInputElement).value.trim() === '') {
+      this.fecha.set('');
+    }
   }
 
   protected setAbono(documentoId: string, valor: number | null): void {

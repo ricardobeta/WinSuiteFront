@@ -355,6 +355,9 @@
           }
         },
         "facturasCompra": {
+          ".indexOn": [
+            "fechaEmision"
+          ],
           "$facturaId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }

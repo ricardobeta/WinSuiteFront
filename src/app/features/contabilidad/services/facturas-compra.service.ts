@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, get, onValue, push, ref, runTransaction, set, update } from '@angular/fire/database';
+import { Database, get, onValue, orderByChild, push, query, ref, runTransaction, set, startAt, endAt, update } from '@angular/fire/database';
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
@@ -88,6 +88,24 @@ export class FacturasCompraService {
       );
       return () => unsubscribe();
     });
+  }
+
+  async getFacturasCompraPorPeriodo(anio: number, mes: number): Promise<FacturaCompra[]> {
+    const desde = new Date(anio, mes - 1, 1, 0, 0, 0, 0).getTime();
+    const hasta = new Date(anio, mes, 1, 0, 0, 0, 0).getTime() - 1;
+    const snapshot = await get(query(
+      this.getFacturasRef(),
+      orderByChild('fechaEmision'),
+      startAt(desde),
+      endAt(hasta)
+    ));
+    if (!snapshot.exists()) {
+      return [];
+    }
+    const raw = snapshot.val() as Record<string, FacturaCompra>;
+    return Object.entries(raw)
+      .map(([id, factura]) => ({ ...factura, id }))
+      .sort((a, b) => (b.fechaEmision ?? 0) - (a.fechaEmision ?? 0));
   }
 
   async getFacturaCompraById(facturaId: string): Promise<FacturaCompra | null> {

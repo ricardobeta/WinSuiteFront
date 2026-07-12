@@ -106,7 +106,7 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
               </button>
               <span class="or-sep">o sube uno nuevo</span>
             </div>
-            <app-archivo-uploader sourceModule="compras" (uploaded)="onXmlSubido($event)"></app-archivo-uploader>
+            <app-archivo-uploader sourceModule="compras" [extensions]="['xml']" (uploaded)="onXmlSubido($event)"></app-archivo-uploader>
             @if (parseando()) {
               <div class="parsing-hint"><mat-icon>hourglass_top</mat-icon> Analizando el XML…</div>
             }
@@ -142,7 +142,7 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
               </button>
               <span class="or-sep">o sube el escaneado (PDF/imagen)</span>
             </div>
-            <app-archivo-uploader sourceModule="compras" (uploaded)="onSoporteSubido($event)"></app-archivo-uploader>
+            <app-archivo-uploader sourceModule="compras" [extensions]="['pdf', 'png', 'jpg', 'jpeg', 'webp']" (uploaded)="onSoporteSubido($event)"></app-archivo-uploader>
             <p class="warn-inline"><mat-icon>info</mat-icon> El documento adjunto es obligatorio para el registro manual.</p>
           } @else {
             <div class="parsed-chip">
@@ -331,7 +331,7 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
               <div class="items-grid-header">
                 @if (form.value.alimentaInventario) { <span>Producto</span> }
                 <span>Descripción</span><span class="num">Cant.</span><span class="num">C. Unit</span>
-                <span class="num">IVA %</span><span class="num">Total</span><span></span>
+                <span class="num">Descuento</span><span class="num">IVA %</span><span class="num">Total</span><span></span>
               </div>
               @for (item of items.controls; track $index) {
                 <div class="item-row" [formGroupName]="$index">
@@ -359,6 +359,10 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
                     <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="costoUnitario" />
                   </mat-form-field>
                   <mat-form-field appearance="outline">
+                    <mat-label>Descuento</mat-label>
+                    <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="descuento" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
                     <mat-label>IVA %</mat-label>
                     <input matInput type="number" min="0" max="100" formControlName="ivaPorcentaje" />
                   </mat-form-field>
@@ -377,35 +381,35 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
             <div class="grid-4">
               <mat-form-field appearance="outline">
                 <mat-label>Base gravada IVA</mat-label>
-                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="baseImpGrav" />
+                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="baseImpGrav" [readonly]="modo() === 'MANUAL'" />
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Base 0%</mat-label>
-                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="baseImponible" />
+                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="baseImponible" [readonly]="modo() === 'MANUAL'" />
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Base no objeto</mat-label>
-                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="baseNoGraIva" />
+                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="baseNoGraIva" (input)="recalcularTotalesDesdeItems()" />
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Base exenta</mat-label>
-                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="baseImpExe" />
+                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="baseImpExe" (input)="recalcularTotalesDesdeItems()" />
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Monto IVA</mat-label>
-                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="montoIva" />
+                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="montoIva" [readonly]="modo() === 'MANUAL'" />
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Monto ICE</mat-label>
-                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="montoIce" />
+                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="montoIce" (input)="recalcularTotalesDesdeItems()" />
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Total sin impuestos</mat-label>
-                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="totalSinImpuestos" />
+                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="totalSinImpuestos" [readonly]="modo() === 'MANUAL'" />
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Importe total</mat-label>
-                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="importeTotal" />
+                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="importeTotal" [readonly]="modo() === 'MANUAL'" />
               </mat-form-field>
             </div>
 
@@ -527,8 +531,8 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
     .items-head { display: flex; justify-content: space-between; align-items: center; }
     .items-head h3 { margin: 0; }
     .items-grid { display: grid; gap: .5rem; }
-    .items-grid-header, .item-row { display: grid; grid-template-columns: 1.6fr .7fr .8fr .7fr .9fr auto; gap: .5rem; align-items: center; }
-    .items-grid.with-product .items-grid-header, .items-grid.with-product .item-row { grid-template-columns: 1.2fr 1.4fr .7fr .8fr .7fr .9fr auto; }
+    .items-grid-header, .item-row { display: grid; grid-template-columns: 1.5fr .65fr .8fr .75fr .65fr .9fr auto; gap: .5rem; align-items: center; }
+    .items-grid.with-product .items-grid-header, .items-grid.with-product .item-row { grid-template-columns: 1.1fr 1.35fr .65fr .8fr .75fr .65fr .9fr auto; }
     .items-grid-header { color: var(--muted-foreground); font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; padding: 0 .25rem; }
     .items-grid-header .num, .item-total { text-align: right; }
     .item-total { font-weight: 600; }
@@ -672,6 +676,10 @@ export class FacturaCompraFormComponent implements OnInit {
     this.parseError.set(null);
     if (modo === 'MANUAL') {
       this.parseado.set(false);
+      if (this.items.length === 0) {
+        this.agregarItem();
+      }
+      this.recalcularTotalesDesdeItems();
     }
   }
 
@@ -740,7 +748,8 @@ export class FacturaCompraFormComponent implements OnInit {
     const cantidad = Number(g.get('cantidad')?.value ?? 0);
     const costo = Number(g.get('costoUnitario')?.value ?? 0);
     const iva = Number(g.get('ivaPorcentaje')?.value ?? 0);
-    const subtotal = cantidad * costo;
+    const descuento = Number(g.get('descuento')?.value ?? 0);
+    const subtotal = Math.max(cantidad * costo - descuento, 0);
     return this.round2(subtotal + subtotal * (iva / 100));
   }
 
@@ -751,22 +760,29 @@ export class FacturaCompraFormComponent implements OnInit {
   }
 
   protected seleccionarExistente(): void {
+    const manual = this.modo() === 'MANUAL';
     const dialogRef = this.dialog.open<ArchivoSelectorDialogComponent, ArchivoSelectorDialogData, ArchivoSelectorDialogResult | null>(
       ArchivoSelectorDialogComponent,
       {
         maxWidth: '96vw',
         data: {
-          title: 'Selecciona el XML de la factura',
-          subtitle: 'Reutiliza un comprobante ya cargado (por ejemplo, los descargados del SRI) o sube uno nuevo.',
+          title: manual ? 'Selecciona el soporte de la compra' : 'Selecciona el XML de la factura',
+          subtitle: manual
+            ? 'Busca un PDF o imagen previamente cargado, o sube uno nuevo.'
+            : 'Reutiliza un comprobante ya cargado (por ejemplo, los descargados del SRI) o sube uno nuevo.',
           sourceModule: 'compras',
           allowUpload: true,
-          extensions: ['xml']
+          extensions: manual ? ['pdf', 'png', 'jpg', 'jpeg', 'webp'] : ['xml']
         }
       }
     );
     dialogRef.afterClosed().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((result) => {
       if (result?.archivo) {
-        this.onXmlSubido(result.archivo);
+        if (manual) {
+          this.onSoporteSubido(result.archivo);
+        } else {
+          this.onXmlSubido(result.archivo);
+        }
       }
     });
   }
@@ -939,11 +955,13 @@ export class FacturaCompraFormComponent implements OnInit {
 
   protected agregarItem(): void {
     this.items.push(this.crearItemGroup());
+    this.recalcularTotalesDesdeItems();
   }
 
   protected eliminarItem(index: number): void {
     if (this.items.length > 1) {
       this.items.removeAt(index);
+      this.recalcularTotalesDesdeItems();
     }
   }
 
@@ -991,7 +1009,45 @@ export class FacturaCompraFormComponent implements OnInit {
     g.patchValue({ valRetIva: this.round2(base * pct / 100) }, { emitEvent: false });
   }
 
+  protected recalcularTotalesDesdeItems(): void {
+    if (this.modo() !== 'MANUAL') {
+      return;
+    }
+
+    let baseGravada = 0;
+    let baseCero = 0;
+    let ivaTotal = 0;
+    for (const group of this.items.controls) {
+      const cantidad = this.num(group.get('cantidad')?.value);
+      const costo = this.num(group.get('costoUnitario')?.value);
+      const descuento = this.num(group.get('descuento')?.value);
+      const porcentajeIva = this.num(group.get('ivaPorcentaje')?.value);
+      const subtotal = this.round2(Math.max(cantidad * costo - descuento, 0));
+      const iva = this.round2(subtotal * porcentajeIva / 100);
+      if (porcentajeIva > 0) {
+        baseGravada += subtotal;
+      } else {
+        baseCero += subtotal;
+      }
+      ivaTotal += iva;
+    }
+
+    const baseNoObjeto = this.num(this.form.get('baseNoGraIva')?.value);
+    const baseExenta = this.num(this.form.get('baseImpExe')?.value);
+    const totalSinImpuestos = this.round2(baseGravada + baseCero + baseNoObjeto + baseExenta);
+    const montoIva = this.round2(ivaTotal);
+    const importeTotal = this.round2(totalSinImpuestos + montoIva + this.num(this.form.get('montoIce')?.value));
+    this.form.patchValue({
+      baseImpGrav: this.round2(baseGravada),
+      baseImponible: this.round2(baseCero),
+      montoIva,
+      totalSinImpuestos,
+      importeTotal
+    }, { emitEvent: false });
+  }
+
   protected async guardar(): Promise<string | null> {
+    this.recalcularTotalesDesdeItems();
     if (this.form.invalid || this.guardando()) {
       this.form.markAllAsTouched();
       this.toast('Revisa los campos obligatorios.', 'error');
@@ -1205,7 +1261,8 @@ export class FacturaCompraFormComponent implements OnInit {
       const cantidad = this.num(g.get('cantidad')?.value);
       const costo = this.num(g.get('costoUnitario')?.value);
       const iva = this.num(g.get('ivaPorcentaje')?.value);
-      const subtotal = this.round2(cantidad * costo);
+      const descuento = this.num(g.get('descuento')?.value);
+      const subtotal = this.round2(Math.max(cantidad * costo - descuento, 0));
       const ivaValor = this.round2(subtotal * iva / 100);
       return {
         productoId: g.get('productoId')?.value ?? null,
@@ -1213,7 +1270,7 @@ export class FacturaCompraFormComponent implements OnInit {
         descripcion: String(g.get('descripcion')?.value ?? ''),
         cantidad,
         costoUnitario: costo,
-        descuento: this.num(g.get('descuento')?.value),
+        descuento,
         ivaPorcentaje: iva,
         subtotal,
         iva: ivaValor,
@@ -1223,7 +1280,7 @@ export class FacturaCompraFormComponent implements OnInit {
   }
 
   private crearItemGroup(item?: Partial<FacturaCompraItem>): FormGroup {
-    return this.fb.nonNullable.group({
+    const group = this.fb.nonNullable.group({
       productoId: [item?.productoId ?? null],
       codigoPrincipal: [item?.codigoPrincipal ?? ''],
       descripcion: [item?.descripcion ?? '', [Validators.required]],
@@ -1232,6 +1289,8 @@ export class FacturaCompraFormComponent implements OnInit {
       descuento: [item?.descuento ?? 0],
       ivaPorcentaje: [item?.ivaPorcentaje ?? 15]
     });
+    group.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.recalcularTotalesDesdeItems());
+    return group;
   }
 
   private async cargarFactura(id: string): Promise<void> {

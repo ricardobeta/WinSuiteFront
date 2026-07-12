@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, EventEmitter, Input, OnChanges, OnInit, Output, SimpleChanges, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
-import { MatAutocompleteModule, MatAutocompleteSelectedEvent } from '@angular/material/autocomplete';
+import { MatAutocompleteModule, MatAutocompleteSelectedEvent, MatAutocompleteTrigger } from '@angular/material/autocomplete';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 
@@ -28,6 +28,9 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
           type="search"
           [formControl]="busquedaControl"
           [matAutocomplete]="cuentasAuto"
+          #cuentasTrigger="matAutocompleteTrigger"
+          (focus)="mostrarOpciones(cuentasTrigger, false)"
+          (click)="mostrarOpciones(cuentasTrigger, true)"
           placeholder="Nombre o codigo"
         />
         <mat-autocomplete
@@ -39,6 +42,9 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
             <mat-option [value]="cuenta">
               {{ cuenta.codigo }} - {{ cuenta.nombre }}
             </mat-option>
+          }
+          @if (cuentasFiltradas().length === 0) {
+            <mat-option disabled>No hay cuentas disponibles con estos filtros</mat-option>
           }
         </mat-autocomplete>
       </mat-form-field>
@@ -159,13 +165,26 @@ export class CuentaContableAutocompleteComponent implements OnInit, OnChanges {
     this.cuentaSeleccionada.emit(cuenta);
   }
 
+  protected mostrarOpciones(trigger: MatAutocompleteTrigger, aperturaExplicita: boolean): void {
+    const value = this.busquedaControl.value;
+    if (!aperturaExplicita && typeof value !== 'string') {
+      return;
+    }
+    this.filtrarCuentas(typeof value === 'string' ? value : '');
+    queueMicrotask(() => {
+      if (!this.disabled) {
+        trigger.openPanel();
+      }
+    });
+  }
+
   private actualizarCuentas(cuentas: CuentaContable[]): void {
     this.todasLasCuentas.set(cuentas);
 
     const filtradas = cuentas
-      .filter((cuenta) => !this.soloActivas || cuenta.estado === 'ACTIVA')
-      .filter((cuenta) => !this.soloMovimiento || cuenta.permiteMovimiento)
-      .sort((a, b) => a.codigo.localeCompare(b.codigo, undefined, { numeric: true }));
+      .filter((cuenta) => !this.soloActivas || cuenta.estado !== 'INACTIVA')
+      .filter((cuenta) => !this.soloMovimiento || cuenta.permiteMovimiento !== false)
+      .sort((a, b) => String(a.codigo ?? '').localeCompare(String(b.codigo ?? ''), undefined, { numeric: true }));
 
     this.cuentasDisponibles.set(filtradas);
     this.sincronizarCuentaSeleccionada();
@@ -201,7 +220,8 @@ export class CuentaContableAutocompleteComponent implements OnInit, OnChanges {
     this.cuentasFiltradas.set(
       cuentas
         .filter((cuenta) => {
-          return cuenta.nombre.toLowerCase().includes(term) || cuenta.codigo.toLowerCase().includes(term);
+          return String(cuenta.nombre ?? '').toLowerCase().includes(term)
+            || String(cuenta.codigo ?? '').toLowerCase().includes(term);
         })
         .slice(0, 25)
     );
