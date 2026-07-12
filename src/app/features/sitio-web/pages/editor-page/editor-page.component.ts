@@ -274,6 +274,10 @@ const AUTOSAVE_MS = 1500;
       background: #fff;
       border-bottom: 1px solid rgba(0, 0, 0, 0.08);
       flex-wrap: wrap;
+      /* La toolbar acompaña el scroll de la pagina */
+      position: sticky;
+      top: 0;
+      z-index: 30;
     }
     .selector-pagina {
       font: inherit;
@@ -322,12 +326,11 @@ const AUTOSAVE_MS = 1500;
       background: #fff;
       overflow-y: auto;
       min-height: 0;
-      /* Fijo con scroll propio aunque un ancestro rompa la cadena de alturas:
-         sticky respecto al scroller del workspace. */
+      /* Paneles fijos con scroll propio: sticky bajo la toolbar (tambien sticky). */
       position: sticky;
-      top: 0;
-      height: calc(100vh - 118px);
-      max-height: calc(100vh - 118px);
+      top: 58px;
+      height: calc(100vh - 58px);
+      max-height: calc(100vh - 58px);
     }
     .lateral.izquierda {
       border-right: 1px solid rgba(0, 0, 0, 0.08);

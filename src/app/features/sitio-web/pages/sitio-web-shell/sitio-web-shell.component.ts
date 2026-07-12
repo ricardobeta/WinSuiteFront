@@ -107,7 +107,9 @@ import { SitiosService } from '../../services/sitios.service';
     .contenido {
       flex: 1;
       min-height: 0;
-      overflow: auto;
+      /* Sin overflow:auto: la cadena usa min-height (nunca scrollea aqui) y un
+         overflow!=visible rompe el position:sticky de los paneles del editor. */
+      overflow: visible;
     }
   `,
 })
