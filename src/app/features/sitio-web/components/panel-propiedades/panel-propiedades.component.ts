@@ -1014,7 +1014,7 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
                 [ngModel]="enlace.paginaId"
                 (ngModelChange)="patchItem('enlaces', i, { paginaId: $event })"
               >
-                @for (pagina of paginas(); track pagina.id) {
+                @for (pagina of paginasMenu(); track pagina.id) {
                   <option [value]="pagina.id">{{ pagina.titulo }}</option>
                 }
               </select>
@@ -1500,6 +1500,11 @@ export class PanelPropiedadesComponent {
   readonly formulariosEmpresa = toSignal(this.formulariosService.getFormularios(), {
     initialValue: [],
   });
+
+  /** Paginas navegables para menus (excluye las de sistema: slug '__x'). */
+  readonly paginasMenu = computed(() =>
+    this.paginas().filter((pagina) => !pagina.slug.startsWith('__')),
+  );
 
   readonly formularioSeleccionadoExiste = computed(() => {
     const bloque = this.bloque();
