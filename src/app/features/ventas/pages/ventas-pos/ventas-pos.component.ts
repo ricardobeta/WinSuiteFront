@@ -1,6 +1,6 @@
 import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, computed, effect, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
@@ -13,7 +13,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, startWith } from 'rxjs';
 import { TwoDecimalInputDirective } from '../../../../shared/directives/two-decimal-input.directive';
 
 import { ClienteFormDialogComponent } from '../../../../shared/components/cliente-form-dialog/cliente-form-dialog.component';
@@ -640,6 +640,14 @@ export class VentasPosComponent {
 
   protected readonly busquedaProductoControl = new FormControl('', { nonNullable: true });
   protected readonly busquedaClienteControl = new FormControl('', { nonNullable: true });
+  private readonly busquedaProducto = toSignal(
+    this.busquedaProductoControl.valueChanges.pipe(startWith(this.busquedaProductoControl.value)),
+    { initialValue: this.busquedaProductoControl.value }
+  );
+  private readonly busquedaCliente = toSignal(
+    this.busquedaClienteControl.valueChanges.pipe(startWith(this.busquedaClienteControl.value)),
+    { initialValue: this.busquedaClienteControl.value }
+  );
   protected readonly tabNombreControl = new FormControl('', { nonNullable: true });
   protected readonly productos = signal<Producto[]>([]);
   protected readonly servicios = signal<Servicio[]>([]);
@@ -732,7 +740,7 @@ export class VentasPosComponent {
   );
   protected readonly pagosDescuadrados = computed(() => Math.abs(this.balancePagos()) > 0.01);
   protected readonly catalogoFiltrado = computed(() => {
-    const query = this.busquedaProductoControl.value.trim().toLowerCase();
+    const query = this.busquedaProducto().trim().toLowerCase();
     const productos = this.productos().map<CatalogoPosItem>((producto) => {
       const esReceta = producto.tipo === 'RECETA';
       const stockReceta = esReceta ? this.stockRecetaAproximado(producto) : null;
@@ -787,7 +795,7 @@ export class VentasPosComponent {
     });
   });
   protected readonly clientesFiltrados = computed(() => {
-    const query = this.busquedaClienteControl.value.trim().toLowerCase();
+    const query = this.busquedaCliente().trim().toLowerCase();
 
     if (!query) {
       return this.clientes().slice(0, 20);

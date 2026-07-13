@@ -13,12 +13,14 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { PageEvent } from '@angular/material/paginator';
 import { debounceTime, firstValueFrom, startWith } from 'rxjs';
 
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { EstadoFacturaCompra, FacturaCompra, TIPOS_COMPROBANTE, TIPO_COMPROBANTE_NOTA_CREDITO } from '../../models/compras.models';
-import { FacturasCompraService } from '../../services/facturas-compra.service';
+import { FacturasCompraPageCursor, FacturasCompraService } from '../../services/facturas-compra.service';
 
 @Component({
   selector: 'app-facturas-compra-list',
@@ -36,7 +38,8 @@ import { FacturasCompraService } from '../../services/facturas-compra.service';
     MatSelectModule,
     MatSnackBarModule,
     MatTableModule,
-    MatTooltipModule
+    MatTooltipModule,
+    DataTableFrameComponent
   ],
   template: `
     <section class="compras-page">
@@ -60,19 +63,19 @@ import { FacturasCompraService } from '../../services/facturas-compra.service';
 
       <section class="kpi-row">
         <article class="kpi-card metric-hero">
-          <p class="kpi-label">Total del período</p>
+          <p class="kpi-label">Total página cargada</p>
           <p class="kpi-value">{{ totalPeriodo() | currency: 'USD':'symbol-narrow':'1.2-2' }}</p>
         </article>
         <article class="kpi-card surface-card">
-          <p class="kpi-label">Comprobantes</p>
+          <p class="kpi-label">Comprobantes página</p>
           <p class="kpi-value">{{ facturasFiltradas().length }}</p>
         </article>
         <article class="kpi-card surface-card">
-          <p class="kpi-label">IVA compras</p>
+          <p class="kpi-label">IVA página</p>
           <p class="kpi-value">{{ totalIva() | currency: 'USD':'symbol-narrow':'1.2-2' }}</p>
         </article>
         <article class="kpi-card surface-card">
-          <p class="kpi-label">Retenciones</p>
+          <p class="kpi-label">Retenciones página</p>
           <p class="kpi-value">{{ totalRetencion() | currency: 'USD':'symbol-narrow':'1.2-2' }}</p>
         </article>
       </section>
@@ -80,18 +83,14 @@ import { FacturasCompraService } from '../../services/facturas-compra.service';
       <section class="surface-card filters-card">
         <mat-form-field appearance="outline" class="search">
           <mat-icon matPrefix>search</mat-icon>
-          <mat-label>Buscar proveedor o comprobante</mat-label>
+          <mat-label>Filtrar página cargada</mat-label>
           <input matInput [formControl]="busqueda" autocomplete="off" />
         </mat-form-field>
 
         <mat-form-field appearance="outline">
-          <mat-label>Período</mat-label>
-          <mat-select [formControl]="periodo">
-            <mat-option value="">Todos</mat-option>
-            @for (opcion of periodosDisponibles(); track opcion.valor) {
-              <mat-option [value]="opcion.valor">{{ opcion.etiqueta }}</mat-option>
-            }
-          </mat-select>
+          <mat-label>Período obligatorio</mat-label>
+          <input matInput type="month" [formControl]="periodo" />
+          <mat-hint>Selecciona el mes a consultar</mat-hint>
         </mat-form-field>
 
         <mat-form-field appearance="outline">
@@ -113,21 +112,46 @@ import { FacturasCompraService } from '../../services/facturas-compra.service';
             <mat-option value="ANULADA">Anulada</mat-option>
           </mat-select>
         </mat-form-field>
+
+        <button mat-raised-button color="primary" type="button" class="search-button" (click)="buscar()" [disabled]="!periodo.value || cargando()">
+          <mat-icon>search</mat-icon>
+          Buscar
+        </button>
       </section>
 
       <section class="surface-card table-card">
-        @if (facturasFiltradas().length === 0) {
+        @if (!periodo.value) {
+          <div class="empty-state">
+            <mat-icon>date_range</mat-icon>
+            <h3>Selecciona un período</h3>
+            <p>La consulta no se ejecutará hasta que elijas un mes.</p>
+          </div>
+        } @else if (!consultaRealizada()) {
+          <div class="empty-state">
+            <mat-icon>manage_search</mat-icon>
+            <h3>Consulta pendiente</h3>
+            <p>Presiona Buscar para cargar hasta 50 compras del período seleccionado.</p>
+          </div>
+        } @else if (cargando()) {
+          <div class="empty-state">
+            <mat-icon>hourglass_empty</mat-icon>
+            <h3>Cargando compras</h3>
+          </div>
+        } @else if (facturas().length === 0) {
           <div class="empty-state">
             <mat-icon>receipt_long</mat-icon>
             <h3>Sin facturas de compra</h3>
-            <p>Sube el XML de una factura de proveedor para empezar a registrar tus compras.</p>
-            <a mat-stroked-button color="primary" routerLink="/workspace/contabilidad/compras/nueva">
-              <mat-icon>upload_file</mat-icon>
-              Registrar primera factura
-            </a>
+            <p>No existen compras en el período seleccionado.</p>
           </div>
         } @else {
-          <div class="table-wrap">
+          <app-data-table-frame
+            [showSearch]="false"
+            [total]="totalPaginador()"
+            [pageIndex]="pageIndex()"
+            [pageSize]="pageSize()"
+            [pageSizeOptions]="[50, 100]"
+            (pageChange)="actualizarPagina($event)"
+          >
             <table mat-table [dataSource]="facturasFiltradas()" class="compras-table">
               <ng-container matColumnDef="documento">
                 <th mat-header-cell *matHeaderCellDef>Comprobante</th>
@@ -208,7 +232,7 @@ import { FacturasCompraService } from '../../services/facturas-compra.service';
               <tr mat-header-row *matHeaderRowDef="columnas"></tr>
               <tr mat-row *matRowDef="let row; columns: columnas"></tr>
             </table>
-          </div>
+          </app-data-table-frame>
         }
       </section>
     </section>
@@ -229,8 +253,9 @@ import { FacturasCompraService } from '../../services/facturas-compra.service';
     .metric-hero { color: var(--tc-on-primary, #fff); background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 72%, #0a1f1b)); box-shadow: 0 12px 30px color-mix(in srgb, var(--primary) 30%, transparent); }
     .metric-hero .kpi-label { color: color-mix(in srgb, #fff 82%, transparent); }
 
-    .filters-card { padding: 1rem 1.25rem; display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: .75rem; align-items: center; }
+    .filters-card { padding: 1rem 1.25rem; display: grid; grid-template-columns: minmax(260px, 2fr) 220px 1fr 1fr auto; gap: .75rem; align-items: start; }
     .filters-card .search { grid-column: 1; }
+    .search-button { min-height: 56px; }
     .compras-table td.num.neg { color: var(--destructive); }
 
     .table-card { padding: .5rem .5rem; }
@@ -271,7 +296,7 @@ export class FacturasCompraListComponent {
   protected readonly columnas = ['documento', 'proveedor', 'tipo', 'fecha', 'total', 'inventario', 'estado', 'acciones'];
   protected readonly tiposComprobante = TIPOS_COMPROBANTE;
 
-  private readonly facturas = signal<FacturaCompra[]>([]);
+  protected readonly facturas = signal<FacturaCompra[]>([]);
   protected readonly busqueda = new FormControl('', { nonNullable: true });
   protected readonly periodo = new FormControl('', { nonNullable: true });
   protected readonly tipo = new FormControl('', { nonNullable: true });
@@ -281,19 +306,12 @@ export class FacturasCompraListComponent {
   private readonly periodoSignal = signal('');
   private readonly tipoSignal = signal('');
   private readonly estadoSignal = signal('');
-
-  protected readonly periodosDisponibles = computed(() => {
-    const set = new Map<string, string>();
-    for (const factura of this.facturas()) {
-      const valor = this.periodoDe(factura);
-      if (valor && !set.has(valor)) {
-        set.set(valor, this.etiquetaPeriodo(valor));
-      }
-    }
-    return Array.from(set.entries())
-      .map(([valor, etiqueta]) => ({ valor, etiqueta }))
-      .sort((a, b) => b.valor.localeCompare(a.valor));
-  });
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(50);
+  protected readonly cargando = signal(false);
+  protected readonly consultaRealizada = signal(false);
+  protected readonly hasMore = signal(false);
+  private readonly cursors = new Map<number, FacturasCompraPageCursor | null>([[0, null]]);
 
   protected readonly facturasFiltradas = computed(() => {
     const texto = this.busquedaSignal().trim().toLowerCase();
@@ -319,6 +337,9 @@ export class FacturasCompraListComponent {
       return true;
     });
   });
+  protected readonly totalPaginador = computed(() =>
+    this.pageIndex() * this.pageSize() + this.facturas().length + (this.hasMore() ? 1 : 0)
+  );
 
   // Las NC restan en los KPIs (netean el período).
   protected readonly totalPeriodo = computed(() =>
@@ -332,19 +353,78 @@ export class FacturasCompraListComponent {
   );
 
   constructor() {
-    this.facturasService
-      .getFacturasCompra()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((facturas) => this.facturas.set(facturas));
-
     this.busqueda.valueChanges.pipe(startWith(''), debounceTime(250), takeUntilDestroyed(this.destroyRef))
       .subscribe((value) => this.busquedaSignal.set(value ?? ''));
     this.periodo.valueChanges.pipe(startWith(''), takeUntilDestroyed(this.destroyRef))
-      .subscribe((value) => this.periodoSignal.set(value ?? ''));
+      .subscribe((value) => {
+        this.periodoSignal.set(value ?? '');
+        this.reiniciarConsulta();
+      });
     this.tipo.valueChanges.pipe(startWith(''), takeUntilDestroyed(this.destroyRef))
       .subscribe((value) => this.tipoSignal.set(value ?? ''));
     this.estado.valueChanges.pipe(startWith(''), takeUntilDestroyed(this.destroyRef))
       .subscribe((value) => this.estadoSignal.set(value ?? ''));
+  }
+
+  protected buscar(): void {
+    if (!this.periodo.value) {
+      return;
+    }
+    this.cursors.clear();
+    this.cursors.set(0, null);
+    void this.cargarPagina(0);
+  }
+
+  protected actualizarPagina(event: PageEvent): void {
+    if (event.pageSize !== this.pageSize()) {
+      this.pageSize.set(event.pageSize);
+      this.buscar();
+      return;
+    }
+
+    if (this.cursors.has(event.pageIndex)) {
+      void this.cargarPagina(event.pageIndex);
+    }
+  }
+
+  private async cargarPagina(pageIndex: number): Promise<void> {
+    const periodo = this.periodo.value;
+    if (!periodo || !this.cursors.has(pageIndex)) {
+      return;
+    }
+
+    this.cargando.set(true);
+    this.consultaRealizada.set(true);
+    try {
+      const page = await this.facturasService.getFacturasCompraPage(
+        periodo,
+        this.pageSize(),
+        this.cursors.get(pageIndex) ?? null
+      );
+      this.facturas.set(page.items);
+      this.pageIndex.set(pageIndex);
+      this.hasMore.set(page.hasMore);
+      if (page.nextCursor) {
+        this.cursors.set(pageIndex + 1, page.nextCursor);
+      } else {
+        this.cursors.delete(pageIndex + 1);
+      }
+    } catch (error) {
+      this.facturas.set([]);
+      this.hasMore.set(false);
+      this.toast(error instanceof Error ? error.message : 'No se pudieron cargar las compras.', 'error');
+    } finally {
+      this.cargando.set(false);
+    }
+  }
+
+  private reiniciarConsulta(): void {
+    this.facturas.set([]);
+    this.pageIndex.set(0);
+    this.hasMore.set(false);
+    this.consultaRealizada.set(false);
+    this.cursors.clear();
+    this.cursors.set(0, null);
   }
 
   protected documento(factura: FacturaCompra): string {
@@ -403,6 +483,7 @@ export class FacturasCompraListComponent {
     try {
       await this.facturasService.cambiarEstado(factura.id, 'ANULADA');
       this.toast('Factura anulada.', 'block');
+      await this.cargarPagina(this.pageIndex());
     } catch (error) {
       this.toast(error instanceof Error ? error.message : 'No se pudo anular la factura.', 'error');
     }
@@ -414,12 +495,6 @@ export class FacturasCompraListComponent {
       return '';
     }
     return `${fecha.getFullYear()}-${String(fecha.getMonth() + 1).padStart(2, '0')}`;
-  }
-
-  private etiquetaPeriodo(valor: string): string {
-    const [anio, mes] = valor.split('-');
-    const meses = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
-    return `${meses[Number(mes) - 1] ?? mes} ${anio}`;
   }
 
   private toast(message: string, icon: string): void {

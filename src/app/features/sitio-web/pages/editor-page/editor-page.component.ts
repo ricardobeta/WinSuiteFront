@@ -267,38 +267,44 @@ const AUTOSAVE_MS = 1500;
       display: flex;
       flex-direction: column;
       height: 100%;
-      background: #f3f4f6;
+      background: var(--tc-surface-container-low);
+      color: var(--tc-on-surface);
     }
     .toolbar {
       display: flex;
       align-items: center;
       gap: 4px;
       padding: 6px 12px;
-      background: #fff;
-      border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
+      border-bottom: 1px solid var(--tc-ghost-border);
       flex-wrap: wrap;
       /* La toolbar acompaña el scroll de la pagina */
       position: sticky;
       top: 0;
       z-index: 30;
     }
+    .toolbar button:not(.mat-primary) {
+      color: var(--tc-on-surface);
+    }
     .selector-pagina {
       font: inherit;
       padding: 6px 8px;
-      border: 1px solid rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 6px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
       max-width: 160px;
     }
     .separador {
       width: 1px;
       height: 22px;
-      background: rgba(0, 0, 0, 0.12);
+      background: var(--tc-ghost-border);
       margin-inline: 6px;
     }
     .toolbar button.activo {
-      color: #2563eb;
-      background: #eff6ff;
+      color: var(--primary);
+      background: color-mix(in srgb, var(--primary) 12%, transparent);
       border-radius: 8px;
     }
     .badge-vista {
@@ -306,8 +312,8 @@ const AUTOSAVE_MS = 1500;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      color: #1d4ed8;
-      background: #eff6ff;
+      color: var(--primary);
+      background: color-mix(in srgb, var(--primary) 12%, transparent);
       border-radius: 999px;
       padding: 4px 10px;
       margin-left: 4px;
@@ -326,7 +332,7 @@ const AUTOSAVE_MS = 1500;
       align-items: start;
     }
     .lateral {
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
       overflow-y: auto;
       min-height: 0;
       /* Paneles fijos con scroll propio: sticky bajo la toolbar (tambien sticky). */
@@ -336,10 +342,10 @@ const AUTOSAVE_MS = 1500;
       max-height: calc(100vh - 58px);
     }
     .lateral.izquierda {
-      border-right: 1px solid rgba(0, 0, 0, 0.08);
+      border-right: 1px solid var(--tc-ghost-border);
     }
     .lateral.derecha {
-      border-left: 1px solid rgba(0, 0, 0, 0.08);
+      border-left: 1px solid var(--tc-ghost-border);
     }
     .titulo-panel {
       margin: 12px 12px 0;
@@ -370,6 +376,11 @@ const AUTOSAVE_MS = 1500;
       padding: 32px 20px;
       text-align: center;
       opacity: 0.55;
+    }
+    @media (max-width: 960px) {
+      .cuerpo { grid-template-columns: 1fr; }
+      .lateral { position: relative; top: auto; height: auto; max-height: 46vh; border: 0 !important; }
+      .zona-canvas { min-height: 60vh; padding: 12px; }
     }
   `,
 })

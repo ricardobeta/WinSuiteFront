@@ -11,9 +11,11 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { PageEvent } from '@angular/material/paginator';
 
 import { AuthorizationService } from '../../../../core/services/authorization.service';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { CuentaContableAutocompleteComponent } from '../../../contabilidad/components/cuenta-contable-autocomplete/cuenta-contable-autocomplete.component';
@@ -38,6 +40,7 @@ import { PlanCuentasService } from '../../../contabilidad/services/plan-cuentas.
     MatSnackBarModule,
     MatTableModule,
     MatTooltipModule,
+    DataTableFrameComponent,
     CuentaContableAutocompleteComponent
   ],
   template: `
@@ -142,8 +145,15 @@ import { PlanCuentasService } from '../../../contabilidad/services/plan-cuentas.
             <p>Siembra los rubros por defecto o crea el primero para usarlo en los roles.</p>
           </div>
         } @else {
-          <div class="table-wrap">
-            <table mat-table [dataSource]="rubros()">
+          <app-data-table-frame
+            searchPlaceholder="Buscar rubro"
+            [total]="rubrosFiltrados().length"
+            [pageIndex]="pageIndex()"
+            [pageSize]="pageSize()"
+            (searchChange)="actualizarBusqueda($event)"
+            (pageChange)="actualizarPagina($event)"
+          >
+            <table mat-table [dataSource]="rubrosPaginados()">
               <ng-container matColumnDef="codigo">
                 <th mat-header-cell *matHeaderCellDef>Codigo</th>
                 <td mat-cell *matCellDef="let row"><strong>{{ row.codigo }}</strong></td>
@@ -191,7 +201,7 @@ import { PlanCuentasService } from '../../../contabilidad/services/plan-cuentas.
               <tr mat-header-row *matHeaderRowDef="columnas"></tr>
               <tr mat-row *matRowDef="let row; columns: columnas"></tr>
             </table>
-          </div>
+          </app-data-table-frame>
         }
       </section>
     </section>
@@ -233,12 +243,38 @@ export class NominaRubrosComponent {
 
   protected readonly columnas = ['codigo', 'nombre', 'tipo', 'calculo', 'iess', 'estado', 'acciones'];
   protected readonly rubros = signal<RubroNomina[]>([]);
+  protected readonly busqueda = signal('');
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(10);
+  protected readonly rubrosFiltrados = computed(() => {
+    const query = this.normalizar(this.busqueda());
+    if (!query) return this.rubros();
+    return this.rubros().filter((rubro) => this.normalizar(JSON.stringify(rubro)).includes(query));
+  });
+  protected readonly rubrosPaginados = computed(() => {
+    const start = this.pageIndex() * this.pageSize();
+    return this.rubrosFiltrados().slice(start, start + this.pageSize());
+  });
   protected readonly cuentas = signal<CuentaContable[]>([]);
   protected readonly cuentasMovimiento = computed(() => this.cuentas().filter((cuenta) => cuenta.estado === 'ACTIVA' && cuenta.permiteMovimiento));
   protected readonly canUpdate = computed(() => this.authorization.canAccess('contabilidad', 'update'));
   protected readonly procesando = signal(false);
   protected readonly error = signal<string | null>(null);
   protected form: RubroNomina = this.nuevoRubro();
+
+  protected actualizarBusqueda(value: string): void {
+    this.busqueda.set(value);
+    this.pageIndex.set(0);
+  }
+
+  protected actualizarPagina(event: PageEvent): void {
+    this.pageIndex.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
+  }
+
+  private normalizar(value: string): string {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  }
 
   constructor() {
     this.nominaService

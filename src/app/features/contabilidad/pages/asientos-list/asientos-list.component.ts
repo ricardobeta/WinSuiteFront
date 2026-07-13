@@ -1,6 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
@@ -12,13 +11,15 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { PageEvent } from '@angular/material/paginator';
 
 import { AuthorizationService } from '../../../../core/services/authorization.service';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { PendienteContabilizacionDialogComponent } from '../../components/pendiente-contabilizacion-dialog/pendiente-contabilizacion-dialog.component';
 import { AsientoContable, EstadoAsiento, OrigenAsiento, PendienteContabilizacion } from '../../models/contabilidad.models';
-import { AsientosContablesService } from '../../services/asientos-contables.service';
+import { AsientosContablesService, AsientosPageCursor } from '../../services/asientos-contables.service';
 import { IntegracionContableService } from '../../services/integracion-contable.service';
 
 @Component({
@@ -36,7 +37,8 @@ import { IntegracionContableService } from '../../services/integracion-contable.
     MatSelectModule,
     MatSnackBarModule,
     MatTableModule,
-    MatTooltipModule
+    MatTooltipModule,
+    DataTableFrameComponent
   ],
   template: `
     <section class="asientos-page">
@@ -59,7 +61,13 @@ import { IntegracionContableService } from '../../services/integracion-contable.
 
       <section class="surface-card filters-card">
         <mat-form-field appearance="outline">
-          <mat-label>Buscar</mat-label>
+          <mat-label>Período obligatorio</mat-label>
+          <input matInput type="month" [value]="periodo()" (input)="actualizarPeriodo($event)" />
+          <mat-hint>Selecciona el mes que deseas consultar</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Filtrar página cargada</mat-label>
           <input matInput type="search" [value]="busqueda()" (input)="actualizarBusqueda($event)" placeholder="Numero, detalle o referencia" />
           <button mat-icon-button matIconSuffix type="button" matTooltipPosition="above" [matTooltip]="ayuda.buscar" aria-label="Ayuda buscar asiento">
             <mat-icon>help_outline</mat-icon>
@@ -92,22 +100,46 @@ import { IntegracionContableService } from '../../services/integracion-contable.
             <mat-option value="ROL_PAGO">Rol de pago</mat-option>
           </mat-select>
         </mat-form-field>
+
+        <button mat-raised-button color="primary" type="button" class="search-button" (click)="buscar()" [disabled]="!periodo() || cargando()">
+          <mat-icon>search</mat-icon>
+          Buscar
+        </button>
       </section>
 
       <section class="surface-card table-card">
-        @if (cargando()) {
+        @if (!periodo()) {
+          <div class="empty-state">
+            <mat-icon>date_range</mat-icon>
+            <h3>Selecciona un período</h3>
+            <p>La consulta no se ejecutará hasta que elijas un mes.</p>
+          </div>
+        } @else if (!consultaRealizada()) {
+          <div class="empty-state">
+            <mat-icon>manage_search</mat-icon>
+            <h3>Consulta pendiente</h3>
+            <p>Presiona Buscar para cargar hasta 50 asientos del período seleccionado.</p>
+          </div>
+        } @else if (cargando()) {
           <div class="empty-state">
             <mat-icon>hourglass_empty</mat-icon>
             <h3>Cargando asientos</h3>
           </div>
-        } @else if (asientosFiltrados().length === 0) {
+        } @else if (asientos().length === 0) {
           <div class="empty-state">
             <mat-icon>receipt_long</mat-icon>
             <h3>Sin asientos</h3>
-            <p>Crea el primer asiento contable o activa integraciones automaticas.</p>
+            <p>No existen asientos en el período seleccionado.</p>
           </div>
         } @else {
-          <div class="table-wrap">
+          <app-data-table-frame
+            [showSearch]="false"
+            [total]="totalPaginador()"
+            [pageIndex]="pageIndex()"
+            [pageSize]="pageSize()"
+            [pageSizeOptions]="[50, 100]"
+            (pageChange)="actualizarPagina($event)"
+          >
             <table mat-table [dataSource]="asientosFiltrados()">
               <ng-container matColumnDef="numero">
                 <th mat-header-cell *matHeaderCellDef>Numero</th>
@@ -171,7 +203,7 @@ import { IntegracionContableService } from '../../services/integracion-contable.
               <tr mat-header-row *matHeaderRowDef="columnas"></tr>
               <tr mat-row *matRowDef="let row; columns: columnas"></tr>
             </table>
-          </div>
+          </app-data-table-frame>
         }
       </section>
 
@@ -238,7 +270,8 @@ import { IntegracionContableService } from '../../services/integracion-contable.
     .page-header h2 { display: inline-flex; align-items: center; gap: .35rem; }
     .page-header p { margin: .35rem 0 0; color: var(--muted-foreground); }
     .eyebrow { margin: 0 0 .35rem; text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; color: var(--primary); }
-    .filters-card { padding: 1rem; display: grid; grid-template-columns: minmax(260px, 1fr) 220px 220px; gap: .75rem; background: var(--tc-surface-container-lowest); }
+    .filters-card { padding: 1rem; display: grid; grid-template-columns: 220px minmax(260px, 1fr) 200px 220px auto; gap: .75rem; align-items: start; background: var(--tc-surface-container-lowest); }
+    .search-button { min-height: 56px; }
     .table-card { padding: 1rem; background: var(--tc-surface-container-lowest); }
     .section-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
     .section-head h3, .section-head p { margin: 0; }
@@ -246,9 +279,9 @@ import { IntegracionContableService } from '../../services/integracion-contable.
     .origin-number { display: block; font-size: .82rem; margin-top: .15rem; }
     .table-wrap { overflow: auto; }
     table { width: 100%; min-width: 1080px; }
-    .estado-borrador { background: color-mix(in srgb, #f59e0b 18%, transparent); }
+    .estado-borrador { background: var(--tc-warning-container); color: var(--tc-on-warning-container); }
     .estado-aprobado { background: color-mix(in srgb, var(--primary) 18%, transparent); }
-    .origen-auto { background: color-mix(in srgb, #0f766e 16%, transparent); color: #0f5f59; }
+    .origen-auto { background: var(--tc-info-container); color: var(--tc-on-info-container); }
     .empty-state { min-height: 240px; display: grid; place-items: center; align-content: center; gap: .5rem; text-align: center; color: var(--muted-foreground); }
     .empty-state.compact { min-height: 120px; }
     .empty-state h3 { margin: 0; color: var(--foreground); }
@@ -265,7 +298,6 @@ export class AsientosListComponent implements OnInit {
   private readonly service = inject(AsientosContablesService);
   private readonly integracionService = inject(IntegracionContableService);
   private readonly authorization = inject(AuthorizationService);
-  private readonly destroyRef = inject(DestroyRef);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   private readonly router = inject(Router);
@@ -274,10 +306,16 @@ export class AsientosListComponent implements OnInit {
   protected readonly columnasPendientes = ['origen', 'modulo', 'motivo', 'fecha', 'acciones'];
   protected readonly asientos = signal<AsientoContable[]>([]);
   protected readonly pendientesAutomaticos = signal<PendienteContabilizacion[]>([]);
-  protected readonly cargando = signal(true);
+  protected readonly cargando = signal(false);
+  protected readonly consultaRealizada = signal(false);
+  protected readonly periodo = signal('');
   protected readonly busqueda = signal('');
   protected readonly estadoFiltro = signal<EstadoAsiento | 'TODOS'>('TODOS');
   protected readonly origenFiltro = signal<OrigenAsiento | 'TODOS'>('TODOS');
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(50);
+  protected readonly hasMore = signal(false);
+  private readonly cursors = new Map<number, AsientosPageCursor | null>([[0, null]]);
   protected readonly canCreate = computed(() => this.authorization.canAccess('contabilidad', 'create'));
   protected readonly canDelete = computed(() => this.authorization.canAccess('contabilidad', 'delete'));
   protected readonly ayuda = {
@@ -305,33 +343,86 @@ export class AsientosListComponent implements OnInit {
       return matchText && matchEstado && matchOrigen;
     });
   });
+  protected readonly totalPaginador = computed(() =>
+    this.pageIndex() * this.pageSize() + this.asientos().length + (this.hasMore() ? 1 : 0)
+  );
 
   ngOnInit(): void {
-    this.service
-      .getAsientos()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (asientos) => {
-          this.asientos.set(asientos);
-          this.cargando.set(false);
-        },
-        error: () => {
-          this.cargando.set(false);
-          this.mostrarMensaje('No se pudieron cargar los asientos.', 'error');
-        }
-      });
+    void this.cargarPendientes();
+  }
 
-    this.integracionService
-      .getPendientes()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe({
-        next: (pendientes) => this.pendientesAutomaticos.set(pendientes),
-        error: () => this.mostrarMensaje('No se pudieron cargar los pendientes automaticos.', 'error')
-      });
+  private async cargarPendientes(): Promise<void> {
+    try {
+      this.pendientesAutomaticos.set(await this.integracionService.getPendientesOnce(50));
+    } catch {
+      this.mostrarMensaje('No se pudieron cargar los pendientes automaticos.', 'error');
+    }
   }
 
   protected actualizarBusqueda(event: Event): void {
     this.busqueda.set((event.target as HTMLInputElement).value);
+  }
+
+  protected actualizarPeriodo(event: Event): void {
+    this.periodo.set((event.target as HTMLInputElement).value);
+    this.reiniciarConsulta();
+  }
+
+  protected buscar(): void {
+    this.cursors.clear();
+    this.cursors.set(0, null);
+    void this.cargarPagina(0);
+  }
+
+  protected actualizarPagina(event: PageEvent): void {
+    if (event.pageSize !== this.pageSize()) {
+      this.pageSize.set(event.pageSize);
+      this.buscar();
+      return;
+    }
+
+    if (this.cursors.has(event.pageIndex)) {
+      void this.cargarPagina(event.pageIndex);
+    }
+  }
+
+  private async cargarPagina(pageIndex: number): Promise<void> {
+    if (!this.periodo() || !this.cursors.has(pageIndex)) {
+      return;
+    }
+
+    this.cargando.set(true);
+    this.consultaRealizada.set(true);
+    try {
+      const page = await this.service.getAsientosPage(
+        this.periodo(),
+        this.pageSize(),
+        this.cursors.get(pageIndex) ?? null
+      );
+      this.asientos.set(page.items);
+      this.pageIndex.set(pageIndex);
+      this.hasMore.set(page.hasMore);
+      if (page.nextCursor) {
+        this.cursors.set(pageIndex + 1, page.nextCursor);
+      } else {
+        this.cursors.delete(pageIndex + 1);
+      }
+    } catch (error) {
+      this.asientos.set([]);
+      this.hasMore.set(false);
+      this.mostrarMensaje(error instanceof Error ? error.message : 'No se pudieron cargar los asientos.', 'error');
+    } finally {
+      this.cargando.set(false);
+    }
+  }
+
+  private reiniciarConsulta(): void {
+    this.asientos.set([]);
+    this.pageIndex.set(0);
+    this.hasMore.set(false);
+    this.consultaRealizada.set(false);
+    this.cursors.clear();
+    this.cursors.set(0, null);
   }
 
   protected editar(asiento: AsientoContable): void {
@@ -367,6 +458,7 @@ export class AsientosListComponent implements OnInit {
 
       void this.service.eliminarBorrador(asiento).then(() => {
         this.mostrarMensaje('Borrador eliminado.', 'delete');
+        void this.cargarPagina(this.pageIndex());
       });
     });
   }
@@ -400,6 +492,7 @@ export class AsientosListComponent implements OnInit {
 
   protected async reintentarPendiente(pendiente: PendienteContabilizacion): Promise<void> {
     await this.integracionService.reintentarPendiente(pendiente);
+    await this.cargarPendientes();
     this.mostrarMensaje('Pendiente marcado para revision.', 'refresh');
   }
 

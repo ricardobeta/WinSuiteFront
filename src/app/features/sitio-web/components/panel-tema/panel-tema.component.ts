@@ -104,6 +104,7 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       flex-direction: column;
       gap: 14px;
       padding: 14px;
+      color: var(--tc-on-surface);
     }
     h3 {
       margin: 0;
@@ -124,10 +125,10 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
     .colores input[type='color'] {
       width: 100%;
       height: 34px;
-      border: 1px solid rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 6px;
       padding: 2px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
       cursor: pointer;
     }
     .presets {
@@ -140,21 +141,22 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       align-items: center;
       gap: 3px;
       padding: 6px 8px;
-      border: 1px solid rgba(0, 0, 0, 0.12);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 8px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
       cursor: pointer;
       font: inherit;
       font-size: 0.75rem;
     }
     .preset:hover {
-      border-color: #2563eb;
+      border-color: var(--primary);
     }
     .muestra {
       width: 12px;
       height: 12px;
       border-radius: 999px;
-      border: 1px solid rgba(0, 0, 0, 0.1);
+      border: 1px solid var(--tc-ghost-border);
       flex-shrink: 0;
     }
     .preset-nombre {
@@ -177,9 +179,10 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       font: inherit;
       font-weight: 400;
       padding: 7px 8px;
-      border: 1px solid rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 6px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
     }
   `,
 })

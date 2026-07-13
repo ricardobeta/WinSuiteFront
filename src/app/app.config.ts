@@ -16,11 +16,13 @@ import {
   MAT_DATE_LOCALE,
   MatDateFormats,
 } from '@angular/material/core';
+import { MatPaginatorIntl } from '@angular/material/paginator';
 
 import { routes } from './app.routes';
 import { environment } from '../environments/environment';
 import { AuthInterceptor } from './core/interceptors/auth.interceptor';
 import { EcuadorDateAdapter } from './shared/adapters/ecuador-date.adapter';
+import { SpanishPaginatorIntl } from './shared/services/spanish-paginator-intl';
 
 // Ecuador usa el formato de fecha día/mes/año. Con el adaptador nativo, estas opciones de Intl
 // (junto con MAT_DATE_LOCALE 'es-EC') hacen que los datepickers muestren y parseen dd/mm/aaaa.
@@ -53,6 +55,7 @@ export const appConfig: ApplicationConfig = {
     { provide: LOCALE_ID, useValue: 'es-EC' },
     { provide: MAT_DATE_LOCALE, useValue: 'es-EC' },
     { provide: MAT_DATE_FORMATS, useValue: ES_EC_DATE_FORMATS },
+    { provide: MatPaginatorIntl, useClass: SpanishPaginatorIntl },
     provideAnimationsAsync(),
     provideFirebaseApp(() => initializeApp(environment.firebase)),
     provideAuth(() => getAuth()),

@@ -6,7 +6,9 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
+import { PageEvent } from '@angular/material/paginator';
 
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { EmpleadoNomina } from '../../../contabilidad/models/nomina.models';
 import { NominaService } from '../../../contabilidad/services/nomina.service';
@@ -20,7 +22,8 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
     MatButtonModule,
     MatIconModule,
     MatSnackBarModule,
-    MatTableModule
+    MatTableModule,
+    DataTableFrameComponent
   ],
   template: `
     <section class="empleados-page">
@@ -55,8 +58,15 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
             <p>Crea el primer empleado para generar roles de pago.</p>
           </div>
         } @else {
-          <div class="table-wrap">
-            <table mat-table [dataSource]="empleados()">
+          <app-data-table-frame
+            searchPlaceholder="Buscar empleado, cargo o identificación"
+            [total]="empleadosFiltrados().length"
+            [pageIndex]="pageIndex()"
+            [pageSize]="pageSize()"
+            (searchChange)="actualizarBusqueda($event)"
+            (pageChange)="actualizarPagina($event)"
+          >
+            <table mat-table [dataSource]="empleadosPaginados()">
               <ng-container matColumnDef="empleado">
                 <th mat-header-cell *matHeaderCellDef>Empleado</th>
                 <td mat-cell *matCellDef="let row">
@@ -103,7 +113,7 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
               <tr mat-header-row *matHeaderRowDef="columnas"></tr>
               <tr mat-row *matRowDef="let row; columns: columnas"></tr>
             </table>
-          </div>
+          </app-data-table-frame>
         }
       </section>
     </section>
@@ -137,6 +147,32 @@ export class NominaEmpleadosListComponent {
   protected readonly columnas = ['empleado', 'cargo', 'ingreso', 'sueldo', 'estado', 'acciones'];
   protected readonly empleados = signal<EmpleadoNomina[]>([]);
   protected readonly empleadosActivos = computed(() => this.empleados().filter((empleado) => empleado.estado === 'ACTIVO'));
+  protected readonly busqueda = signal('');
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(10);
+  protected readonly empleadosFiltrados = computed(() => {
+    const query = this.normalizar(this.busqueda());
+    if (!query) return this.empleados();
+    return this.empleados().filter((empleado) => this.normalizar(JSON.stringify(empleado)).includes(query));
+  });
+  protected readonly empleadosPaginados = computed(() => {
+    const start = this.pageIndex() * this.pageSize();
+    return this.empleadosFiltrados().slice(start, start + this.pageSize());
+  });
+
+  protected actualizarBusqueda(value: string): void {
+    this.busqueda.set(value);
+    this.pageIndex.set(0);
+  }
+
+  protected actualizarPagina(event: PageEvent): void {
+    this.pageIndex.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
+  }
+
+  private normalizar(value: string): string {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  }
 
   constructor() {
     this.nominaService

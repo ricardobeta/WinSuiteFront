@@ -9,7 +9,9 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { PageEvent } from '@angular/material/paginator';
 
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { DocumentoPorPagar, EstadoDocumentoPorPagar } from '../../models/cuentas-por-pagar.models';
 import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service';
@@ -26,7 +28,8 @@ import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service
     MatIconModule,
     MatInputModule,
     MatSelectModule,
-    MatSnackBarModule
+    MatSnackBarModule,
+    DataTableFrameComponent
   ],
   template: `
     <section class="cxp-page">
@@ -75,7 +78,13 @@ import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service
         <section class="surface-card empty">No hay documentos por pagar con los filtros actuales.</section>
       } @else {
         <section class="surface-card table-card">
-          <div class="table-scroll">
+          <app-data-table-frame
+            [showSearch]="false"
+            [total]="documentosFiltrados().length"
+            [pageIndex]="pageIndexActual()"
+            [pageSize]="pageSize()"
+            (pageChange)="actualizarPagina($event)"
+          >
             <table>
               <thead>
                 <tr>
@@ -91,7 +100,7 @@ import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service
                 </tr>
               </thead>
               <tbody>
-                @for (documento of documentosFiltrados(); track documento.id) {
+                @for (documento of documentosPaginados(); track documento.id) {
                   <tr [class.vencido]="estaVencido(documento)">
                     <td>{{ documento.numero }}</td>
                     <td>
@@ -115,7 +124,7 @@ import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service
                 }
               </tbody>
             </table>
-          </div>
+          </app-data-table-frame>
         </section>
       }
     </section>
@@ -142,11 +151,11 @@ import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service
     .sub { display: block; font-size: .78rem; color: var(--muted-foreground); }
     .chip { font-size: .72rem; padding: .15rem .5rem; border-radius: 999px; background: color-mix(in srgb, var(--primary) 15%, transparent); }
     .estado { font-size: .72rem; padding: .15rem .5rem; border-radius: 999px; }
-    .estado[data-estado='PENDIENTE'] { background: color-mix(in srgb, #b26a00 20%, transparent); }
-    .estado[data-estado='PARCIAL'] { background: color-mix(in srgb, #1565c0 20%, transparent); }
-    .estado[data-estado='PAGADA'] { background: color-mix(in srgb, #2e7d32 22%, transparent); }
+    .estado[data-estado='PENDIENTE'] { background: var(--tc-warning-container); color: var(--tc-on-warning-container); }
+    .estado[data-estado='PARCIAL'] { background: var(--tc-info-container); color: var(--tc-on-info-container); }
+    .estado[data-estado='PAGADA'] { background: var(--tc-success-container); color: var(--tc-on-success-container); }
     .estado[data-estado='ANULADA'] { background: color-mix(in srgb, var(--outline) 35%, transparent); text-decoration: line-through; }
-    tr.vencido td:nth-child(5) { color: #b3261e; font-weight: 600; }
+    tr.vencido td:nth-child(5) { color: var(--tc-error); font-weight: 600; }
     .acciones { text-align: right; }
     .empty { padding: 2rem; text-align: center; color: var(--muted-foreground); background: var(--tc-surface-container-lowest); }
   `]
@@ -159,6 +168,8 @@ export class CuentasPorPagarListComponent implements OnInit {
   protected readonly documentos = signal<DocumentoPorPagar[]>([]);
   protected readonly filtroProveedor = signal('');
   protected readonly filtroEstado = signal<'TODOS' | EstadoDocumentoPorPagar>('TODOS');
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(10);
 
   protected readonly documentosFiltrados = computed(() => {
     const termino = this.filtroProveedor().trim().toLowerCase();
@@ -170,6 +181,13 @@ export class CuentasPorPagarListComponent implements OnInit {
       const coincideEstado = estado === 'TODOS' || documento.estadoPago === estado;
       return coincideProveedor && coincideEstado;
     });
+  });
+  protected readonly pageIndexActual = computed(() =>
+    Math.min(this.pageIndex(), Math.max(0, Math.ceil(this.documentosFiltrados().length / this.pageSize()) - 1))
+  );
+  protected readonly documentosPaginados = computed(() => {
+    const start = this.pageIndexActual() * this.pageSize();
+    return this.documentosFiltrados().slice(start, start + this.pageSize());
   });
 
   protected readonly totalPendiente = computed(() => this.documentos()
@@ -188,6 +206,11 @@ export class CuentasPorPagarListComponent implements OnInit {
   protected estaVencido(documento: DocumentoPorPagar): boolean {
     return documento.estadoPago !== 'PAGADA' && documento.estadoPago !== 'ANULADA'
       && Number(documento.saldoPendiente ?? 0) > 0 && documento.fechaVencimiento < Date.now();
+  }
+
+  protected actualizarPagina(event: PageEvent): void {
+    this.pageIndex.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
   }
 
   protected etiquetaOrigen(origen: DocumentoPorPagar['origenTipo']): string {

@@ -1,6 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, get, onValue, orderByChild, push, query, ref, runTransaction, set, startAt, endAt, update } from '@angular/fire/database';
-import { Observable } from 'rxjs';
+import { Database, endAt, get, limitToLast, orderByChild, push, query, ref, runTransaction, set, startAt, update } from '@angular/fire/database';
 
 import { AuthService } from '../../../core/services/auth.service';
 import { AuditService } from '../../../core/services/audit.service';
@@ -28,6 +27,17 @@ export interface ArchivosCompraRef {
   xmlStoragePath?: string | null;
   pdfArchivoId?: string | null;
   pdfDownloadUrl?: string | null;
+}
+
+export interface FacturasCompraPageCursor {
+  value: number;
+  key: string;
+}
+
+export interface FacturasCompraPageResult {
+  items: FacturaCompra[];
+  nextCursor: FacturasCompraPageCursor | null;
+  hasMore: boolean;
 }
 
 @Injectable({
@@ -69,25 +79,46 @@ export class FacturasCompraService {
     return ref(this.database, `${this.getTenantPath()}/secuencias/facturasCompra`);
   }
 
-  getFacturasCompra(): Observable<FacturaCompra[]> {
-    return new Observable<FacturaCompra[]>((subscriber) => {
-      const unsubscribe = onValue(
-        this.getFacturasRef(),
-        (snapshot) => {
-          if (!snapshot.exists()) {
-            subscriber.next([]);
-            return;
-          }
-          const raw = snapshot.val() as Record<string, FacturaCompra>;
-          const facturas = Object.entries(raw)
-            .map(([id, factura]) => ({ ...factura, id }))
-            .sort((a, b) => (b.creadoEn ?? 0) - (a.creadoEn ?? 0));
-          subscriber.next(facturas);
-        },
-        (error) => subscriber.error(error)
-      );
-      return () => unsubscribe();
+  async getFacturasCompraPage(
+    periodo: string,
+    limit = 50,
+    cursor: FacturasCompraPageCursor | null = null
+  ): Promise<FacturasCompraPageResult> {
+    if (!/^\d{4}-\d{2}$/.test(periodo)) {
+      throw new Error('Selecciona un periodo contable valido.');
+    }
+
+    const [anio, mes] = periodo.split('-').map(Number);
+    const desde = new Date(anio, mes - 1, 1, 0, 0, 0, 0).getTime();
+    const hasta = new Date(anio, mes, 1, 0, 0, 0, 0).getTime() - 1;
+    const boundedLimit = Math.max(1, Math.min(limit, 100));
+    const constraints = [orderByChild('fechaEmision'), startAt(desde)];
+    constraints.push(cursor ? endAt(cursor.value, cursor.key) : endAt(hasta));
+    constraints.push(limitToLast(boundedLimit + (cursor ? 2 : 1)));
+
+    const snapshot = await get(query(this.getFacturasRef(), ...constraints));
+    const items: FacturaCompra[] = [];
+    snapshot.forEach((child) => {
+      if (child.key !== cursor?.key) {
+        items.push({ ...(child.val() as FacturaCompra), id: child.key ?? undefined });
+      }
+      return false;
     });
+
+    const hasMore = items.length > boundedLimit;
+    if (hasMore) {
+      items.shift();
+    }
+    items.reverse();
+    const last = items.at(-1);
+
+    return {
+      items,
+      nextCursor: hasMore && last?.id
+        ? { value: Number(last.fechaEmision), key: last.id }
+        : null,
+      hasMore
+    };
   }
 
   async getFacturasCompraPorPeriodo(anio: number, mes: number): Promise<FacturaCompra[]> {

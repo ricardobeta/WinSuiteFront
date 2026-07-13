@@ -1,7 +1,27 @@
 export type SriJobStatus = 'queued' | 'running' | 'completed' | 'completed_with_warnings' | 'failed' | 'cancelled' | 'config_saved';
 
+// Tipos de comprobante del SRI (value = <option> del select cmbTipoComprobante).
+// El worker usa el value para seleccionar el tipo y el nombre para almacenar cada
+// documento con su nombre respectivo.
+export interface SriTipoComprobante {
+  value: string;
+  label: string;
+}
+
+export const SRI_TIPOS_COMPROBANTE: readonly SriTipoComprobante[] = [
+  { value: '1', label: 'Factura' },
+  { value: '2', label: 'Liquidación de compra de bienes y prestación de servicios' },
+  { value: '3', label: 'Notas de Crédito' },
+  { value: '4', label: 'Notas de Débito' },
+  { value: '6', label: 'Comprobante de Retención' }
+] as const;
+
+export const SRI_TIPO_COMPROBANTE_DEFAULT = '1';
+
 export interface SriConnectionCheck {
   worker: string;
+  // Version del agente local reportada por el worker (para el control de version).
+  version?: string;
   spring: string;
   springDetail?: string;
   ready: boolean;
@@ -25,6 +45,8 @@ export interface SriWorkerRunRequest {
   dia?: number | null;
   descargarXml?: boolean;
   descargarPdf?: boolean;
+  // Tipo de comprobante a descargar (value del select del SRI). Default '1' (Factura).
+  tipoComprobante?: string;
 }
 
 export interface SriDownloadRequest {
@@ -35,6 +57,8 @@ export interface SriDownloadRequest {
   anio?: number;
   mes?: number;
   dia?: number | null;
+  // Tipo de comprobante a descargar (value del select del SRI). Default '1' (Factura).
+  tipoComprobante?: string;
 }
 
 export interface SriDownloadJob {

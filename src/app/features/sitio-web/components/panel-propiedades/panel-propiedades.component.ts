@@ -1408,9 +1408,10 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       font: inherit;
       font-weight: 400;
       padding: 7px 8px;
-      border: 1px solid rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 6px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
       width: 100%;
       box-sizing: border-box;
     }
@@ -1428,9 +1429,9 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       width: 44px;
       height: 32px;
       padding: 2px;
-      border: 1px solid rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 6px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
     }
     .campo {
       display: flex;
@@ -1443,7 +1444,7 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       display: flex;
       gap: 6px;
       align-items: flex-start;
-      border: 1px solid rgba(0, 0, 0, 0.08);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 8px;
       padding: 8px;
       padding-right: 30px;
@@ -1472,12 +1473,13 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       gap: 4px;
       align-self: flex-start;
       background: none;
-      border: 1px dashed rgba(0, 0, 0, 0.25);
+      border: 1px dashed var(--tc-ghost-border);
       border-radius: 6px;
       padding: 6px 10px;
       cursor: pointer;
       font: inherit;
       font-size: 0.82rem;
+      color: var(--tc-on-surface);
     }
     .agregar mat-icon {
       font-size: 16px;
@@ -1499,7 +1501,7 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
     .lista-productos {
       max-height: 220px;
       overflow: auto;
-      border: 1px solid rgba(0, 0, 0, 0.08);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 8px;
       padding: 8px;
       display: flex;
@@ -1514,8 +1516,8 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       display: flex;
       align-items: center;
       gap: 8px;
-      background: #eff6ff;
-      color: #1d4ed8;
+      background: var(--tc-info-container);
+      color: var(--tc-on-info-container);
       border-radius: 8px;
       padding: 8px 10px;
       font-size: 0.78rem;
@@ -1530,9 +1532,9 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       width: 100%;
       height: 34px;
       padding: 2px;
-      border: 1px solid rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 6px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
     }
     .presets {
       display: grid;
@@ -1541,13 +1543,13 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
     }
     .preset {
       aspect-ratio: 1;
-      border: 1px solid rgba(0, 0, 0, 0.12);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 6px;
       cursor: pointer;
       padding: 0;
     }
     .preset:hover {
-      outline: 2px solid #2563eb;
+      outline: 2px solid var(--primary);
       outline-offset: 1px;
     }
     .codigo {
@@ -1556,9 +1558,10 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
     }
     mat-expansion-panel {
       box-shadow: none !important;
-      border: 1px solid rgba(0, 0, 0, 0.08);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 10px !important;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
     }
     mat-panel-title {
       display: flex;
@@ -1571,7 +1574,7 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       font-size: 18px;
       width: 18px;
       height: 18px;
-      color: #2563eb;
+      color: var(--primary);
     }
     :host ::ng-deep .mat-expansion-panel-body {
       padding: 4px 14px 16px;
@@ -1595,9 +1598,10 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       gap: 2px;
       padding: 8px 10px;
       min-width: 62px;
-      border: 1px solid rgba(0, 0, 0, 0.12);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 8px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
       cursor: pointer;
       font: inherit;
     }
@@ -1610,17 +1614,18 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       font-size: 20px;
       width: 20px;
       height: 20px;
-      color: #6b7280;
+      color: var(--muted-foreground);
     }
     .variante-btn:hover {
-      border-color: #93c5fd;
+      border-color: var(--primary);
     }
     .variante-btn.activa {
-      border-color: #2563eb;
-      background: #eff6ff;
+      border-color: var(--primary);
+      background: var(--tc-primary-container);
+      color: var(--tc-on-primary-container);
     }
     .variante-btn.activa mat-icon {
-      color: #2563eb;
+      color: var(--tc-on-primary-container);
     }
   `,
 })

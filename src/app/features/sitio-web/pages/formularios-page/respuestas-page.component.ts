@@ -108,8 +108,9 @@ import { FormulariosService } from '../../services/formularios.service';
     }
     .tabla-scroll {
       overflow-x: auto;
-      background: #fff;
-      border: 1px solid rgba(0, 0, 0, 0.08);
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 12px;
     }
     table {
@@ -121,7 +122,7 @@ import { FormulariosService } from '../../services/formularios.service';
     td {
       text-align: left;
       padding: 10px 14px;
-      border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+      border-bottom: 1px solid var(--tc-ghost-border);
       max-width: 280px;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -132,6 +133,7 @@ import { FormulariosService } from '../../services/formularios.service';
       text-transform: uppercase;
       letter-spacing: 0.04em;
       opacity: 0.6;
+      background: var(--tc-surface-container-low);
     }
     .fecha,
     .sitio {

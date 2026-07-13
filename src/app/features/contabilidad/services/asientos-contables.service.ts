@@ -1,11 +1,21 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, get, onValue, push, ref, remove, runTransaction, set, update } from '@angular/fire/database';
-import { Observable } from 'rxjs';
+import { Database, endAt, get, limitToLast, orderByChild, push, query, ref, remove, runTransaction, set, startAt, update } from '@angular/fire/database';
 
 import { AuthService } from '../../../core/services/auth.service';
 import { AuditService } from '../../../core/services/audit.service';
 import { AsientoContable, AsientoContableLinea, SaldoCuentaPeriodo } from '../models/contabilidad.models';
 import { ConfiguracionContableService } from './configuracion-contable.service';
+
+export interface AsientosPageCursor {
+  value: string;
+  key: string;
+}
+
+export interface AsientosPageResult {
+  items: AsientoContable[];
+  nextCursor: AsientosPageCursor | null;
+  hasMore: boolean;
+}
 
 @Injectable({
   providedIn: 'root'
@@ -32,35 +42,50 @@ export class AsientosContablesService {
     return ref(this.database, `${this.getAsientosPath()}/${asientoId}`);
   }
 
-  getAsientos(): Observable<AsientoContable[]> {
-    return new Observable<AsientoContable[]>((subscriber) => {
-      const unsubscribe = onValue(
-        this.getAsientosRef(),
-        (snapshot) => {
-          if (!snapshot.exists()) {
-            subscriber.next([]);
-            return;
-          }
+  async getAsientosPage(
+    periodo: string,
+    limit = 50,
+    cursor: AsientosPageCursor | null = null
+  ): Promise<AsientosPageResult> {
+    if (!/^\d{4}-\d{2}$/.test(periodo)) {
+      throw new Error('Selecciona un periodo contable valido.');
+    }
 
-          const raw = snapshot.val() as Record<string, AsientoContable>;
-          const asientos = Object.entries(raw)
-            .map(([id, asiento]) => ({
-              ...asiento,
-              id,
-              lineas: Array.isArray(asiento.lineas) ? asiento.lineas : []
-            }))
-            .sort((a, b) => {
-              const byDate = b.fecha.localeCompare(a.fecha);
-              return byDate !== 0 ? byDate : (b.numero ?? '').localeCompare(a.numero ?? '');
-            });
+    const boundedLimit = Math.max(1, Math.min(limit, 100));
+    const desde = `${periodo}-01`;
+    const hasta = `${periodo}-31`;
+    const constraints = [orderByChild('fecha'), startAt(desde)];
+    constraints.push(cursor ? endAt(cursor.value, cursor.key) : endAt(hasta));
+    constraints.push(limitToLast(boundedLimit + (cursor ? 2 : 1)));
 
-          subscriber.next(asientos);
-        },
-        (error) => subscriber.error(error)
-      );
-
-      return () => unsubscribe();
+    const snapshot = await get(query(this.getAsientosRef(), ...constraints));
+    const items: AsientoContable[] = [];
+    snapshot.forEach((child) => {
+      if (child.key !== cursor?.key) {
+        const asiento = child.val() as AsientoContable;
+        items.push({
+          ...asiento,
+          id: child.key ?? undefined,
+          lineas: Array.isArray(asiento.lineas) ? asiento.lineas : []
+        });
+      }
+      return false;
     });
+
+    const hasMore = items.length > boundedLimit;
+    if (hasMore) {
+      items.shift();
+    }
+    items.reverse();
+    const last = items.at(-1);
+
+    return {
+      items,
+      nextCursor: hasMore && last?.id
+        ? { value: last.fecha, key: last.id }
+        : null,
+      hasMore
+    };
   }
 
   async getAsientoById(asientoId: string): Promise<AsientoContable | null> {

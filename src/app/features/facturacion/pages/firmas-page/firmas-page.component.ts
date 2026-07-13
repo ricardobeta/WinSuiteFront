@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatButtonModule } from '@angular/material/button';
@@ -11,7 +11,9 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { PageEvent } from '@angular/material/paginator';
 
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { FacturacionConfigService } from '../../../../core/services/facturacion-config.service';
@@ -31,7 +33,8 @@ import { FirmaDigitalConfig } from '../../../../shared/models/facturacion.models
 		MatInputModule,
 		MatSnackBarModule,
 		MatTableModule,
-		MatTooltipModule
+		MatTooltipModule,
+		DataTableFrameComponent
 	],
 	template: `
 		<section class="page-grid">
@@ -91,7 +94,15 @@ import { FirmaDigitalConfig } from '../../../../shared/models/facturacion.models
 						<mat-card-title>Listado de firmas</mat-card-title>
 					</mat-card-header>
 					<mat-card-content>
-						<table mat-table [dataSource]="firmas()" class="mini-table">
+						<app-data-table-frame
+							searchPlaceholder="Buscar firma, RUC o empresa"
+							[total]="firmasFiltradas().length"
+							[pageIndex]="pageIndex()"
+							[pageSize]="pageSize()"
+							(searchChange)="actualizarBusqueda($event)"
+							(pageChange)="actualizarPagina($event)"
+						>
+						<table mat-table [dataSource]="firmasPaginadas()" class="mini-table">
 							<ng-container matColumnDef="nombreArchivo">
 								<th mat-header-cell *matHeaderCellDef>Archivo</th>
 								<td mat-cell *matCellDef="let row">{{ row.nombreArchivo }}</td>
@@ -126,6 +137,7 @@ import { FirmaDigitalConfig } from '../../../../shared/models/facturacion.models
 							<tr mat-header-row *matHeaderRowDef="columnasFirmas"></tr>
 							<tr mat-row *matRowDef="let row; columns: columnasFirmas"></tr>
 						</table>
+						</app-data-table-frame>
 					</mat-card-content>
 				</mat-card>
 			</div>
@@ -164,6 +176,18 @@ export class FirmasPageComponent {
 
 	protected readonly columnasFirmas = ['nombreArchivo', 'nombreComercial', 'ruc', 'razonSocial', 'acciones'];
 	protected readonly firmas = signal<FirmaDigitalConfig[]>([]);
+	protected readonly busqueda = signal('');
+	protected readonly pageIndex = signal(0);
+	protected readonly pageSize = signal(10);
+	protected readonly firmasFiltradas = computed(() => {
+		const query = this.normalizar(this.busqueda());
+		if (!query) return this.firmas();
+		return this.firmas().filter((firma) => this.normalizar(JSON.stringify(firma)).includes(query));
+	});
+	protected readonly firmasPaginadas = computed(() => {
+		const start = this.pageIndex() * this.pageSize();
+		return this.firmasFiltradas().slice(start, start + this.pageSize());
+	});
 	protected readonly subiendo = signal(false);
 	protected readonly eliminandoId = signal<string | null>(null);
 	protected readonly selectedFile = signal<File | null>(null);
@@ -175,6 +199,20 @@ export class FirmasPageComponent {
 		razonSocial: ['', [Validators.required]],
 		nombreComercial: ['', [Validators.required]]
 	});
+
+	protected actualizarBusqueda(value: string): void {
+		this.busqueda.set(value);
+		this.pageIndex.set(0);
+	}
+
+	protected actualizarPagina(event: PageEvent): void {
+		this.pageIndex.set(event.pageIndex);
+		this.pageSize.set(event.pageSize);
+	}
+
+	private normalizar(value: string): string {
+		return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+	}
 
 	constructor() {
 		this.facturacionService.getFirmasDisponibles().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({

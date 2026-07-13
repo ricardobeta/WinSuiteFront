@@ -6,8 +6,10 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatTableModule } from '@angular/material/table';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { PageEvent } from '@angular/material/paginator';
 
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { OrdenCompra } from '../../models/inventario.models';
 import { OrdenesCompraService } from '../../services/ordenes-compra.service';
@@ -15,7 +17,7 @@ import { OrdenesCompraService } from '../../services/ordenes-compra.service';
 @Component({
   selector: 'app-ordenes-compra-list',
   standalone: true,
-  imports: [CommonModule, RouterLink, MatButtonModule, MatTableModule, MatDialogModule, MatSnackBarModule],
+  imports: [CommonModule, RouterLink, MatButtonModule, MatTableModule, MatDialogModule, MatSnackBarModule, DataTableFrameComponent],
   template: `
     <section class="surface-card page-card">
       <div class="header">
@@ -42,8 +44,15 @@ import { OrdenesCompraService } from '../../services/ordenes-compra.service';
           <p>Registra la primera OC para iniciar abastecimiento.</p>
         </section>
       } @else {
-        <div class="table-wrap">
-          <table mat-table [dataSource]="ordenes()">
+        <app-data-table-frame
+          searchPlaceholder="Buscar orden de compra"
+          [total]="ordenesFiltradas().length"
+          [pageIndex]="pageIndex()"
+          [pageSize]="pageSize()"
+          (searchChange)="actualizarBusqueda($event)"
+          (pageChange)="actualizarPagina($event)"
+        >
+          <table mat-table [dataSource]="ordenesPaginadas()">
           <ng-container matColumnDef="numero">
             <th mat-header-cell *matHeaderCellDef>N° OC</th>
             <td mat-cell *matCellDef="let row">{{ row.numero }}</td>
@@ -90,7 +99,7 @@ import { OrdenesCompraService } from '../../services/ordenes-compra.service';
           <tr mat-header-row *matHeaderRowDef="columnas"></tr>
           <tr mat-row *matRowDef="let row; columns: columnas"></tr>
           </table>
-        </div>
+        </app-data-table-frame>
       }
     </section>
   `,
@@ -120,6 +129,20 @@ export class OrdenesCompraListComponent implements OnInit {
 
   protected readonly cargando = signal(true);
   protected readonly ordenes = signal<OrdenCompra[]>([]);
+  protected readonly busqueda = signal('');
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(10);
+  protected readonly ordenesFiltradas = computed(() => {
+    const query = this.normalizar(this.busqueda());
+    if (!query) return this.ordenes();
+    return this.ordenes().filter((orden) =>
+      this.normalizar(`${orden.numero} ${orden.fechaEmision} ${orden.estado}`).includes(query)
+    );
+  });
+  protected readonly ordenesPaginadas = computed(() => {
+    const start = this.pageIndex() * this.pageSize();
+    return this.ordenesFiltradas().slice(start, start + this.pageSize());
+  });
   protected readonly columnas = ['numero', 'fechaEmision', 'total', 'estado', 'acciones'];
 
   ngOnInit(): void {
@@ -130,6 +153,20 @@ export class OrdenesCompraListComponent implements OnInit {
         this.ordenes.set(ordenes);
         this.cargando.set(false);
       });
+  }
+
+  protected actualizarBusqueda(value: string): void {
+    this.busqueda.set(value);
+    this.pageIndex.set(0);
+  }
+
+  protected actualizarPagina(event: PageEvent): void {
+    this.pageIndex.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
+  }
+
+  private normalizar(value: string): string {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   }
 
   protected async enviar(orden: OrdenCompra): Promise<void> {

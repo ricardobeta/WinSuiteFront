@@ -16,7 +16,7 @@ mat-form-field { width: 100%; }
 .badge { font-size: .62rem; border-radius: 999px; padding: .1rem .45rem; text-transform: uppercase; letter-spacing: .04em; }
 .badge.ok { background: color-mix(in srgb, var(--success) 18%, transparent); color: var(--success); }
 .badge.err { background: color-mix(in srgb, var(--destructive) 15%, transparent); color: var(--destructive); }
-.badge.pending { background: color-mix(in srgb, #d97706 18%, transparent); color: #b45309; }
+.badge.pending { background: var(--tc-warning-container); color: var(--tc-on-warning-container); }
 .badge.draft { background: var(--muted); color: var(--muted-foreground); }
 
 /* Editor */
@@ -48,3 +48,4 @@ mat-form-field { width: 100%; }
 .dlg .actions { justify-content: flex-end; }
 
 @media (max-width: 1100px) { .plantillas { grid-template-columns: 1fr; } .preview-panel { position: static; } }
+@media (max-width: 720px) { .grid2, .btn-row { grid-template-columns: 1fr; } .panel { min-width: 0; padding: var(--space-3); } }

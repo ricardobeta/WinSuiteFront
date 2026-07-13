@@ -351,6 +351,9 @@
           }
         },
         "asientos": {
+          ".indexOn": [
+            "fecha"
+          ],
           "$asientoId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
@@ -401,6 +404,9 @@
           }
         },
         "pendientesContabilizacion": {
+          ".indexOn": [
+            "creadoEn"
+          ],
           "$pendienteId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }

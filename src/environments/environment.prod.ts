@@ -2,6 +2,7 @@ export const environment = {
   production: true,
   apiBaseUrl: 'https://api.winsuit.app',
   sriWorkerBaseUrl: 'http://127.0.0.1:8010',
+  sriWorkerMinVersion: '1.0.014',
   support: {
     whatsappPhone: '+593963879697',
     whatsappMessage: 'Hola, necesito ayuda con Winsuite.'

@@ -128,6 +128,23 @@ html {
 	box-sizing: border-box;
 }
 
+img,
+canvas {
+	max-width: 100%;
+}
+
+button,
+a,
+input,
+select,
+textarea {
+	font: inherit;
+}
+
+:focus-visible {
+	outline-color: color-mix(in srgb, var(--primary) 65%, transparent);
+}
+
 .page-shell {
 	min-height: 100dvh;
 	background: var(--background);
@@ -138,6 +155,46 @@ html {
 	border: 1px solid var(--tc-ghost-border);
 	border-radius: var(--radius-lg);
 	box-shadow: var(--tc-elevation-1);
+}
+
+/* Every data-dense surface owns its horizontal scrolling. The workspace itself
+   must never grow wider than the viewport. */
+.table-wrap,
+.table-wrapper,
+.table-scroll,
+.table-container,
+.table-responsive {
+	display: block;
+	width: 100%;
+	min-width: 0;
+	max-width: 100%;
+	overflow-x: auto;
+	overscroll-behavior-inline: contain;
+	scrollbar-gutter: stable;
+	border-radius: var(--tc-radius-md);
+}
+
+.page-card,
+.header-card,
+.filters-card,
+.form-card,
+.surface-card {
+	min-width: 0;
+	max-width: 100%;
+}
+
+.mat-mdc-button,
+.mat-mdc-raised-button,
+.mat-mdc-unelevated-button,
+.mat-mdc-outlined-button,
+.mat-mdc-icon-button {
+	min-height: 44px;
+}
+
+@media (max-width: 720px) {
+	.mat-mdc-dialog-container .mat-mdc-dialog-surface {
+		max-width: calc(100vw - 1rem);
+	}
 }
 
 html.theme-dark {

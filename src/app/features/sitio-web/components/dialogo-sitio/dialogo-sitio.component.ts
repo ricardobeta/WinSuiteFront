@@ -40,9 +40,9 @@ export interface DialogoSitioData {
     </mat-dialog-actions>
   `,
   styles: `
-    mat-dialog-content { min-width: min(420px, 75vw); color: #475569; }
+    mat-dialog-content { min-width: min(420px, 75vw); color: var(--tc-on-surface); }
     .campo { display: block; width: 100%; margin-top: 12px; }
-    .peligro { --mdc-filled-button-container-color: #b91c1c; --mdc-filled-button-label-text-color: #fff; }
+    .peligro { --mdc-filled-button-container-color: var(--tc-error); --mdc-filled-button-label-text-color: #fff; }
   `,
 })
 export class DialogoSitioComponent {

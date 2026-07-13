@@ -7,6 +7,9 @@ export interface AppEnvironment {
   apiBaseUrl: string;
   // URL del worker SRI local (agente) en la maquina del cliente.
   sriWorkerBaseUrl: string;
+  // Version minima requerida del agente SRI local. Si el worker reporta una
+  // version inferior, el frontend bloquea la descarga y pide actualizar.
+  sriWorkerMinVersion: string;
   support?: {
     whatsappPhone: string;
     whatsappMessage: string;
@@ -20,6 +23,7 @@ export const environment: AppEnvironment = {
   production: false,
   apiBaseUrl: 'http://localhost:8080',
   sriWorkerBaseUrl: 'http://127.0.0.1:8010',
+  sriWorkerMinVersion: '1.0.014',
   support: {
     whatsappPhone: '',
     whatsappMessage: 'Hola, necesito ayuda con Winsuite.'

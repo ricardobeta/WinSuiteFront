@@ -61,10 +61,11 @@ import { CATEGORIAS_BLOQUES, DefinicionBloque } from '../../config/bloques-catal
       align-items: center;
       gap: 6px;
       margin: 10px 12px 0;
-      border: 1px solid rgba(0, 0, 0, 0.12);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 8px;
       padding: 4px 8px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
     }
     .buscador mat-icon {
       font-size: 18px;
@@ -79,6 +80,10 @@ import { CATEGORIAS_BLOQUES, DefinicionBloque } from '../../config/bloques-catal
       font-size: 0.85rem;
       width: 100%;
       background: none;
+      color: var(--tc-on-surface);
+    }
+    .buscador input::placeholder {
+      color: var(--muted-foreground);
     }
     .paleta {
       display: flex;
@@ -93,6 +98,7 @@ import { CATEGORIAS_BLOQUES, DefinicionBloque } from '../../config/bloques-catal
       letter-spacing: 0.06em;
       opacity: 0.5;
       margin-top: 8px;
+      color: var(--muted-foreground);
     }
     .categoria:first-child {
       margin-top: 0;
@@ -102,20 +108,21 @@ import { CATEGORIAS_BLOQUES, DefinicionBloque } from '../../config/bloques-catal
       align-items: center;
       gap: 10px;
       padding: 8px 10px;
-      border: 1px solid rgba(0, 0, 0, 0.1);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 8px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
       cursor: grab;
       font: inherit;
       font-size: 0.88rem;
       text-align: left;
     }
     .item:hover {
-      border-color: #2563eb;
-      background: #eff6ff;
+      border-color: var(--primary);
+      background: color-mix(in srgb, var(--primary) 14%, var(--tc-surface-container-lowest));
     }
     .item mat-icon {
-      color: #2563eb;
+      color: var(--primary);
       font-size: 20px;
       width: 20px;
       height: 20px;
@@ -132,6 +139,7 @@ import { CATEGORIAS_BLOQUES, DefinicionBloque } from '../../config/bloques-catal
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      color: var(--muted-foreground);
     }
     .item:not(:hover) .textos small {
       display: none;

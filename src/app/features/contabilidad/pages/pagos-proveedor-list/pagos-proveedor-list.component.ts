@@ -1,11 +1,13 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { PageEvent } from '@angular/material/paginator';
 
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { PagoProveedor } from '../../models/cuentas-por-pagar.models';
 import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service';
@@ -13,7 +15,7 @@ import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service
 @Component({
   selector: 'app-pagos-proveedor-list',
   standalone: true,
-  imports: [CommonModule, RouterLink, MatButtonModule, MatIconModule, MatSnackBarModule],
+  imports: [CommonModule, RouterLink, MatButtonModule, MatIconModule, MatSnackBarModule, DataTableFrameComponent],
   template: `
     <section class="pagos-page">
       <header class="surface-card page-header">
@@ -32,7 +34,14 @@ import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service
         <section class="surface-card empty">Aun no hay pagos registrados.</section>
       } @else {
         <section class="surface-card table-card">
-          <div class="table-scroll">
+          <app-data-table-frame
+            searchPlaceholder="Buscar pago, proveedor o referencia"
+            [total]="pagosFiltrados().length"
+            [pageIndex]="pageIndex()"
+            [pageSize]="pageSize()"
+            (searchChange)="actualizarBusqueda($event)"
+            (pageChange)="actualizarPagina($event)"
+          >
             <table>
               <thead>
                 <tr>
@@ -47,7 +56,7 @@ import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service
                 </tr>
               </thead>
               <tbody>
-                @for (pago of pagos(); track pago.id) {
+                @for (pago of pagosPaginados(); track pago.id) {
                   <tr [class.anulado]="pago.estado === 'ANULADO'">
                     <td>{{ pago.numero }}</td>
                     <td>{{ pago.fecha | date:'dd/MM/yyyy' }}</td>
@@ -67,7 +76,7 @@ import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service
                 }
               </tbody>
             </table>
-          </div>
+          </app-data-table-frame>
         </section>
       }
     </section>
@@ -85,7 +94,7 @@ import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service
     th, td { text-align: left; padding: .6rem .75rem; border-bottom: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); font-size: .9rem; }
     th { font-size: .75rem; text-transform: uppercase; color: var(--muted-foreground); }
     .num { text-align: right; font-variant-numeric: tabular-nums; }
-    .estado { font-size: .72rem; padding: .15rem .5rem; border-radius: 999px; background: color-mix(in srgb, #2e7d32 22%, transparent); }
+    .estado { font-size: .72rem; padding: .15rem .5rem; border-radius: 999px; background: var(--tc-success-container); color: var(--tc-on-success-container); }
     .estado[data-estado='ANULADO'] { background: color-mix(in srgb, var(--outline) 35%, transparent); text-decoration: line-through; }
     tr.anulado { opacity: .6; }
     .acciones { text-align: right; }
@@ -98,11 +107,35 @@ export class PagosProveedorListComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly pagos = signal<PagoProveedor[]>([]);
+  protected readonly busqueda = signal('');
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(10);
+  protected readonly pagosFiltrados = computed(() => {
+    const query = this.normalizar(this.busqueda());
+    if (!query) return this.pagos();
+    return this.pagos().filter((pago) =>
+      this.normalizar(`${pago.numero} ${pago.proveedorNombre} ${pago.referencia ?? ''} ${pago.metodoPago}`).includes(query)
+    );
+  });
+  protected readonly pagosPaginados = computed(() => {
+    const start = this.pageIndex() * this.pageSize();
+    return this.pagosFiltrados().slice(start, start + this.pageSize());
+  });
 
   ngOnInit(): void {
     this.service.getPagos()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((pagos) => this.pagos.set(pagos));
+  }
+
+  protected actualizarBusqueda(value: string): void {
+    this.busqueda.set(value);
+    this.pageIndex.set(0);
+  }
+
+  protected actualizarPagina(event: PageEvent): void {
+    this.pageIndex.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
   }
 
   protected async anular(pago: PagoProveedor): Promise<void> {
@@ -120,5 +153,9 @@ export class PagosProveedorListComponent implements OnInit {
     } catch (error: unknown) {
       this.snackBar.open(error instanceof Error ? error.message : 'No se pudo anular el pago.', 'Cerrar', { duration: 4000 });
     }
+  }
+
+  private normalizar(value: string): string {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   }
 }

@@ -6,9 +6,11 @@ import { MatCardModule } from '@angular/material/card';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
+import { PageEvent } from '@angular/material/paginator';
 import { Subscription } from 'rxjs';
 
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { Almacen, AlmacenStockRow } from '../../models/inventario.models';
 import { AlmacenFormDialogComponent } from '../../components/almacenes/almacen-form-dialog.component';
@@ -17,7 +19,7 @@ import { AlmacenesService } from '../../services/almacenes.service';
 @Component({
   selector: 'app-almacenes',
   standalone: true,
-  imports: [CommonModule, MatButtonModule, MatCardModule, MatDialogModule, MatSnackBarModule, MatTableModule],
+  imports: [CommonModule, MatButtonModule, MatCardModule, MatDialogModule, MatSnackBarModule, MatTableModule, DataTableFrameComponent],
   template: `
     <section class="page-grid">
       <header class="surface-card header-card">
@@ -77,8 +79,15 @@ import { AlmacenesService } from '../../services/almacenes.service';
             <h3>Stock · {{ almacenSeleccionado()!.nombre }}</h3>
           </div>
 
-          <div class="table-wrap">
-            <table mat-table [dataSource]="stockRows()">
+          <app-data-table-frame
+            searchPlaceholder="Buscar producto en este almacén"
+            [total]="stockFiltrado().length"
+            [pageIndex]="pageIndex()"
+            [pageSize]="pageSize()"
+            (searchChange)="actualizarBusqueda($event)"
+            (pageChange)="actualizarPagina($event)"
+          >
+            <table mat-table [dataSource]="stockPaginado()">
               <ng-container matColumnDef="sku">
                 <th mat-header-cell *matHeaderCellDef>SKU</th>
                 <td mat-cell *matCellDef="let row">{{ row.sku }}</td>
@@ -117,7 +126,7 @@ import { AlmacenesService } from '../../services/almacenes.service';
               <tr mat-header-row *matHeaderRowDef="stockColumns"></tr>
               <tr mat-row *matRowDef="let row; columns: stockColumns"></tr>
             </table>
-          </div>
+          </app-data-table-frame>
         </section>
       }
     </section>
@@ -140,7 +149,7 @@ import { AlmacenesService } from '../../services/almacenes.service';
     .stock-header h3 { margin: 0 0 .75rem; }
     .table-wrap { overflow: auto; }
     table { width: 100%; min-width: 820px; }
-    .low { color: #b3261e; font-weight: 700; }
+    .low { color: var(--tc-error); font-weight: 700; }
     .empty-card { padding: 1.25rem; display: grid; gap: .5rem; background: var(--tc-surface-container-lowest); }
     .empty-card h3 { margin: 0; }
     .skeleton-grid .skeleton-card { height: 180px; border-radius: .75rem; background: linear-gradient(90deg, rgba(180,180,180,.18), rgba(180,180,180,.28), rgba(180,180,180,.18)); animation: shimmer 1.4s infinite; }
@@ -158,6 +167,18 @@ export class AlmacenesComponent implements OnInit {
   protected readonly almacenes = signal<Almacen[]>([]);
   protected readonly almacenSeleccionado = signal<Almacen | null>(null);
   protected readonly stockRows = signal<AlmacenStockRow[]>([]);
+  protected readonly busqueda = signal('');
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(10);
+  protected readonly stockFiltrado = computed(() => {
+    const query = this.normalizar(this.busqueda());
+    if (!query) return this.stockRows();
+    return this.stockRows().filter((row) => this.normalizar(`${row.sku} ${row.nombre}`).includes(query));
+  });
+  protected readonly stockPaginado = computed(() => {
+    const start = this.pageIndex() * this.pageSize();
+    return this.stockFiltrado().slice(start, start + this.pageSize());
+  });
   protected readonly stockKpi = computed(() => {
     const rows = this.stockRows();
     return {
@@ -296,6 +317,16 @@ export class AlmacenesComponent implements OnInit {
     return this.stockKpi().skus;
   }
 
+  protected actualizarBusqueda(value: string): void {
+    this.busqueda.set(value);
+    this.pageIndex.set(0);
+  }
+
+  protected actualizarPagina(event: PageEvent): void {
+    this.pageIndex.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
+  }
+
   protected kpiValor(almacenId: string): number {
     if (this.almacenSeleccionado()?.id !== almacenId) {
       return 0;
@@ -311,5 +342,9 @@ export class AlmacenesComponent implements OnInit {
       horizontalPosition: 'end',
       verticalPosition: 'top'
     });
+  }
+
+  private normalizar(value: string): string {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   }
 }

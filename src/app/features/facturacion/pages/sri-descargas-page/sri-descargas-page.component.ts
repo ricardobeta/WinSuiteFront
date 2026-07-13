@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -13,12 +13,15 @@ import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
+import { PageEvent } from '@angular/material/paginator';
 import { Database, objectVal, ref } from '@angular/fire/database';
 import { finalize } from 'rxjs';
 
+import { environment } from '../../../../../environments/environment';
 import { SriDescargasService } from '../../../../core/services/sri-descargas.service';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
-import { SriDownloadJob } from '../../../../shared/models/sri.models';
+import { SRI_TIPOS_COMPROBANTE, SRI_TIPO_COMPROBANTE_DEFAULT, SriDownloadJob } from '../../../../shared/models/sri.models';
 
 @Component({
   selector: 'app-sri-descargas-page',
@@ -36,7 +39,8 @@ import { SriDownloadJob } from '../../../../shared/models/sri.models';
     MatProgressBarModule,
     MatSelectModule,
     MatSnackBarModule,
-    MatTableModule
+    MatTableModule,
+    DataTableFrameComponent
   ],
   template: `
     <section class="sri-page">
@@ -114,6 +118,15 @@ import { SriDownloadJob } from '../../../../shared/models/sri.models';
               }
             </div>
 
+            @if (connStatus() === 'ok' || connStatus() === 'fail') {
+              <div class="version-row" [class.version-outdated]="versionDesactualizada()">
+                <mat-icon>{{ versionDesactualizada() ? 'system_update' : 'verified' }}</mat-icon>
+                <span>Agente v{{ workerVersion() || 'desconocida' }}</span>
+                <span class="version-sep">·</span>
+                <span>requiere v{{ requiredVersion }}</span>
+              </div>
+            }
+
             <form class="form" [formGroup]="downloadForm" (ngSubmit)="startDownload()">
               <mat-button-toggle-group
                 class="mode-toggle"
@@ -129,6 +142,15 @@ import { SriDownloadJob } from '../../../../shared/models/sri.models';
                   Mes completo
                 </mat-button-toggle>
               </mat-button-toggle-group>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Tipo de comprobante</mat-label>
+                <mat-select formControlName="tipoComprobante">
+                  @for (tipo of tiposComprobante; track tipo.value) {
+                    <mat-option [value]="tipo.value">{{ tipo.label }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
 
               @if (modo() === 'dia') {
                 <mat-form-field appearance="outline">
@@ -204,7 +226,15 @@ import { SriDownloadJob } from '../../../../shared/models/sri.models';
           <mat-card-subtitle>{{ jobs().length }} ejecuciones</mat-card-subtitle>
         </mat-card-header>
         <mat-card-content>
-          <table mat-table [dataSource]="jobs()" class="history-table">
+          <app-data-table-frame
+            searchPlaceholder="Buscar ejecución o diagnóstico"
+            [total]="jobsFiltrados().length"
+            [pageIndex]="pageIndex()"
+            [pageSize]="pageSize()"
+            (searchChange)="actualizarBusqueda($event)"
+            (pageChange)="actualizarPagina($event)"
+          >
+          <table mat-table [dataSource]="jobsPaginados()" class="history-table">
             <ng-container matColumnDef="createdAt">
               <th mat-header-cell *matHeaderCellDef>Fecha</th>
               <td mat-cell *matCellDef="let row">{{ row.createdAt | date:'short' }}</td>
@@ -244,6 +274,7 @@ import { SriDownloadJob } from '../../../../shared/models/sri.models';
             <tr mat-header-row *matHeaderRowDef="columns"></tr>
             <tr mat-row *matRowDef="let row; columns: columns"></tr>
           </table>
+          </app-data-table-frame>
         </mat-card-content>
       </mat-card>
     </section>
@@ -263,11 +294,15 @@ import { SriDownloadJob } from '../../../../shared/models/sri.models';
     .conn-row { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-bottom: .5rem; }
     .conn-badge { display: inline-flex; align-items: center; gap: .3rem; font-size: .85rem; font-weight: 600; }
     .conn-badge mat-icon { font-size: 1.1rem; width: 1.1rem; height: 1.1rem; }
-    .conn-ok { color: #12805c; }
-    .conn-fail { color: #b42318; }
+    .conn-ok { color: var(--tc-success); }
+    .conn-fail { color: var(--tc-error); }
     .conn-hint { align-self: center; color: var(--muted-foreground); font-size: .8rem; }
+    .version-row { display: inline-flex; align-items: center; gap: .35rem; margin: -.25rem 0 .5rem; font-size: .8rem; font-weight: 600; color: var(--tc-success); }
+    .version-row mat-icon { font-size: 1.05rem; width: 1.05rem; height: 1.05rem; }
+    .version-row .version-sep { color: var(--muted-foreground); font-weight: 400; }
+    .version-row.version-outdated { color: var(--tc-error); }
     .actions { display: flex; justify-content: flex-end; gap: .75rem; align-items: center; }
-    .form-error { margin: 0; color: #b42318; font-weight: 600; }
+    .form-error { margin: 0; color: var(--tc-error); font-weight: 600; }
     .status-card mat-progress-bar { margin: .5rem 0 1rem; }
     .metrics { display: flex; flex-wrap: wrap; gap: .75rem; color: var(--muted-foreground); }
     .history-table { width: 100%; }
@@ -287,14 +322,40 @@ export class SriDescargasPageComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly db = inject(Database);
 
-  protected readonly agentDownloadUrl = 'https://drive.google.com/uc?export=download&id=1Mw70B8Pz5i3D2IuJFeH49jNMXMsijag-';
+  protected readonly agentDownloadUrl = 'https://drive.google.com/uc?export=download&id=1GgcP0nnFRZOS988380FUNq_OibiwmyeF';
   protected readonly maxDownloadDate = this.addDays(new Date(), -1);
   protected readonly jobs = signal<SriDownloadJob[]>([]);
+  protected readonly busqueda = signal('');
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(10);
+  protected readonly jobsFiltrados = computed(() => {
+    const query = this.normalizar(this.busqueda());
+    if (!query) return this.jobs();
+    return this.jobs().filter((job) => this.normalizar(JSON.stringify(job)).includes(query));
+  });
+  protected readonly jobsPaginados = computed(() => {
+    const start = this.pageIndex() * this.pageSize();
+    return this.jobsFiltrados().slice(start, start + this.pageSize());
+  });
   protected readonly loadingJobs = signal(false);
   protected readonly savingConfig = signal(false);
   protected readonly startingDownload = signal(false);
   protected readonly activeJob = signal<SriDownloadJob | null>(null);
   protected readonly columns = ['createdAt', 'rango', 'modo', 'status', 'archivos', 'diagnostico'];
+
+  protected actualizarBusqueda(value: string): void {
+    this.busqueda.set(value);
+    this.pageIndex.set(0);
+  }
+
+  protected actualizarPagina(event: PageEvent): void {
+    this.pageIndex.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
+  }
+
+  private normalizar(value: string): string {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
+  }
 
   protected readonly configForm = this.formBuilder.nonNullable.group({
     ruc: ['', [Validators.required, Validators.pattern(/^[0-9]{10,13}$/)]],
@@ -305,6 +366,10 @@ export class SriDescargasPageComponent {
   protected readonly connStatus = signal<'idle' | 'checking' | 'ok' | 'fail'>('idle');
   protected readonly connMessage = signal<string>('');
   protected readonly credsConfigured = signal<boolean>(false);
+  protected readonly workerVersion = signal<string>('');
+  protected readonly requiredVersion = environment.sriWorkerMinVersion;
+  // true si el agente reportado esta desactualizado o no reporto version.
+  protected readonly versionDesactualizada = computed(() => this.isWorkerOutdated(this.workerVersion()));
 
   protected readonly modo = signal<'dia' | 'mes'>('dia');
 
@@ -314,9 +379,20 @@ export class SriDescargasPageComponent {
     this.service.checkConnection().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (res) => {
         this.credsConfigured.set(!!res.credencialesConfiguradas);
+        this.workerVersion.set(res.version ?? '');
+        // Control de version: si el agente reporta una version inferior a la
+        // requerida (o no reporta version), se bloquea la descarga.
+        if (this.isWorkerOutdated(res.version)) {
+          this.connStatus.set('fail');
+          this.connMessage.set(
+            `Agente SRI desactualizado (versión ${res.version || 'desconocida'}). ` +
+            `Actualiza a la ${this.requiredVersion} o superior para continuar.`
+          );
+          return;
+        }
         if (res.ready) {
           this.connStatus.set('ok');
-          this.connMessage.set('Agente local y servidor conectados.');
+          this.connMessage.set(`Agente local (v${res.version}) y servidor conectados.`);
         } else {
           this.connStatus.set('fail');
           this.connMessage.set(
@@ -339,15 +415,39 @@ export class SriDescargasPageComponent {
     { value: 10, label: 'Octubre' }, { value: 11, label: 'Noviembre' }, { value: 12, label: 'Diciembre' }
   ];
   protected readonly anios = this.buildYearOptions();
+  protected readonly tiposComprobante = SRI_TIPOS_COMPROBANTE;
 
   protected readonly downloadForm = this.formBuilder.nonNullable.group({
     fecha: [this.addDays(new Date(), -1), [Validators.required]],
     mes: [this.maxDownloadDate.getMonth() + 1, [Validators.required]],
-    anio: [this.maxDownloadDate.getFullYear(), [Validators.required]]
+    anio: [this.maxDownloadDate.getFullYear(), [Validators.required]],
+    tipoComprobante: [SRI_TIPO_COMPROBANTE_DEFAULT, [Validators.required]]
   });
 
   protected setModo(modo: 'dia' | 'mes'): void {
     this.modo.set(modo);
+  }
+
+  /** true si el worker no reporta version o es inferior a la requerida. */
+  private isWorkerOutdated(workerVersion?: string): boolean {
+    if (!this.requiredVersion) {
+      return false;
+    }
+    return this.compareVersions(workerVersion ?? '', this.requiredVersion) < 0;
+  }
+
+  /** Compara versiones "1.0.14" numericamente por segmento: -1, 0 o 1. */
+  private compareVersions(a: string, b: string): number {
+    const partsA = a.split('.').map((n) => parseInt(n, 10) || 0);
+    const partsB = b.split('.').map((n) => parseInt(n, 10) || 0);
+    const len = Math.max(partsA.length, partsB.length);
+    for (let i = 0; i < len; i++) {
+      const diff = (partsA[i] ?? 0) - (partsB[i] ?? 0);
+      if (diff !== 0) {
+        return diff > 0 ? 1 : -1;
+      }
+    }
+    return 0;
   }
 
   protected downloadError(): string | null {
@@ -407,7 +507,7 @@ export class SriDescargasPageComponent {
       return;
     }
     const { inicio, fin } = this.resolveRange();
-    const { anio, mes } = this.downloadForm.getRawValue();
+    const { anio, mes, tipoComprobante } = this.downloadForm.getRawValue();
     // Modo dia => se envia el dia concreto; modo mes => dia=null para que el worker
     // seleccione "Todos" y descargue el mes completo con un solo captcha.
     const periodo = this.modo() === 'dia'
@@ -418,6 +518,7 @@ export class SriDescargasPageComponent {
     this.service.startDownload({
       fechaInicio: this.toApiDate(inicio),
       fechaFin: this.toApiDate(fin),
+      tipoComprobante,
       ...periodo
     }).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (job) => {
@@ -429,6 +530,7 @@ export class SriDescargasPageComponent {
           jobId: job.id,
           tenantId: job.tenantId,
           ...periodo,
+          tipoComprobante,
           descargarXml: true,
           descargarPdf: true
         }).pipe(finalize(() => this.startingDownload.set(false)), takeUntilDestroyed(this.destroyRef)).subscribe({

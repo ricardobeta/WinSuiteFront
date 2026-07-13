@@ -161,12 +161,11 @@ import { DashboardDataMap, DashboardLayoutItem, DashboardWidgetData, DashboardWi
       align-items: stretch;
       justify-content: space-between;
       gap: 1rem;
-      padding: 1.1rem;
+      padding: clamp(1rem, 2vw, 1.5rem);
+      min-height: 132px;
       border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--border));
       border-radius: var(--radius-md);
-      background:
-        linear-gradient(135deg, color-mix(in srgb, var(--primary) 12%, transparent), transparent 46%),
-        var(--tc-surface-container-lowest);
+      background: var(--tc-hero-background);
       box-shadow: 0 12px 28px rgb(0 0 0 / 10%);
     }
 
@@ -327,10 +326,7 @@ import { DashboardDataMap, DashboardLayoutItem, DashboardWidgetData, DashboardWi
     }
 
     :host-context(html.theme-dark) .dashboard-header {
-      border-color: color-mix(in srgb, var(--primary) 24%, #263238);
-      background:
-        linear-gradient(135deg, color-mix(in srgb, var(--primary) 14%, transparent), transparent 46%),
-        #151b1e;
+      border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
       box-shadow: 0 18px 38px rgb(0 0 0 / 34%);
     }
   `]

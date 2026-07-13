@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,7 +8,9 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
+import { PageEvent } from '@angular/material/paginator';
 
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { CostoAnalisisRow, MetodoCosteo, Producto } from '../../models/inventario.models';
 import { ConfiguracionInventarioService } from '../../services/configuracion-inventario.service';
@@ -26,7 +28,8 @@ import { ProductosService } from '../../services/productos.service';
     MatSelectModule,
     MatButtonModule,
     MatTableModule,
-    MatSnackBarModule
+    MatSnackBarModule,
+    DataTableFrameComponent
   ],
   template: `
     <section class="page-grid">
@@ -91,8 +94,15 @@ import { ProductosService } from '../../services/productos.service';
         </section>
       } @else {
         <section class="surface-card table-card">
-          <div class="table-wrap">
-            <table mat-table [dataSource]="rows()">
+          <app-data-table-frame
+            searchPlaceholder="Buscar producto en el análisis"
+            [total]="rowsFiltradas().length"
+            [pageIndex]="pageIndex()"
+            [pageSize]="pageSize()"
+            (searchChange)="actualizarBusqueda($event)"
+            (pageChange)="actualizarPagina($event)"
+          >
+            <table mat-table [dataSource]="rowsPaginadas()">
               <ng-container matColumnDef="producto">
                 <th mat-header-cell *matHeaderCellDef>Producto</th>
                 <td mat-cell *matCellDef="let row">{{ row.producto }}</td>
@@ -131,7 +141,7 @@ import { ProductosService } from '../../services/productos.service';
               <tr mat-header-row *matHeaderRowDef="columns"></tr>
               <tr mat-row *matRowDef="let row; columns: columns"></tr>
             </table>
-          </div>
+          </app-data-table-frame>
         </section>
       }
     </section>
@@ -169,6 +179,18 @@ export class CostosComponent implements OnInit {
   protected readonly columns = ['producto', 'saldoInicial', 'entradas', 'salidas', 'saldoFinal', 'costoPromedio', 'valorTotal'];
   protected readonly productos = signal<Producto[]>([]);
   protected readonly rows = signal<CostoAnalisisRow[]>([]);
+  protected readonly busqueda = signal('');
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(10);
+  protected readonly rowsFiltradas = computed(() => {
+    const query = this.normalizar(this.busqueda());
+    if (!query) return this.rows();
+    return this.rows().filter((row) => this.normalizar(row.producto).includes(query));
+  });
+  protected readonly rowsPaginadas = computed(() => {
+    const start = this.pageIndex() * this.pageSize();
+    return this.rowsFiltradas().slice(start, start + this.pageSize());
+  });
   protected readonly cargando = signal(false);
   protected readonly simboloMoneda = signal('$');
   protected readonly valorTotalInventario = signal(0);
@@ -219,5 +241,19 @@ export class CostosComponent implements OnInit {
     } finally {
       this.cargando.set(false);
     }
+  }
+
+  protected actualizarBusqueda(value: string): void {
+    this.busqueda.set(value);
+    this.pageIndex.set(0);
+  }
+
+  protected actualizarPagina(event: PageEvent): void {
+    this.pageIndex.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
+  }
+
+  private normalizar(value: string): string {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   }
 }

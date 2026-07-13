@@ -9,6 +9,18 @@
   --tc-primary-container: #a0f2e1;
   --tc-on-primary-container: #005d51;
   --tc-tertiary: #3a647d;
+  --tc-info: #315f78;
+  --tc-info-container: #d7efff;
+  --tc-on-info-container: #12384c;
+  --tc-success: #087a47;
+  --tc-success-container: #c8f7dc;
+  --tc-on-success-container: #06492c;
+  --tc-warning: #9a5700;
+  --tc-warning-container: #ffe0b2;
+  --tc-on-warning-container: #5b3300;
+  --tc-error: #ba1a1a;
+  --tc-error-container: #ffdad6;
+  --tc-on-error-container: #93000a;
 
   --tc-surface: #f8f9fa;
   --tc-surface-container: #f1f4f5;
@@ -29,6 +41,10 @@
   --tc-gradient-primary-start: rgb(var(--tc-primary-rgb));
   --tc-gradient-primary-end: color-mix(in srgb, var(--tc-primary) 75%, white);
   --tc-gradient-primary: linear-gradient(90deg, var(--tc-gradient-primary-start), var(--tc-gradient-primary-end));
+  --tc-hero-background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--tc-primary) 18%, transparent), transparent 58%),
+    linear-gradient(135deg, color-mix(in srgb, var(--tc-primary-container) 30%, transparent), transparent 72%),
+    var(--tc-surface-container-lowest);
 
   /* Radii / elevation */
   --tc-radius-sm: var(--radius-sm);
@@ -48,6 +64,18 @@ html.theme-dark {
   --tc-primary-container: #1c2a28;
   --tc-on-primary-container: #b8f2eb;
   --tc-tertiary: #6f8fa8;
+  --tc-info: #8fcdec;
+  --tc-info-container: #153746;
+  --tc-on-info-container: #c5eaff;
+  --tc-success: #61dda0;
+  --tc-success-container: #123d2a;
+  --tc-on-success-container: #b5f2d0;
+  --tc-warning: #ffc46b;
+  --tc-warning-container: #4a3210;
+  --tc-on-warning-container: #ffe1b2;
+  --tc-error: #ffb4ab;
+  --tc-error-container: #5e1b1b;
+  --tc-on-error-container: #ffdad6;
 
   --tc-surface: #111315;
   --tc-surface-container: #121618;
@@ -66,4 +94,8 @@ html.theme-dark {
   --tc-gradient-primary-start: rgb(var(--tc-primary-rgb));
   --tc-gradient-primary-end: rgba(255,255,255,0.02);
   --tc-gradient-primary: linear-gradient(90deg, var(--tc-gradient-primary-start), var(--tc-gradient-primary-end));
+  --tc-hero-background:
+    radial-gradient(circle at 0% 0%, color-mix(in srgb, var(--tc-primary) 17%, transparent), transparent 58%),
+    linear-gradient(135deg, color-mix(in srgb, var(--tc-primary-container) 42%, transparent), transparent 72%),
+    var(--tc-surface-container-lowest);
 }

@@ -140,10 +140,12 @@ import { SelectorImagenComponent } from '../../components/selector-imagen/select
       width: 100%;
       font: inherit;
       padding: 10px 12px;
-      border: 1px solid rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 8px;
       margin-bottom: 14px;
       box-sizing: border-box;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
     }
     .lista {
       display: flex;
@@ -154,13 +156,14 @@ import { SelectorImagenComponent } from '../../components/selector-imagen/select
       display: flex;
       align-items: center;
       gap: 14px;
-      border: 1px solid rgba(0, 0, 0, 0.08);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 10px;
       padding: 10px 14px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
     }
     .fila.publicado {
-      border-color: #93c5fd;
+      border-color: var(--primary);
     }
     .datos {
       display: flex;
@@ -180,12 +183,12 @@ import { SelectorImagenComponent } from '../../components/selector-imagen/select
       padding: 32px;
     }
     .ficha {
-      border: 1px solid #93c5fd;
+      border: 1px solid var(--primary);
       border-top: none;
       border-radius: 0 0 10px 10px;
       margin-top: -8px;
       padding: 16px 14px 14px;
-      background: #f8fafc;
+      background: var(--tc-surface-container-low);
       display: flex;
       flex-direction: column;
       gap: 12px;
@@ -203,9 +206,10 @@ import { SelectorImagenComponent } from '../../components/selector-imagen/select
       font: inherit;
       font-weight: 400;
       padding: 8px 10px;
-      border: 1px solid rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 8px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
     }
     .etiqueta {
       font-size: 0.85rem;
@@ -222,7 +226,7 @@ import { SelectorImagenComponent } from '../../components/selector-imagen/select
       height: 72px;
       border-radius: 8px;
       overflow: hidden;
-      border: 1px solid rgba(0, 0, 0, 0.1);
+      border: 1px solid var(--tc-ghost-border);
     }
     .mini img {
       width: 100%;

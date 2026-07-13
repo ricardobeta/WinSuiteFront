@@ -1,101 +1,35 @@
-import { Component, Injector, afterNextRender, inject } from '@angular/core';
-import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { Component } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { RouterLink, RouterOutlet } from '@angular/router';
 
-import { loadTourSteps } from '../../../../core/config/tour-steps/tour-steps.registry';
-import { GuidedTourService } from '../../../../core/services/guided-tour.service';
-import { TourTriggerButtonComponent } from '../../../../shared/components/tour-trigger-button/tour-trigger-button.component';
+import { ModuleNavItem, ModuleShellComponent } from '../../../../shared/components/module-shell/module-shell.component';
 
 @Component({
   selector: 'app-clientes-shell',
-  standalone: true,
-  imports: [RouterLink, RouterLinkActive, RouterOutlet, MatButtonModule, MatIconModule, TourTriggerButtonComponent],
+  imports: [RouterLink, RouterOutlet, MatButtonModule, MatIconModule, ModuleShellComponent],
   template: `
-    <section class="clientes-shell">
-      <header class="clientes-hero surface-card" id="tour-clientes-header">
-        <div>
-          <p class="eyebrow">
-            Módulo Clientes
-            <app-tour-trigger-button (open)="startTourManually()" />
-          </p>
-          <h1>Clientes</h1>
-          <p>
-            Administra la lista de clientes, la configuración de campos personalizados y el flujo
-            reutilizable para apertura desde otros módulos.
-          </p>
-        </div>
-
-        <div class="clientes-actions" id="tour-clientes-actions">
-          <a mat-raised-button color="primary" routerLink="lista" routerLinkActive="active-link">
-            <mat-icon>group</mat-icon>
-            Lista de clientes
-          </a>
-          <a mat-flat-button class="btn-secondary-tonal" routerLink="configuracion" routerLinkActive="active-link">
-            <mat-icon>tune</mat-icon>
-            Configuración
-          </a>
-        </div>
-      </header>
-
-      <nav class="subnav surface-card" id="tour-clientes-subnav" aria-label="Navegación de clientes">
-        <a routerLink="lista" routerLinkActive="active-link">Lista</a>
-        <a routerLink="configuracion" routerLinkActive="active-link">Configuración</a>
-      </nav>
-
-      <main class="clientes-content" id="tour-clientes-content">
-        <router-outlet />
-      </main>
-    </section>
+    <app-module-shell
+      moduleId="clientes"
+      eyebrow="Módulo Clientes"
+      title="Clientes"
+      description="Administra clientes y configura los campos que necesita tu operación comercial."
+      icon="groups"
+      navigationLabel="Navegación de clientes"
+      [items]="navigationItems"
+    >
+      <div module-hero-actions>
+        <a mat-flat-button color="primary" routerLink="/workspace/customers/lista">
+          <mat-icon>groups</mat-icon> Ver clientes
+        </a>
+      </div>
+      <router-outlet />
+    </app-module-shell>
   `,
-  styles: [`
-    .clientes-shell { display: grid; gap: 1rem; }
-    .clientes-hero { padding: 1.5rem; display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr) auto; align-items: end; background: var(--tc-surface-container-lowest); }
-    .clientes-hero h1 { margin: 0; font-size: clamp(2rem, 4vw, 3rem); }
-    .clientes-hero p { margin: .35rem 0 0; max-width: 70ch; color: var(--muted-foreground); }
-    .eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; margin: 0 0 .35rem; color: var(--primary); }
-    .clientes-actions { display: flex; flex-wrap: wrap; gap: .75rem; justify-content: flex-end; }
-    .clientes-actions a, .subnav a { text-decoration: none; min-height: 44px; display: inline-flex; align-items: center; }
-    .btn-secondary-tonal {
-      background: var(--tc-surface-container-highest);
-      color: var(--tc-on-surface);
-      border-radius: 999px;
-    }
-    .subnav { padding: .75rem 1rem; display: flex; gap: .5rem; align-items: center; background: var(--tc-surface-container); border-radius: var(--tc-radius-lg); }
-    .subnav a { padding: .6rem .9rem; border-radius: 999px; color: inherit; min-height: 44px; }
-    .active-link {
-      background: color-mix(in srgb, var(--primary) 20%, transparent);
-      color: var(--foreground);
-    }
-    .clientes-content { min-width: 0; }
-    @media (max-width: 900px) {
-      .clientes-hero { grid-template-columns: 1fr; }
-      .clientes-actions { justify-content: flex-start; }
-    }
-  `]
 })
 export class ClientesShellComponent {
-  private static readonly MODULE_ID = 'clientes';
-
-  private readonly guidedTour = inject(GuidedTourService);
-  private readonly injector = inject(Injector);
-
-  constructor() {
-    if (!this.guidedTour.hasSeenTour(ClientesShellComponent.MODULE_ID)) {
-      afterNextRender(
-        () => {
-          void loadTourSteps(ClientesShellComponent.MODULE_ID).then((steps) =>
-            this.guidedTour.startTour(ClientesShellComponent.MODULE_ID, steps)
-          );
-        },
-        { injector: this.injector }
-      );
-    }
-  }
-
-  protected startTourManually(): void {
-    void loadTourSteps(ClientesShellComponent.MODULE_ID).then((steps) =>
-      this.guidedTour.startTour(ClientesShellComponent.MODULE_ID, steps)
-    );
-  }
+  protected readonly navigationItems: readonly ModuleNavItem[] = [
+    { label: 'Lista', icon: 'groups', route: '/workspace/customers/lista' },
+    { label: 'Configuración', icon: 'tune', route: '/workspace/customers/configuracion' },
+  ];
 }

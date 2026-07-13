@@ -7,7 +7,9 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatTableModule } from '@angular/material/table';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { PageEvent } from '@angular/material/paginator';
 
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { Almacen, Producto } from '../../models/inventario.models';
 import { AlmacenesService } from '../../services/almacenes.service';
 import { KardexService } from '../../services/kardex.service';
@@ -23,7 +25,7 @@ interface RecetaRow {
 @Component({
   selector: 'app-recetas-list',
   standalone: true,
-  imports: [CommonModule, RouterLink, MatButtonModule, MatChipsModule, MatTableModule, MatFormFieldModule, MatSelectModule],
+  imports: [CommonModule, RouterLink, MatButtonModule, MatChipsModule, MatTableModule, MatFormFieldModule, MatSelectModule, DataTableFrameComponent],
   template: `
     <section class="surface-card page-card">
       <div class="header">
@@ -57,8 +59,15 @@ interface RecetaRow {
           <p>No hay productos tipo receta creados para esta empresa.</p>
         </section>
       } @else {
-        <div class="table-wrap">
-          <table mat-table [dataSource]="recetaRows()">
+        <app-data-table-frame
+          searchPlaceholder="Buscar receta"
+          [total]="recetasFiltradas().length"
+          [pageIndex]="pageIndex()"
+          [pageSize]="pageSize()"
+          (searchChange)="actualizarBusqueda($event)"
+          (pageChange)="actualizarPagina($event)"
+        >
+          <table mat-table [dataSource]="recetasPaginadas()">
             <ng-container matColumnDef="sku">
               <th mat-header-cell *matHeaderCellDef>SKU</th>
               <td mat-cell *matCellDef="let row">{{ row.receta.sku }}</td>
@@ -106,7 +115,7 @@ interface RecetaRow {
             <tr mat-header-row *matHeaderRowDef="columnas"></tr>
             <tr mat-row *matRowDef="let row; columns: columnas"></tr>
           </table>
-        </div>
+        </app-data-table-frame>
       }
     </section>
   `,
@@ -142,6 +151,9 @@ export class RecetasListComponent implements OnInit {
   protected readonly almacenes = signal<Almacen[]>([]);
   protected readonly almacenSeleccionadoId = signal<string | null>(null);
   protected readonly stockPorProductoAlmacen = signal<Record<string, Record<string, number>>>({});
+  protected readonly busqueda = signal('');
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(10);
   protected readonly columnas = ['sku', 'nombre', 'insumos', 'disponible', 'stockAlmacen', 'estado', 'acciones'];
   protected readonly productosIndex = computed(() => {
     const index: Record<string, Producto> = {};
@@ -167,6 +179,17 @@ export class RecetasListComponent implements OnInit {
         ? this.capacidadRecetaEnAlmacen(receta.id, almacenId, new Set<string>())
         : 0
     }));
+  });
+  protected readonly recetasFiltradas = computed(() => {
+    const query = this.normalizar(this.busqueda());
+    if (!query) return this.recetaRows();
+    return this.recetaRows().filter((row) =>
+      this.normalizar(`${row.receta.sku} ${row.receta.nombre}`).includes(query)
+    );
+  });
+  protected readonly recetasPaginadas = computed(() => {
+    const start = this.pageIndex() * this.pageSize();
+    return this.recetasFiltradas().slice(start, start + this.pageSize());
   });
 
   ngOnInit(): void {
@@ -221,6 +244,16 @@ export class RecetasListComponent implements OnInit {
 
   protected seleccionarAlmacen(almacenId: string | null): void {
     this.almacenSeleccionadoId.set(almacenId);
+  }
+
+  protected actualizarBusqueda(value: string): void {
+    this.busqueda.set(value);
+    this.pageIndex.set(0);
+  }
+
+  protected actualizarPagina(event: PageEvent): void {
+    this.pageIndex.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
   }
 
   protected nombreAlmacenSeleccionado(): string {
@@ -278,5 +311,9 @@ export class RecetasListComponent implements OnInit {
   private stockProductoTotal(productoId: string): number {
     return Object.values(this.stockPorProductoAlmacen()[productoId] ?? {})
       .reduce((total, value) => total + Number(value ?? 0), 0);
+  }
+
+  private normalizar(value: string): string {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   }
 }

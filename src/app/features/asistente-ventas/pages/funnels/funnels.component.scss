@@ -23,3 +23,4 @@ mat-form-field { width: 100%; }
 .row:not(.head):nth-child(odd) { background: color-mix(in srgb, var(--muted) 40%, transparent); }
 
 @media (max-width: 1000px) { .funnels { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .row { grid-template-columns: minmax(140px, 2fr) 1fr 1fr; min-width: 520px; } .metrics-table { overflow-x: auto; } .panel { min-width: 0; padding: var(--space-3); } }

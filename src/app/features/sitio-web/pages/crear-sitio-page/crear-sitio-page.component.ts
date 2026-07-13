@@ -181,11 +181,11 @@ type EstadoSubdominio =
     .pasos span {
       padding: 4px 12px;
       border-radius: 999px;
-      background: rgba(0, 0, 0, 0.05);
+      background: var(--tc-surface-container-low);
     }
     .pasos .activo {
-      background: #2563eb;
-      color: #fff;
+      background: var(--primary);
+      color: var(--tc-on-primary);
       font-weight: 600;
     }
     .opciones {
@@ -196,23 +196,26 @@ type EstadoSubdominio =
     .opcion {
       text-align: left;
       padding: 20px;
-      border: 2px solid rgba(0, 0, 0, 0.1);
+      border: 2px solid var(--tc-ghost-border);
       border-radius: 12px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
       cursor: pointer;
       font: inherit;
     }
     .opcion:hover {
-      border-color: #93c5fd;
+      border-color: var(--primary);
     }
     .opcion.seleccionada {
-      border-color: #2563eb;
+      border-color: var(--primary);
+      background: var(--tc-primary-container);
+      color: var(--tc-on-primary-container);
     }
     .opcion mat-icon {
       font-size: 34px;
       width: 34px;
       height: 34px;
-      color: #2563eb;
+      color: var(--primary);
     }
     .opcion h3 {
       margin: 10px 0 6px;
@@ -235,9 +238,9 @@ type EstadoSubdominio =
     .mini-contenido { position: absolute; left: 14px; bottom: 18px; display: grid; gap: 6px; }
     .mini-contenido b, .mini-contenido i { display: block; height: 5px; border-radius: 4px; background: white; }
     .mini-contenido b { width: 100px; height: 9px; } .mini-contenido i { width: 72px; opacity: .65; }
-    .categoria { display: inline-block; margin-top: 12px; color: #2563eb; font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
+    .categoria { display: inline-block; margin-top: 12px; color: var(--primary); font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
     .etiquetas { display: flex; gap: 6px; margin-top: 12px; flex-wrap: wrap; }
-    .etiquetas span { padding: 3px 8px; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: .72rem; }
+    .etiquetas span { padding: 3px 8px; border-radius: 999px; background: var(--tc-surface-container-low); color: var(--tc-on-surface); font-size: .72rem; }
     .formulario {
       display: flex;
       flex-direction: column;
@@ -253,8 +256,10 @@ type EstadoSubdominio =
     input {
       font: inherit;
       padding: 10px 12px;
-      border: 1px solid rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 8px;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
     }
     .subdominio {
       display: flex;
@@ -274,7 +279,7 @@ type EstadoSubdominio =
       opacity: 0.75;
     }
     .ayuda.error {
-      color: #dc2626;
+      color: var(--tc-error);
       opacity: 1;
     }
     .acciones {

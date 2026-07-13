@@ -213,8 +213,9 @@ import { SelectorImagenComponent } from '../../components/selector-imagen/select
       font-size: 0.88rem;
     }
     section {
-      background: #fff;
-      border: 1px solid rgba(0, 0, 0, 0.08);
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 12px;
       padding: 18px;
       display: flex;
@@ -247,9 +248,10 @@ import { SelectorImagenComponent } from '../../components/selector-imagen/select
       font: inherit;
       font-weight: 400;
       padding: 9px 10px;
-      border: 1px solid rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 8px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
     }
     .fila {
       display: grid;
@@ -265,7 +267,7 @@ import { SelectorImagenComponent } from '../../components/selector-imagen/select
     }
     .cuenta {
       position: relative;
-      border: 1px solid rgba(0, 0, 0, 0.08);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 10px;
       padding: 12px;
       padding-right: 34px;
@@ -284,7 +286,7 @@ import { SelectorImagenComponent } from '../../components/selector-imagen/select
       padding: 2px;
     }
     .quitar:hover {
-      color: #dc2626;
+      color: var(--tc-error);
       opacity: 1;
     }
     .ayuda {

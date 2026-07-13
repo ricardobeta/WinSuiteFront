@@ -1,17 +1,19 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTableModule } from '@angular/material/table';
+import { PageEvent } from '@angular/material/paginator';
 
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { Proveedor } from '../../models/inventario.models';
 import { ProveedoresService } from '../../services/proveedores.service';
 
 @Component({
   selector: 'app-proveedores-list',
   standalone: true,
-  imports: [CommonModule, RouterLink, MatButtonModule, MatTableModule],
+  imports: [CommonModule, RouterLink, MatButtonModule, MatTableModule, DataTableFrameComponent],
   template: `
     <section class="surface-card page-card">
       <div class="header">
@@ -23,8 +25,15 @@ import { ProveedoresService } from '../../services/proveedores.service';
         <a mat-raised-button color="primary" routerLink="/workspace/inventario/proveedores/new">Nuevo proveedor</a>
       </div>
 
-      <div class="table-wrap">
-        <table mat-table [dataSource]="proveedores()">
+      <app-data-table-frame
+        searchPlaceholder="Buscar proveedor"
+        [total]="proveedoresFiltrados().length"
+        [pageIndex]="pageIndex()"
+        [pageSize]="pageSize()"
+        (searchChange)="actualizarBusqueda($event)"
+        (pageChange)="actualizarPagina($event)"
+      >
+        <table mat-table [dataSource]="proveedoresPaginados()">
           <ng-container matColumnDef="codigo">
             <th mat-header-cell *matHeaderCellDef>Codigo</th>
             <td mat-cell *matCellDef="let row">{{ row.codigo }}</td>
@@ -60,7 +69,7 @@ import { ProveedoresService } from '../../services/proveedores.service';
           <tr mat-header-row *matHeaderRowDef="columnas"></tr>
           <tr mat-row *matRowDef="let row; columns: columnas"></tr>
         </table>
-      </div>
+      </app-data-table-frame>
     </section>
   `,
   styles: [`
@@ -79,6 +88,20 @@ export class ProveedoresListComponent implements OnInit {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly proveedores = signal<Proveedor[]>([]);
+  protected readonly busqueda = signal('');
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(10);
+  protected readonly proveedoresFiltrados = computed(() => {
+    const query = this.normalizar(this.busqueda());
+    if (!query) return this.proveedores();
+    return this.proveedores().filter((proveedor) =>
+      this.normalizar(`${proveedor.codigo} ${proveedor.nombre} ${proveedor.email ?? ''} ${proveedor.telefono ?? ''}`).includes(query)
+    );
+  });
+  protected readonly proveedoresPaginados = computed(() => {
+    const start = this.pageIndex() * this.pageSize();
+    return this.proveedoresFiltrados().slice(start, start + this.pageSize());
+  });
   protected readonly columnas = ['codigo', 'nombre', 'email', 'telefono', 'estado', 'acciones'];
 
   ngOnInit(): void {
@@ -88,5 +111,19 @@ export class ProveedoresListComponent implements OnInit {
       .subscribe((proveedores) => {
         this.proveedores.set(proveedores);
       });
+  }
+
+  protected actualizarBusqueda(value: string): void {
+    this.busqueda.set(value);
+    this.pageIndex.set(0);
+  }
+
+  protected actualizarPagina(event: PageEvent): void {
+    this.pageIndex.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
+  }
+
+  private normalizar(value: string): string {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   }
 }

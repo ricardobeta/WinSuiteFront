@@ -164,8 +164,9 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
       margin: 0;
     }
     section {
-      background: #fff;
-      border: 1px solid rgba(0, 0, 0, 0.08);
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 12px;
       padding: 18px;
       margin-top: 12px;
@@ -200,9 +201,10 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
       font: inherit;
       font-weight: 400;
       padding: 9px 10px;
-      border: 1px solid rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 8px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
     }
     .linea {
       display: flex;
@@ -240,15 +242,16 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
       font-size: 0.75rem;
       padding: 2px 10px;
       border-radius: 999px;
-      background: #fef3c7;
-      color: #92400e;
+      background: var(--tc-warning-container);
+      color: var(--tc-on-warning-container);
     }
     .badge.ok {
-      background: #d1fae5;
-      color: #065f46;
+      background: var(--tc-success-container);
+      color: var(--tc-on-success-container);
     }
     .instrucciones {
-      background: #f9fafb;
+      background: var(--tc-surface-container-low);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 8px;
       padding: 12px;
       display: flex;

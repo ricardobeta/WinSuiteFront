@@ -12,9 +12,11 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { PageEvent } from '@angular/material/paginator';
 
 import { AuthorizationService } from '../../../../core/services/authorization.service';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { CuentaContable, EstadoCuentaContable, PlanCuentasExport, TipoCuenta } from '../../models/contabilidad.models';
 import { PLANTILLA_ESF_CONSTRUCTORA, PLANTILLA_PLAN_COMPLETO_ECUADOR } from '../../data/plan-cuentas-templates';
@@ -36,7 +38,8 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
     MatSelectModule,
     MatSnackBarModule,
     MatTableModule,
-    MatTooltipModule
+    MatTooltipModule,
+    DataTableFrameComponent
   ],
   template: `
     <section class="plan-page">
@@ -166,8 +169,14 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
             <h3>No hay resultados</h3>
           </div>
         } @else {
-          <div class="table-wrap">
-            <table mat-table [dataSource]="cuentasFiltradas()">
+          <app-data-table-frame
+            [showSearch]="false"
+            [total]="gruposRaizFiltrados().length"
+            [pageIndex]="pageIndexActual()"
+            [pageSize]="pageSize()"
+            (pageChange)="actualizarPagina($event)"
+          >
+            <table mat-table [dataSource]="cuentasPaginadas()">
               <ng-container matColumnDef="seleccion">
                 <th mat-header-cell *matHeaderCellDef>
                   <mat-checkbox
@@ -259,7 +268,7 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
               <tr mat-header-row *matHeaderRowDef="columnas"></tr>
               <tr mat-row *matRowDef="let row; columns: columnas" [class.inactive-row]="row.estado === 'INACTIVA'"></tr>
             </table>
-          </div>
+          </app-data-table-frame>
         }
       </section>
     </section>
@@ -319,6 +328,8 @@ export class PlanCuentasComponent implements OnInit {
   protected readonly busqueda = signal('');
   protected readonly tipoFiltro = signal<TipoCuenta | 'TODOS'>('TODOS');
   protected readonly estadoFiltro = signal<EstadoCuentaContable | 'TODOS'>('TODOS');
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(10);
   protected readonly canCreate = computed(() => this.authorization.canAccess('contabilidad', 'create'));
   protected readonly canUpdate = computed(() => this.authorization.canAccess('contabilidad', 'update'));
   protected readonly canDelete = computed(() => this.authorization.canAccess('contabilidad', 'delete'));
@@ -359,6 +370,24 @@ export class PlanCuentasComponent implements OnInit {
       return coincideBusqueda && coincideTipo && coincideEstado;
     });
   });
+  protected readonly gruposRaizFiltrados = computed(() => {
+    const index = new Map(this.cuentas().filter((cuenta) => !!cuenta.id).map((cuenta) => [cuenta.id!, cuenta]));
+    const grupos: string[] = [];
+    for (const cuenta of this.cuentasFiltradas()) {
+      const raiz = this.obtenerRaiz(cuenta, index);
+      if (!grupos.includes(raiz)) grupos.push(raiz);
+    }
+    return grupos;
+  });
+  protected readonly pageIndexActual = computed(() =>
+    Math.min(this.pageIndex(), Math.max(0, Math.ceil(this.gruposRaizFiltrados().length / this.pageSize()) - 1))
+  );
+  protected readonly cuentasPaginadas = computed(() => {
+    const start = this.pageIndexActual() * this.pageSize();
+    const raicesPagina = new Set(this.gruposRaizFiltrados().slice(start, start + this.pageSize()));
+    const index = new Map(this.cuentas().filter((cuenta) => !!cuenta.id).map((cuenta) => [cuenta.id!, cuenta]));
+    return this.cuentasFiltradas().filter((cuenta) => raicesPagina.has(this.obtenerRaiz(cuenta, index)));
+  });
 
   protected readonly cuentasMovimiento = computed(() => {
     return this.cuentas().filter((cuenta) => cuenta.permiteMovimiento).length;
@@ -385,6 +414,12 @@ export class PlanCuentasComponent implements OnInit {
 
   protected actualizarBusqueda(event: Event): void {
     this.busqueda.set((event.target as HTMLInputElement).value);
+    this.pageIndex.set(0);
+  }
+
+  protected actualizarPagina(event: PageEvent): void {
+    this.pageIndex.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
   }
 
   protected abrirDialogo(cuenta?: CuentaContable): void {
@@ -517,7 +552,7 @@ export class PlanCuentasComponent implements OnInit {
   }
 
   protected alternarSeleccionVisible(seleccionada: boolean): void {
-    const visiblesConId = this.cuentasFiltradas().filter((cuenta) => !!cuenta.id);
+    const visiblesConId = this.cuentasPaginadas().filter((cuenta) => !!cuenta.id);
     this.cuentasSeleccionadas.update((seleccion) => {
       const siguiente = new Set(seleccion);
       for (const cuenta of visiblesConId) {
@@ -532,12 +567,12 @@ export class PlanCuentasComponent implements OnInit {
   }
 
   protected todasVisiblesSeleccionadas(): boolean {
-    const visiblesConId = this.cuentasFiltradas().filter((cuenta) => !!cuenta.id);
+    const visiblesConId = this.cuentasPaginadas().filter((cuenta) => !!cuenta.id);
     return visiblesConId.length > 0 && visiblesConId.every((cuenta) => this.cuentasSeleccionadas().has(cuenta.id!));
   }
 
   protected algunasVisiblesSeleccionadas(): boolean {
-    const visiblesConId = this.cuentasFiltradas().filter((cuenta) => !!cuenta.id);
+    const visiblesConId = this.cuentasPaginadas().filter((cuenta) => !!cuenta.id);
     const seleccionadas = visiblesConId.filter((cuenta) => this.cuentasSeleccionadas().has(cuenta.id!)).length;
     return seleccionadas > 0 && seleccionadas < visiblesConId.length;
   }
@@ -768,6 +803,18 @@ export class PlanCuentasComponent implements OnInit {
     } finally {
       this.importando.set(false);
     }
+  }
+
+  private obtenerRaiz(cuenta: CuentaContable, index: Map<string, CuentaContable>): string {
+    let actual = cuenta;
+    const visitadas = new Set<string>();
+    while (actual.cuentaPadreId && !visitadas.has(actual.cuentaPadreId)) {
+      visitadas.add(actual.cuentaPadreId);
+      const padre = index.get(actual.cuentaPadreId);
+      if (!padre) break;
+      actual = padre;
+    }
+    return actual.id ?? actual.codigo;
   }
 
   private mostrarMensaje(message: string, icon: string): void {

@@ -152,7 +152,7 @@ const SNAPS: { max: number; ancho: AnchoBloque }[] = [
     .canvas {
       min-height: 100%;
       border-radius: 8px;
-      box-shadow: 0 2px 14px rgba(0, 0, 0, 0.12);
+      box-shadow: var(--tc-elevation-1);
       overflow: hidden;
     }
     .canvas-vacio {
@@ -171,10 +171,10 @@ const SNAPS: { max: number; ancho: AnchoBloque }[] = [
       transition: outline-color 0.12s ease;
     }
     .envoltorio:hover {
-      outline-color: #93c5fd;
+      outline-color: color-mix(in srgb, var(--primary) 55%, transparent);
     }
     .envoltorio.seleccionado {
-      outline-color: #2563eb;
+      outline-color: var(--primary);
     }
     .insertar {
       position: absolute;
@@ -186,8 +186,8 @@ const SNAPS: { max: number; ancho: AnchoBloque }[] = [
       height: 24px;
       border-radius: 999px;
       border: none;
-      background: #2563eb;
-      color: #fff;
+      background: var(--primary);
+      color: var(--tc-on-primary);
       cursor: pointer;
       display: none;
       align-items: center;
@@ -199,7 +199,8 @@ const SNAPS: { max: number; ancho: AnchoBloque }[] = [
       display: inline-flex;
     }
     .insertar.activo {
-      background: #16a34a;
+      background: var(--tc-success);
+      color: var(--tc-on-success-container);
       display: inline-flex;
     }
     .insertar mat-icon {
@@ -214,18 +215,18 @@ const SNAPS: { max: number; ancho: AnchoBloque }[] = [
       gap: 6px;
       margin: 0;
       padding: 14px;
-      border: 1px dashed rgba(0, 0, 0, 0.25);
+      border: 1px dashed var(--tc-ghost-border);
       background: none;
-      color: #6b7280;
+      color: var(--muted-foreground);
       cursor: pointer;
       font: inherit;
       font-size: 0.85rem;
     }
     .insertar-final:hover,
     .insertar-final.activo {
-      color: #2563eb;
-      border-color: #2563eb;
-      background: #eff6ff;
+      color: var(--tc-on-primary-container);
+      border-color: var(--primary);
+      background: var(--tc-primary-container);
     }
     .chrome {
       position: absolute;
@@ -235,12 +236,12 @@ const SNAPS: { max: number; ancho: AnchoBloque }[] = [
       display: none;
       align-items: center;
       gap: 2px;
-      background: #1f2937;
+      background: var(--mat-sys-inverse-surface);
       border-radius: 8px;
       padding: 2px 6px;
     }
     .chrome-tipo {
-      color: #d1d5db;
+      color: var(--mat-sys-inverse-on-surface);
       font-size: 0.7rem;
       text-transform: uppercase;
       letter-spacing: 0.04em;
@@ -254,7 +255,7 @@ const SNAPS: { max: number; ancho: AnchoBloque }[] = [
       display: inline-flex;
       background: none;
       border: none;
-      color: #e5e7eb;
+      color: var(--mat-sys-inverse-on-surface);
       cursor: pointer;
       padding: 4px;
       border-radius: 6px;
@@ -267,7 +268,7 @@ const SNAPS: { max: number; ancho: AnchoBloque }[] = [
       cursor: default;
     }
     .chrome button.peligro:hover {
-      color: #fca5a5;
+      color: var(--tc-error);
     }
     .chrome mat-icon {
       font-size: 18px;
@@ -283,8 +284,8 @@ const SNAPS: { max: number; ancho: AnchoBloque }[] = [
       left: 50%;
       transform: translate(-50%, -50%);
       z-index: 4;
-      background: #1f2937;
-      color: #e5e7eb;
+      background: var(--mat-sys-inverse-surface);
+      color: var(--mat-sys-inverse-on-surface);
       font-size: 0.72rem;
       border-radius: 999px;
       padding: 3px 12px;
@@ -299,7 +300,7 @@ const SNAPS: { max: number; ancho: AnchoBloque }[] = [
       height: 44px;
       border-radius: 6px;
       border: none;
-      background: #2563eb;
+      background: var(--primary);
       cursor: ew-resize;
       opacity: 0;
       transition: opacity 0.12s ease;
@@ -317,8 +318,8 @@ const SNAPS: { max: number; ancho: AnchoBloque }[] = [
       left: 50%;
       transform: translateX(-50%);
       z-index: 7;
-      background: #2563eb;
-      color: #fff;
+      background: var(--primary);
+      color: var(--tc-on-primary);
       font-size: 0.75rem;
       font-weight: 700;
       border-radius: 999px;
@@ -330,7 +331,7 @@ const SNAPS: { max: number; ancho: AnchoBloque }[] = [
     }
     .cdk-drag-placeholder {
       opacity: 0.25;
-      background: #dbeafe;
+      background: var(--tc-primary-container);
       min-height: 48px;
     }
   `,

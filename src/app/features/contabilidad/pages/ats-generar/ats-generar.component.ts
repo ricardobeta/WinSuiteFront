@@ -50,31 +50,45 @@ interface ChecklistItem {
       </header>
 
       <section class="surface-card period-card">
-        <mat-form-field appearance="outline">
-          <mat-label>Año</mat-label>
-          <mat-select [formControl]="anio">
-            @for (a of anios; track a) { <mat-option [value]="a">{{ a }}</mat-option> }
-          </mat-select>
-        </mat-form-field>
-        <mat-form-field appearance="outline">
-          <mat-label>Mes</mat-label>
-          <mat-select [formControl]="mes">
-            @for (m of meses; track m.valor) { <mat-option [value]="m.valor">{{ m.etiqueta }}</mat-option> }
-          </mat-select>
-        </mat-form-field>
-        <div class="period-count">
-          <mat-icon>fact_check</mat-icon>
-          <span>{{ periodoBuscado() ? facturasPeriodo().length + ' factura(s) en el período' : 'Busca las facturas del período seleccionado' }}</span>
+        <div class="period-heading">
+          <span class="period-heading__icon" aria-hidden="true"><mat-icon>calendar_month</mat-icon></span>
+          <div>
+            <h3>Período a consultar</h3>
+            <p>Selecciona el mes fiscal y define qué documentos formarán parte de la revisión.</p>
+          </div>
         </div>
-        <button mat-raised-button color="primary" type="button" (click)="buscarFacturas()" [disabled]="buscando()">
-          <mat-icon>search</mat-icon>
-          {{ buscando() ? 'Buscando...' : 'Buscar facturas' }}
-        </button>
-        <div class="borradores-toggle">
-          <mat-slide-toggle [checked]="incluirBorradores()" (change)="setIncluirBorradores($event.checked)">
-            Incluir borradores
-          </mat-slide-toggle>
-          <span class="toggle-hint">{{ incluirBorradores() ? 'Se incluyen BORRADOR + REGISTRADA' : 'Solo facturas REGISTRADA' }}</span>
+
+        <div class="period-controls">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Año</mat-label>
+            <mat-select [formControl]="anio">
+              @for (a of anios; track a) { <mat-option [value]="a">{{ a }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+          <mat-form-field appearance="outline" subscriptSizing="dynamic">
+            <mat-label>Mes</mat-label>
+            <mat-select [formControl]="mes">
+              @for (m of meses; track m.valor) { <mat-option [value]="m.valor">{{ m.etiqueta }}</mat-option> }
+            </mat-select>
+          </mat-form-field>
+          <div class="borradores-toggle" [class.enabled]="incluirBorradores()">
+            <span class="option-label">Alcance de documentos</span>
+            <mat-slide-toggle [checked]="incluirBorradores()" (change)="setIncluirBorradores($event.checked)">
+              Incluir borradores
+            </mat-slide-toggle>
+            <span class="toggle-hint">{{ incluirBorradores() ? 'Incluye facturas BORRADOR y REGISTRADA' : 'Recomendado: solo facturas REGISTRADA' }}</span>
+          </div>
+        </div>
+
+        <div class="period-actions">
+          <div class="period-count" [class.ready]="periodoBuscado()">
+            <mat-icon>{{ periodoBuscado() ? 'fact_check' : 'info' }}</mat-icon>
+            <span>{{ periodoBuscado() ? facturasPeriodo().length + ' factura(s) encontradas en el período' : 'Consulta las facturas para habilitar la generación del ATS' }}</span>
+          </div>
+          <button mat-raised-button color="primary" type="button" (click)="buscarFacturas()" [disabled]="buscando()">
+            <mat-icon>search</mat-icon>
+            {{ buscando() ? 'Consultando...' : 'Consultar facturas' }}
+          </button>
         </div>
       </section>
 
@@ -136,10 +150,23 @@ interface ChecklistItem {
     .page-header h2 { margin: 0; font-size: 1.6rem; }
     .support { margin: .4rem 0 0; color: var(--muted-foreground); max-width: 62ch; }
 
-    .period-card { padding: 1rem 1.25rem; display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; }
-    .period-count { display: flex; align-items: center; gap: .4rem; color: var(--muted-foreground); }
-    .borradores-toggle { display: flex; flex-direction: column; gap: .1rem; margin-left: auto; }
+    .period-card { padding: 1.25rem; display: grid; gap: 1rem; background: var(--tc-surface-container-lowest); }
+    .period-heading { display: flex; align-items: center; gap: .75rem; }
+    .period-heading__icon { width: 2.65rem; height: 2.65rem; display: grid; place-items: center; flex: 0 0 auto; border-radius: .8rem; color: var(--primary); background: color-mix(in srgb, var(--primary) 14%, transparent); }
+    .period-heading h3 { margin: 0; font-size: 1rem; }
+    .period-heading p { margin: .2rem 0 0; color: var(--muted-foreground); font-size: .86rem; }
+    .period-controls { display: grid; grid-template-columns: minmax(130px, .65fr) minmax(180px, 1fr) minmax(260px, 1.35fr); gap: .85rem; align-items: stretch; }
+    .period-controls mat-form-field { width: 100%; }
+    .borradores-toggle { min-height: 3.5rem; display: flex; flex-direction: column; justify-content: center; gap: .16rem; padding: .55rem .8rem; border: 1px solid var(--tc-ghost-border); border-radius: var(--tc-radius-md); background: var(--tc-surface-container-low); }
+    .borradores-toggle.enabled { border-color: var(--tc-warning); background: var(--tc-warning-container); color: var(--tc-on-warning-container); }
+    .borradores-toggle.enabled .option-label, .borradores-toggle.enabled .toggle-hint { color: var(--tc-on-warning-container); }
+    .option-label { font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-foreground); }
     .toggle-hint { font-size: .78rem; color: var(--muted-foreground); }
+    .period-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding-top: .9rem; border-top: 1px solid var(--tc-ghost-border); }
+    .period-count { min-width: 0; display: flex; align-items: center; gap: .5rem; color: var(--muted-foreground); font-size: .86rem; }
+    .period-count mat-icon { color: var(--tc-info); flex: 0 0 auto; }
+    .period-count.ready mat-icon { color: var(--tc-success); }
+    .period-actions button { flex: 0 0 auto; }
 
     .kpi-row { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 1rem; }
     .kpi-card { padding: 1.1rem 1.25rem; border-radius: 1rem; display: grid; gap: .35rem; }
@@ -159,7 +186,19 @@ interface ChecklistItem {
     .actions { display: flex; gap: .75rem; flex-wrap: wrap; }
     .result-ok { display: flex; align-items: center; gap: .5rem; color: var(--success, #1a7f52); margin: 0; }
 
-    @media (max-width: 900px) { .kpi-row { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+    @media (max-width: 900px) {
+      .period-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .borradores-toggle { grid-column: 1 / -1; }
+      .kpi-row { grid-template-columns: repeat(2, minmax(0,1fr)); }
+    }
+    @media (max-width: 600px) {
+      .period-card { padding: 1rem; }
+      .period-controls { grid-template-columns: 1fr; }
+      .borradores-toggle { grid-column: auto; }
+      .period-actions { align-items: stretch; flex-direction: column; }
+      .period-actions button { width: 100%; }
+      .kpi-row { grid-template-columns: 1fr; }
+    }
   `]
 })
 export class AtsGenerarComponent {

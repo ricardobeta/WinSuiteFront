@@ -191,22 +191,24 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
       align-items: center;
       gap: 8px;
       padding: 10px 12px;
-      border: 1px solid rgba(0, 0, 0, 0.1);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 10px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
       cursor: pointer;
       font: inherit;
       text-align: left;
     }
     .item mat-icon {
-      color: #2563eb;
+      color: var(--primary);
       font-size: 20px;
       width: 20px;
       height: 20px;
     }
     .item.activo {
-      border-color: #2563eb;
-      background: #eff6ff;
+      border-color: var(--primary);
+      background: var(--tc-primary-container);
+      color: var(--tc-on-primary-container);
     }
     .item .nombre {
       flex: 1;
@@ -223,8 +225,9 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
       font-size: 0.88rem;
     }
     .editor {
-      background: #fff;
-      border: 1px solid rgba(0, 0, 0, 0.08);
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 12px;
       padding: 18px;
       display: flex;
@@ -268,15 +271,16 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
       font: inherit;
       font-weight: 400;
       padding: 8px 10px;
-      border: 1px solid rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 8px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
     }
     .campo-item {
       display: flex;
       gap: 8px;
       align-items: flex-start;
-      border: 1px solid rgba(0, 0, 0, 0.08);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 10px;
       padding: 10px;
     }
@@ -313,7 +317,7 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
       padding: 4px;
     }
     .quitar:hover {
-      color: #dc2626;
+      color: var(--tc-error);
       opacity: 1;
     }
     .acciones {
@@ -323,7 +327,7 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
       margin-top: 8px;
     }
     .peligro {
-      color: #dc2626;
+      color: var(--tc-error);
     }
     @media (max-width: 760px) {
       .cuerpo {

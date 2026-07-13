@@ -96,10 +96,11 @@ import { PedidosWebService } from '../../services/pedidos-web.service';
       gap: 12px;
     }
     .pedido {
-      border: 1px solid rgba(0, 0, 0, 0.1);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 10px;
       padding: 14px 16px;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
     }
     .cabecera {
       display: flex;
@@ -115,33 +116,39 @@ import { PedidosWebService } from '../../services/pedidos-web.service';
       font: inherit;
       padding: 4px 8px;
       border-radius: 999px;
-      border: 1px solid rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--tc-ghost-border);
       font-size: 0.82rem;
+      color: var(--tc-on-surface);
     }
     .estado-nuevo {
-      background: #fef3c7;
+      background: var(--tc-warning-container);
+      color: var(--tc-on-warning-container);
     }
     .estado-pagado {
-      background: #dcfce7;
+      background: var(--tc-success-container);
+      color: var(--tc-on-success-container);
       font-weight: 700;
     }
     .pago-info {
       margin-top: 6px;
       font-size: 0.82rem;
-      color: #15803d;
-      background: #f0fdf4;
+      color: var(--tc-on-success-container);
+      background: var(--tc-success-container);
       border-radius: 8px;
       padding: 5px 10px;
       display: inline-block;
     }
     .estado-confirmado {
-      background: #dbeafe;
+      background: var(--tc-info-container);
+      color: var(--tc-on-info-container);
     }
     .estado-entregado {
-      background: #d1fae5;
+      background: var(--tc-success-container);
+      color: var(--tc-on-success-container);
     }
     .estado-cancelado {
-      background: #fee2e2;
+      background: var(--tc-error-container);
+      color: var(--tc-on-error-container);
     }
     .detalle {
       display: flex;

@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, get, onValue, push, ref, remove, set, update } from '@angular/fire/database';
+import { Database, get, limitToLast, onValue, orderByChild, push, query, ref, remove, set, update } from '@angular/fire/database';
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
@@ -206,6 +206,28 @@ export class IntegracionContableService {
 
       return () => unsubscribe();
     });
+  }
+
+  async getPendientesOnce(limit = 50): Promise<PendienteContabilizacion[]> {
+    const boundedLimit = Math.max(1, Math.min(limit, 100));
+    const snapshot = await get(query(
+      this.getPendientesRef(),
+      orderByChild('creadoEn'),
+      limitToLast(boundedLimit)
+    ));
+    if (!snapshot.exists()) {
+      return [];
+    }
+
+    const pendientes: PendienteContabilizacion[] = [];
+    snapshot.forEach((child) => {
+      const pendiente = child.val() as PendienteContabilizacion;
+      if (pendiente.estado !== 'RESUELTO') {
+        pendientes.push({ ...pendiente, id: child.key ?? undefined });
+      }
+      return false;
+    });
+    return pendientes.sort((a, b) => b.creadoEn - a.creadoEn);
   }
 
   getEstadoOrigen(origenTipo: OrigenAsientoAutomatico, origenId: string): Observable<EstadoOrigenContable> {

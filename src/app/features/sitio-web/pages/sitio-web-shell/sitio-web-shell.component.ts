@@ -99,16 +99,23 @@ import { SitiosService } from '../../services/sitios.service';
       align-items: center;
       gap: 4px;
       padding: 0 16px;
-      border-bottom: 1px solid rgba(0, 0, 0, 0.08);
-      background: #fff;
-      flex-wrap: wrap;
+      border-radius: var(--tc-radius-lg);
+      background: var(--tc-surface-container);
+      flex-wrap: nowrap;
+      min-width: 0;
+      max-width: 100%;
+      box-shadow: var(--tc-elevation-1);
     }
     .tabs-nav {
       --mat-tab-header-divider-height: 0;
+      min-width: 0;
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
     }
     .tabs-nav a {
       min-width: 0;
       padding: 0 14px;
+      min-height: 44px;
     }
     .tabs-nav mat-icon {
       font-size: 18px;
@@ -141,6 +148,17 @@ import { SitiosService } from '../../services/sitios.service';
       /* Sin overflow:auto: la cadena usa min-height (nunca scrollea aqui) y un
          overflow!=visible rompe el position:sticky de los paneles del editor. */
       overflow: visible;
+      min-width: 0;
+      max-width: 100%;
+    }
+    @media (max-width: 900px) {
+      .dominio { display: none; }
+      .nombre { max-width: 140px; margin-right: 4px; }
+      .barra { padding-inline: 8px; }
+    }
+    @media (max-width: 600px) {
+      .nombre { display: none; }
+      .tabs-nav a { padding-inline: 10px; }
     }
   `,
 })

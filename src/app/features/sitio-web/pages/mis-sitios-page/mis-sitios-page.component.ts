@@ -99,14 +99,15 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
     }
     .grilla {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
       gap: 16px;
     }
     .card {
-      border: 1px solid rgba(0, 0, 0, 0.1);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 12px;
       overflow: hidden;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
       display: flex;
       flex-direction: column;
     }
@@ -122,8 +123,8 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
       font-weight: 600;
       padding: 3px 10px;
       border-radius: 999px;
-      background: #ecfdf5;
-      color: #059669;
+      background: var(--tc-success-container);
+      color: var(--tc-on-success-container);
       margin-bottom: 10px;
     }
     .tipo mat-icon {
@@ -132,8 +133,8 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
       height: 16px;
     }
     .tipo-ecommerce {
-      background: #eff6ff;
-      color: #2563eb;
+      background: var(--tc-info-container);
+      color: var(--tc-on-info-container);
     }
     .card h2 {
       margin: 0 0 4px;
@@ -150,17 +151,17 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
       font-size: 0.85rem;
     }
     .publicado {
-      color: #059669;
+      color: var(--tc-success);
     }
     .borrador {
-      color: #b45309;
+      color: var(--tc-warning);
     }
     .card-acciones {
       display: flex;
       align-items: center;
       gap: 4px;
       padding: 8px 12px;
-      border-top: 1px solid rgba(0, 0, 0, 0.06);
+      border-top: 1px solid var(--tc-ghost-border);
     }
     .card-acciones button[mat-icon-button] {
       margin-left: auto;
@@ -176,6 +177,11 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
       width: 56px;
       height: 56px;
       opacity: 0.35;
+    }
+    @media (max-width: 600px) {
+      :host { padding: 12px; }
+      .encabezado { flex-direction: column; }
+      .encabezado a { width: 100%; }
     }
   `,
 })

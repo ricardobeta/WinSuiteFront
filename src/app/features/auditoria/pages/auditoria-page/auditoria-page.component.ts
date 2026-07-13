@@ -9,9 +9,11 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
+import { PageEvent } from '@angular/material/paginator';
 
 import { AuditEvent } from '../../../../core/models/audit.models';
 import { AuditService } from '../../../../core/services/audit.service';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 
 @Component({
   selector: 'app-auditoria-page',
@@ -26,7 +28,8 @@ import { AuditService } from '../../../../core/services/audit.service';
     MatInputModule,
     MatProgressSpinnerModule,
     MatSelectModule,
-    MatTableModule
+    MatTableModule,
+    DataTableFrameComponent
   ],
   template: `
     <section class="audit-page">
@@ -40,6 +43,7 @@ import { AuditService } from '../../../../core/services/audit.service';
           <mat-icon>refresh</mat-icon>
           Actualizar
         </button>
+        <div class="header-icon" aria-hidden="true"><mat-icon>manage_search</mat-icon></div>
       </header>
 
       <section class="surface-card filters">
@@ -70,8 +74,14 @@ import { AuditService } from '../../../../core/services/audit.service';
             <span>No hay eventos para los filtros actuales.</span>
           </div>
         } @else {
-          <div class="table-wrap">
-            <table mat-table [dataSource]="filteredEvents()">
+          <app-data-table-frame
+            [showSearch]="false"
+            [total]="filteredEvents().length"
+            [pageIndex]="pageIndexActual()"
+            [pageSize]="pageSize()"
+            (pageChange)="actualizarPagina($event)"
+          >
+            <table mat-table [dataSource]="paginatedEvents()">
               <ng-container matColumnDef="timestamp">
                 <th mat-header-cell *matHeaderCellDef>Fecha</th>
                 <td mat-cell *matCellDef="let row">{{ row.timestamp | date:'dd/MM/yyyy HH:mm' }}</td>
@@ -113,7 +123,7 @@ import { AuditService } from '../../../../core/services/audit.service';
               <tr mat-header-row *matHeaderRowDef="columns"></tr>
               <tr mat-row *matRowDef="let row; columns: columns"></tr>
             </table>
-          </div>
+          </app-data-table-frame>
           @if (hasMore()) {
             <div class="load-more">
               <button mat-stroked-button type="button" [disabled]="loadingMore()" (click)="loadMore()">
@@ -143,7 +153,14 @@ import { AuditService } from '../../../../core/services/audit.service';
         justify-content: space-between;
         gap: 1rem;
         align-items: end;
+        min-height: 132px;
+        background: var(--tc-hero-background);
+        overflow: hidden;
       }
+
+      .header > div:first-child { min-width: 0; flex: 1; }
+      .header-icon { width: 58px; height: 58px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 18px; color: var(--primary); background: color-mix(in srgb, var(--primary) 14%, transparent); }
+      .header-icon mat-icon { width: 30px; height: 30px; font-size: 30px; }
 
       .eyebrow {
         margin: 0 0 0.35rem;
@@ -197,12 +214,14 @@ import { AuditService } from '../../../../core/services/audit.service';
 
       .action-pill.eliminar,
       .action-pill.reversar {
-        background: rgb(239 68 68 / 14%);
+        background: var(--tc-error-container);
+        color: var(--tc-on-error-container);
       }
 
       .action-pill.aprobar,
       .action-pill.publicar {
-        background: rgb(16 185 129 / 16%);
+        background: var(--tc-success-container);
+        color: var(--tc-on-success-container);
       }
 
       .state {
@@ -237,6 +256,7 @@ import { AuditService } from '../../../../core/services/audit.service';
         .filters {
           grid-template-columns: 1fr;
         }
+        .header-icon { display: none; }
       }
     `
   ]
@@ -251,6 +271,8 @@ export class AuditoriaPageComponent implements OnInit {
   protected readonly loadingMore = signal(false);
   protected readonly hasMore = signal(false);
   private readonly nextCursor = signal<string | null>(null);
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(10);
   protected moduleFilter = '';
   protected textFilter = '';
 
@@ -286,6 +308,7 @@ export class AuditoriaPageComponent implements OnInit {
   }
 
   protected reload(): void {
+    this.pageIndex.set(0);
     this.loading.set(true);
     this.nextCursor.set(null);
     this.audit
@@ -305,6 +328,20 @@ export class AuditoriaPageComponent implements OnInit {
           this.loading.set(false);
         }
       });
+  }
+
+  protected pageIndexActual(): number {
+    return Math.min(this.pageIndex(), Math.max(0, Math.ceil(this.filteredEvents().length / this.pageSize()) - 1));
+  }
+
+  protected paginatedEvents(): AuditEvent[] {
+    const start = this.pageIndexActual() * this.pageSize();
+    return this.filteredEvents().slice(start, start + this.pageSize());
+  }
+
+  protected actualizarPagina(event: PageEvent): void {
+    this.pageIndex.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
   }
 
   protected loadMore(): void {

@@ -7,8 +7,10 @@ import { MatTableModule } from '@angular/material/table';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatSelectModule } from '@angular/material/select';
+import { PageEvent } from '@angular/material/paginator';
 
 import { CampoPersonalizado } from '../../../../shared/models/clientes.models';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { Almacen, Producto } from '../../models/inventario.models';
 import { AlmacenesService } from '../../services/almacenes.service';
 import { CamposInventarioService } from '../../services/campos-inventario.service';
@@ -18,7 +20,7 @@ import { ProductosService } from '../../services/productos.service';
 @Component({
   selector: 'app-productos-list',
   standalone: true,
-  imports: [CommonModule, RouterLink, MatButtonModule, MatTableModule, MatChipsModule, MatFormFieldModule, MatSelectModule],
+  imports: [CommonModule, RouterLink, MatButtonModule, MatTableModule, MatChipsModule, MatFormFieldModule, MatSelectModule, DataTableFrameComponent],
   template: `
     <section class="surface-card page-card">
       <div class="header">
@@ -52,8 +54,15 @@ import { ProductosService } from '../../services/productos.service';
           <p>No hay productos registrados para esta empresa.</p>
         </section>
       } @else {
-        <div class="table-wrap">
-          <table mat-table [dataSource]="productos()">
+        <app-data-table-frame
+          searchPlaceholder="Buscar por SKU o nombre"
+          [total]="productosFiltrados().length"
+          [pageIndex]="pageIndex()"
+          [pageSize]="pageSize()"
+          (searchChange)="actualizarBusqueda($event)"
+          (pageChange)="actualizarPagina($event)"
+        >
+          <table mat-table [dataSource]="productosPaginados()">
           <ng-container matColumnDef="sku">
             <th mat-header-cell *matHeaderCellDef>SKU</th>
             <td mat-cell *matCellDef="let row">{{ row.sku }}</td>
@@ -117,7 +126,7 @@ import { ProductosService } from '../../services/productos.service';
           <tr mat-header-row *matHeaderRowDef="displayedColumns()"></tr>
           <tr mat-row *matRowDef="let row; columns: displayedColumns()"></tr>
           </table>
-        </div>
+        </app-data-table-frame>
       }
     </section>
   `,
@@ -157,6 +166,20 @@ export class ProductosListComponent implements OnInit {
   protected readonly stockTotales = signal<Record<string, number>>({});
   protected readonly stockPorProductoAlmacen = signal<Record<string, Record<string, number>>>({});
   protected readonly camposVisibles = signal<CampoPersonalizado[]>([]);
+  protected readonly busqueda = signal('');
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(10);
+  protected readonly productosFiltrados = computed(() => {
+    const query = this.normalizar(this.busqueda());
+    if (!query) return this.productos();
+    return this.productos().filter((producto) =>
+      this.normalizar(`${producto.sku} ${producto.nombre}`).includes(query)
+    );
+  });
+  protected readonly productosPaginados = computed(() => {
+    const start = this.pageIndex() * this.pageSize();
+    return this.productosFiltrados().slice(start, start + this.pageSize());
+  });
   protected readonly productosIndex = computed(() => {
     const index: Record<string, Producto> = {};
     for (const producto of this.productos()) {
@@ -241,6 +264,16 @@ export class ProductosListComponent implements OnInit {
     this.almacenSeleccionadoId.set(almacenId);
   }
 
+  protected actualizarBusqueda(value: string): void {
+    this.busqueda.set(value);
+    this.pageIndex.set(0);
+  }
+
+  protected actualizarPagina(event: PageEvent): void {
+    this.pageIndex.set(event.pageIndex);
+    this.pageSize.set(event.pageSize);
+  }
+
   protected nombreAlmacenSeleccionado(): string {
     const id = this.almacenSeleccionadoId();
     if (!id) {
@@ -308,5 +341,9 @@ export class ProductosListComponent implements OnInit {
 
   private roundToTwo(value: number): number {
     return Math.round((value + Number.EPSILON) * 100) / 100;
+  }
+
+  private normalizar(value: string): string {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
   }
 }

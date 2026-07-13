@@ -68,12 +68,13 @@ import { SitioMediaService } from '../../services/sitio-media.service';
       align-items: center;
       gap: 4px;
       padding: 6px 10px;
-      border: 1px solid rgba(0, 0, 0, 0.15);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: 6px;
       cursor: pointer;
       font-size: 0.82rem;
       white-space: nowrap;
-      background: #fff;
+      background: var(--tc-surface-container-lowest);
+      color: var(--tc-on-surface);
     }
     .subir.subiendo {
       opacity: 0.6;
@@ -91,7 +92,7 @@ import { SitioMediaService } from '../../services/sitio-media.service';
       padding: 6px 10px;
       border: 0;
       background: transparent;
-      color: var(--warn, #b91c1c);
+      color: var(--tc-error);
       cursor: pointer;
     }
   `,
