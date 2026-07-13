@@ -1,5 +1,4 @@
 import { ChangeDetectionStrategy, Component, inject, input, output, signal } from '@angular/core';
-import { FormsModule } from '@angular/forms';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -10,11 +9,11 @@ import {
 } from '../../../../shared/components/archivo-selector-dialog/archivo-selector-dialog.component';
 import { SitioMediaService } from '../../services/sitio-media.service';
 
-/** Campo de imagen: subir archivo a Storage (sitios/{t}/media) o pegar URL. */
+/** Campo de imagen publica: seleccionar o subir exclusivamente al Storage de Sites. */
 @Component({
   selector: 'app-selector-imagen',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, MatIconModule],
+  imports: [MatIconModule],
   template: `
     <div class="selector">
       @if (url()) {
@@ -36,13 +35,12 @@ import { SitioMediaService } from '../../services/sitio-media.service';
             hidden
           />
         </label>
-        <input
-          class="url"
-          type="text"
-          placeholder="o pega una URL https://..."
-          [ngModel]="url()"
-          (ngModelChange)="urlChange.emit($event)"
-        />
+        @if (url()) {
+          <button type="button" class="quitar" (click)="urlChange.emit('')">
+            <mat-icon>delete_outline</mat-icon>
+            Quitar
+          </button>
+        }
       </div>
     </div>
   `,
@@ -86,14 +84,15 @@ import { SitioMediaService } from '../../services/sitio-media.service';
       width: 17px;
       height: 17px;
     }
-    .url {
-      flex: 1;
-      min-width: 0;
-      font: inherit;
-      font-size: 0.82rem;
-      padding: 6px 8px;
-      border: 1px solid rgba(0, 0, 0, 0.15);
-      border-radius: 6px;
+    .quitar {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 10px;
+      border: 0;
+      background: transparent;
+      color: var(--warn, #b91c1c);
+      cursor: pointer;
     }
   `,
 })
@@ -113,6 +112,7 @@ export class SelectorImagenComponent {
         title: 'Imagenes de tu sitio',
         subtitle: 'Reutiliza una imagen ya subida o carga una nueva.',
         sourceModule: 'sitio_web',
+        storageTarget: 'sites',
         extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'],
       },
       maxWidth: '95vw',

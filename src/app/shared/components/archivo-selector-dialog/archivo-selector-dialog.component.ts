@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, Inject, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, Injector, OnInit, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
@@ -14,11 +14,15 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ArchivosService } from '../../../core/services/archivos.service';
 import { ArchivoUploaderComponent } from '../archivo-uploader/archivo-uploader.component';
 import { ArchivoItem } from '../../models/archivos.models';
+import { SitioMediaService } from '../../../features/sitio-web/services/sitio-media.service';
+
+export type ArchivoStorageTarget = 'principal' | 'sites';
 
 export interface ArchivoSelectorDialogData {
   title?: string;
   subtitle?: string;
   sourceModule?: string;
+  storageTarget?: ArchivoStorageTarget;
   allowUpload?: boolean;
   /** Si se define, solo muestra archivos con estas extensiones (ej. ['xml']). */
   extensions?: string[];
@@ -49,7 +53,7 @@ export interface ArchivoSelectorDialogResult {
     <section class="selector-shell">
       <header class="selector-hero surface-card">
         <div class="hero-copy">
-          <p class="eyebrow">Archivos de la empresa</p>
+          <p class="eyebrow">{{ isSitesStorage() ? 'Contenido publico' : 'Archivos de la empresa' }}</p>
           <h2>{{ data.title ?? 'Buscar, reutilizar o subir archivo' }}</h2>
           <p>{{ data.subtitle ?? 'Encuentra un documento existente o sube uno nuevo sin salir de esta ventana.' }}</p>
 
@@ -107,9 +111,9 @@ export interface ArchivoSelectorDialogResult {
 
             @if (filteredFiles().length === 0) {
               <div class="empty-state">
-                <mat-icon>search_off</mat-icon>
-                <h4>No encontramos coincidencias</h4>
-                <p>Prueba con otro nombre o cambia al modo subir si necesitas crear uno nuevo.</p>
+                <mat-icon>{{ sitesError() ? 'cloud_off' : 'search_off' }}</mat-icon>
+                <h4>{{ sitesLoading() ? 'Consultando imagenes...' : (sitesError() ? 'No se pudo consultar Sites' : 'No encontramos coincidencias') }}</h4>
+                <p>{{ sitesError() ?? 'Prueba con otro nombre o cambia al modo subir si necesitas crear uno nuevo.' }}</p>
                 <div class="empty-actions">
                   <button mat-stroked-button type="button" (click)="clearSearch()">Limpiar búsqueda</button>
                   @if (data.allowUpload ?? true) {
@@ -146,6 +150,13 @@ export interface ArchivoSelectorDialogResult {
                   </article>
                 }
               </div>
+              @if (isSitesStorage() && sitesNextPageToken()) {
+                <div class="load-more">
+                  <button mat-stroked-button type="button" [disabled]="sitesLoading()" (click)="loadMoreSites()">
+                    {{ sitesLoading() ? 'Consultando...' : 'Cargar mas imagenes' }}
+                  </button>
+                </div>
+              }
             }
           </section>
         </section>
@@ -165,12 +176,41 @@ export interface ArchivoSelectorDialogResult {
             </button>
           </div>
           <mat-divider />
-          <app-archivo-uploader
-            [sourceModule]="data.sourceModule ?? 'archivos'"
-            [extensions]="data.extensions ?? null"
-            (uploaded)="onUploaded($event)"
-            (failed)="onUploadFailed($event)"
-          />
+          @if (isSitesStorage()) {
+            <div class="sites-upload">
+              <mat-icon>public</mat-icon>
+              <div>
+                <h4>Subir al contenido publico</h4>
+                <p>La imagen quedara disponible para los visitantes del sitio.</p>
+              </div>
+              <input
+                #sitesFileInput
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                hidden
+                (change)="onSitesFileSelected($event)"
+              />
+              <button
+                mat-raised-button
+                color="primary"
+                type="button"
+                [disabled]="sitesUploading()"
+                (click)="sitesFileInput.click()"
+              >
+                {{ sitesUploading() ? 'Subiendo...' : 'Elegir imagen' }}
+              </button>
+              @if (sitesError()) {
+                <p class="sites-error">{{ sitesError() }}</p>
+              }
+            </div>
+          } @else {
+            <app-archivo-uploader
+              [sourceModule]="data.sourceModule ?? 'archivos'"
+              [extensions]="data.extensions ?? null"
+              (uploaded)="onUploaded($event)"
+              (failed)="onUploadFailed($event)"
+            />
+          }
         </section>
       }
     </section>
@@ -351,6 +391,37 @@ export interface ArchivoSelectorDialogResult {
         gap: 0.75rem;
       }
 
+      .load-more {
+        display: flex;
+        justify-content: center;
+        padding-top: 0.35rem;
+      }
+
+      .sites-upload {
+        display: grid;
+        grid-template-columns: auto 1fr auto;
+        gap: 1rem;
+        align-items: center;
+        padding: 1.25rem;
+        border: 1px dashed color-mix(in srgb, var(--primary) 35%, var(--tc-ghost-border));
+        border-radius: 1rem;
+        background: color-mix(in srgb, var(--primary) 5%, var(--card));
+      }
+
+      .sites-upload h4,
+      .sites-upload p {
+        margin: 0;
+      }
+
+      .sites-upload > mat-icon {
+        color: var(--primary);
+      }
+
+      .sites-error {
+        grid-column: 2 / -1;
+        color: var(--warn, #b91c1c);
+      }
+
       .file-row {
         display: flex;
         gap: 1rem;
@@ -455,6 +526,15 @@ export interface ArchivoSelectorDialogResult {
         .hero-actions mat-button-toggle {
           flex: 1 1 0;
         }
+
+        .sites-upload {
+          grid-template-columns: auto 1fr;
+        }
+
+        .sites-upload button,
+        .sites-error {
+          grid-column: 1 / -1;
+        }
       }
 
       :host-context(html.theme-dark) .selector-shell {
@@ -507,12 +587,17 @@ export class ArchivoSelectorDialogComponent implements OnInit {
   protected readonly data = inject<ArchivoSelectorDialogData>(MAT_DIALOG_DATA);
   private readonly dialogRef = inject(MatDialogRef<ArchivoSelectorDialogComponent, ArchivoSelectorDialogResult | null>);
   private readonly archivosService = inject(ArchivosService);
+  private readonly injector = inject(Injector);
   private readonly destroyRef = inject(DestroyRef);
   private readonly fb = inject(FormBuilder);
 
   protected readonly files = signal<ArchivoItem[]>([]);
   protected readonly filteredFiles = signal<ArchivoItem[]>([]);
   protected readonly mode = signal<'search' | 'upload'>('search');
+  protected readonly sitesLoading = signal(false);
+  protected readonly sitesUploading = signal(false);
+  protected readonly sitesError = signal<string | null>(null);
+  protected readonly sitesNextPageToken = signal<string | null>(null);
   protected readonly filterForm = this.fb.nonNullable.group({
     search: ''
   });
@@ -520,13 +605,17 @@ export class ArchivoSelectorDialogComponent implements OnInit {
   protected readonly selectedCountLabel = computed(() => `${this.filteredFiles().length} visibles`);
 
   ngOnInit(): void {
-    this.archivosService
-      .getArchivos()
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((items) => {
-        this.files.set(items);
-        this.applyFilter();
-      });
+    if (this.isSitesStorage()) {
+      void this.loadSitesPage(true);
+    } else {
+      this.archivosService
+        .getArchivos()
+        .pipe(takeUntilDestroyed(this.destroyRef))
+        .subscribe((items) => {
+          this.files.set(items);
+          this.applyFilter();
+        });
+    }
 
     this.filterForm.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.applyFilter());
   }
@@ -553,6 +642,33 @@ export class ArchivoSelectorDialogComponent implements OnInit {
     this.mode.set(mode);
   }
 
+  protected isSitesStorage(): boolean {
+    return this.data.storageTarget === 'sites';
+  }
+
+  protected loadMoreSites(): void {
+    if (this.sitesNextPageToken()) {
+      void this.loadSitesPage(false);
+    }
+  }
+
+  protected async onSitesFileSelected(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    const archivo = input.files?.[0];
+    if (!archivo) return;
+    this.sitesUploading.set(true);
+    this.sitesError.set(null);
+    try {
+      const item = await this.sitesMediaService.subirImagenComoArchivo(archivo);
+      this.onUploaded(item);
+    } catch (error) {
+      this.sitesError.set(error instanceof Error ? error.message : 'No se pudo subir la imagen.');
+    } finally {
+      this.sitesUploading.set(false);
+      input.value = '';
+    }
+  }
+
   protected clearSearch(): void {
     this.filterForm.setValue({ search: '' });
   }
@@ -565,7 +681,7 @@ export class ArchivoSelectorDialogComponent implements OnInit {
     if (extension === 'csv') {
       return 'CSV';
     }
-    if (extension === 'png' || extension === 'jpg' || extension === 'jpeg' || extension === 'webp') {
+    if (extension === 'png' || extension === 'jpg' || extension === 'jpeg' || extension === 'webp' || extension === 'gif') {
       return 'Imagen';
     }
     return 'Archivo';
@@ -576,7 +692,7 @@ export class ArchivoSelectorDialogComponent implements OnInit {
     if (extension === 'xls' || extension === 'xlsx' || extension === 'csv') {
       return 'description';
     }
-    if (extension === 'png' || extension === 'jpg' || extension === 'jpeg' || extension === 'webp') {
+    if (extension === 'png' || extension === 'jpg' || extension === 'jpeg' || extension === 'webp' || extension === 'gif') {
       return 'image';
     }
     return 'draft';
@@ -592,6 +708,28 @@ export class ArchivoSelectorDialogComponent implements OnInit {
 
   protected onUploadFailed(event: { file: File; error: string }): void {
     console.error('Archivo upload failed', event.file.name, event.error);
+  }
+
+  private get sitesMediaService(): SitioMediaService {
+    return this.injector.get(SitioMediaService);
+  }
+
+  private async loadSitesPage(reset: boolean): Promise<void> {
+    if (this.sitesLoading()) return;
+    this.sitesLoading.set(true);
+    this.sitesError.set(null);
+    try {
+      const page = await this.sitesMediaService.listarImagenes(
+        reset ? null : this.sitesNextPageToken(),
+      );
+      this.files.update((actuales) => reset ? page.items : [...actuales, ...page.items]);
+      this.sitesNextPageToken.set(page.nextPageToken);
+      this.applyFilter();
+    } catch (error) {
+      this.sitesError.set(error instanceof Error ? error.message : 'No se pudieron consultar las imagenes publicas.');
+    } finally {
+      this.sitesLoading.set(false);
+    }
   }
 
   private applyFilter(): void {

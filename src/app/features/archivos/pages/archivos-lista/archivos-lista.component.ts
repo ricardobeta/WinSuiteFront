@@ -25,6 +25,7 @@ import { ArchivoUploaderComponent } from '../../../../shared/components/archivo-
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { ARCHIVO_MAX_TOTAL_BYTES, ArchivoItem, ArchivosUsage } from '../../../../shared/models/archivos.models';
+import { SitioMediaService } from '../../../sitio-web/services/sitio-media.service';
 
 
 @Component({
@@ -56,7 +57,7 @@ import { ARCHIVO_MAX_TOTAL_BYTES, ArchivoItem, ArchivosUsage } from '../../../..
           <div>
             <p class="eyebrow">Almacenamiento</p>
             <h2>Resumen de archivos</h2>
-            <p>Controla el espacio usado por tu empresa y los archivos activos.</p>
+            <p>Controla el espacio privado usado por tu empresa y consulta por separado el contenido publico de Sites.</p>
           </div>
 
           <div class="summary-metrics">
@@ -147,10 +148,17 @@ import { ARCHIVO_MAX_TOTAL_BYTES, ArchivoItem, ArchivosUsage } from '../../../..
             <h3>{{ filteredCount() }} archivos encontrados</h3>
           </div>
 
-          <button mat-raised-button color="primary" type="button" (click)="openSelector()">
-            <mat-icon>search</mat-icon>
-            Buscar o reutilizar
-          </button>
+          <div class="table-actions">
+            @if (isSitesModuleSelected() && sitesNextPageToken()) {
+              <button mat-stroked-button type="button" [disabled]="sitesLoading()" (click)="loadMoreSites()">
+                {{ sitesLoading() ? 'Consultando...' : 'Cargar mas de Sites' }}
+              </button>
+            }
+            <button mat-raised-button color="primary" type="button" (click)="openSelector()">
+              <mat-icon>search</mat-icon>
+              {{ isSitesModuleSelected() ? 'Imagenes publicas' : 'Buscar o reutilizar' }}
+            </button>
+          </div>
         </div>
 
         @if (dataSource.data.length === 0) {
@@ -339,6 +347,13 @@ import { ARCHIVO_MAX_TOTAL_BYTES, ArchivoItem, ArchivosUsage } from '../../../..
         align-items: end;
       }
 
+      .table-actions {
+        display: flex;
+        gap: 0.75rem;
+        align-items: center;
+        flex-wrap: wrap;
+      }
+
       .table-wrap {
         overflow: auto;
       }
@@ -439,6 +454,7 @@ import { ARCHIVO_MAX_TOTAL_BYTES, ArchivoItem, ArchivosUsage } from '../../../..
 })
 export class ArchivosListaComponent implements OnInit, AfterViewInit {
   private readonly archivosService = inject(ArchivosService);
+  private readonly sitioMediaService = inject(SitioMediaService);
   private readonly authorization = inject(AuthorizationService);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
@@ -461,7 +477,15 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
 
   protected readonly dataSource = new MatTableDataSource<ArchivoItem>([]);
   protected readonly usage = signal<ArchivosUsage>({ totalBytes: 0, totalCount: 0 });
-  protected readonly files = signal<ArchivoItem[]>([]);
+  private readonly primaryFiles = signal<ArchivoItem[]>([]);
+  private readonly sitesFiles = signal<ArchivoItem[]>([]);
+  protected readonly files = computed(() => [
+    ...this.primaryFiles().filter((file) => file.sourceModule !== 'sitio_web'),
+    ...this.sitesFiles(),
+  ]);
+  protected readonly sitesLoading = signal(false);
+  protected readonly sitesNextPageToken = signal<string | null>(null);
+  private readonly sitesInitialized = signal(false);
   protected readonly filteredCount = signal(0);
 
   protected readonly maxTotalBytes = ARCHIVO_MAX_TOTAL_BYTES;
@@ -474,7 +498,10 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
   protected readonly canDelete = computed(() => this.authorization.canAccess('archivos', 'delete'));
 
   protected readonly moduleOptions = computed(() => {
-    const modules = Array.from(new Set(this.files().map((file) => file.sourceModule || 'general')));
+    const modules = Array.from(new Set([
+      ...this.files().map((file) => file.sourceModule || 'general'),
+      'sitio_web',
+    ]));
     return modules.sort((a, b) => a.localeCompare(b));
   });
 
@@ -515,7 +542,7 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
       .getArchivos()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((files) => {
-        this.files.set(files);
+        this.primaryFiles.set(files);
         this.applyFilters();
       });
 
@@ -526,7 +553,12 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
 
     this.filterForm.valueChanges
       .pipe(startWith(this.filterForm.value), takeUntilDestroyed(this.destroyRef))
-      .subscribe(() => this.applyFilters());
+      .subscribe((value) => {
+        if (value.module === 'sitio_web' && !this.sitesInitialized()) {
+          void this.loadSitesPage(true);
+        }
+        this.applyFilters();
+      });
   }
 
   ngAfterViewInit(): void {
@@ -536,6 +568,9 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
   protected formatModule(moduleKey: string): string {
     if (!moduleKey) {
       return 'General';
+    }
+    if (moduleKey === 'sitio_web') {
+      return 'Sites (publico)';
     }
     return moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1);
   }
@@ -593,7 +628,9 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
       width: '420px',
       data: {
         title: 'Eliminar archivo',
-        message: `¿Deseas eliminar "${item.name}"? Esta accion no se puede deshacer.`,
+        message: item.sourceModule === 'sitio_web'
+          ? `¿Deseas eliminar "${item.name}" del contenido publico? Si esta en uso, dejara de mostrarse en el sitio publicado.`
+          : `¿Deseas eliminar "${item.name}"? Esta accion no se puede deshacer.`,
         confirmText: 'Eliminar'
       }
     });
@@ -603,8 +640,14 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
         return;
       }
 
-      this.archivosService
-        .deleteArchivo(item)
+      const eliminar = item.sourceModule === 'sitio_web'
+        ? this.sitioMediaService.eliminarImagen(item.storagePath).then(() => {
+            this.sitesFiles.update((actuales) => actuales.filter((archivo) => archivo.id !== item.id));
+            this.applyFilters();
+          })
+        : this.archivosService.deleteArchivo(item);
+
+      eliminar
         .then(() => this.showSuccess('Archivo eliminado correctamente.'))
         .catch(() => {
           this.snackBar.open('No se pudo eliminar el archivo.', 'Cerrar', { duration: 3200 });
@@ -613,14 +656,19 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
   }
 
   protected openSelector(): void {
+    const sites = this.isSitesModuleSelected();
     const dialogRef = this.dialog.open(ArchivoSelectorDialogComponent, {
       width: 'min(1100px, 96vw)',
       maxWidth: '96vw',
       disableClose: true,
       data: {
-        title: 'Buscar o reutilizar archivo',
-        subtitle: 'Encuentra un archivo cargado o sube uno nuevo en el mismo popup.',
-        sourceModule: 'archivos',
+        title: sites ? 'Imagenes publicas de Sites' : 'Buscar o reutilizar archivo',
+        subtitle: sites
+          ? 'Consulta o sube contenido exclusivo del bucket publico de Sites.'
+          : 'Encuentra un archivo privado o sube uno nuevo en el mismo popup.',
+        sourceModule: sites ? 'sitio_web' : 'archivos',
+        storageTarget: sites ? 'sites' : 'principal',
+        extensions: sites ? ['png', 'jpg', 'jpeg', 'webp', 'gif'] : undefined,
         allowUpload: true
       }
     });
@@ -628,6 +676,14 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
     dialogRef.afterClosed().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((result) => {
       if (!result) {
         return;
+      }
+
+      if (sites && result.action === 'uploaded') {
+        this.sitesFiles.update((actuales) => [
+          result.archivo,
+          ...actuales.filter((archivo) => archivo.id !== result.archivo.id),
+        ]);
+        this.applyFilters();
       }
 
       if (result.action === 'selected') {
@@ -652,6 +708,16 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
     this.snackBar.open(event.error, 'Cerrar', { duration: 3200 });
   }
 
+  protected isSitesModuleSelected(): boolean {
+    return this.filterForm.controls.module.value === 'sitio_web';
+  }
+
+  protected loadMoreSites(): void {
+    if (this.sitesNextPageToken()) {
+      void this.loadSitesPage(false);
+    }
+  }
+
   private showSuccess(message: string): void {
     this.snackBar.openFromComponent(SuccessSnackbarComponent, {
       data: { message, icon: 'check_circle' },
@@ -659,6 +725,28 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
       horizontalPosition: 'end',
       verticalPosition: 'top'
     });
+  }
+
+  private async loadSitesPage(reset: boolean): Promise<void> {
+    if (this.sitesLoading()) return;
+    this.sitesLoading.set(true);
+    try {
+      const page = await this.sitioMediaService.listarImagenes(
+        reset ? null : this.sitesNextPageToken(),
+      );
+      this.sitesFiles.update((actuales) => reset ? page.items : [...actuales, ...page.items]);
+      this.sitesNextPageToken.set(page.nextPageToken);
+      this.sitesInitialized.set(true);
+      this.applyFilters();
+    } catch (error) {
+      this.snackBar.open(
+        error instanceof Error ? error.message : 'No se pudieron consultar las imagenes de Sites.',
+        'Cerrar',
+        { duration: 4000 },
+      );
+    } finally {
+      this.sitesLoading.set(false);
+    }
   }
 
   private applyFilters(): void {
@@ -716,6 +804,7 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
       case 'jpg':
       case 'jpeg':
       case 'webp':
+      case 'gif':
         return 'imagen';
       default:
         return 'otro';

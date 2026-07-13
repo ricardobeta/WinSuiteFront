@@ -82,6 +82,7 @@ const AUTOSAVE_MS = 1500;
               title: 'Imagenes de tu sitio',
               subtitle: 'Reutiliza una imagen ya subida o carga una nueva.',
               sourceModule: 'sitio_web',
+              storageTarget: 'sites',
               extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'],
             },
             maxWidth: '95vw',
