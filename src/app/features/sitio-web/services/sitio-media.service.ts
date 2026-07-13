@@ -1,16 +1,20 @@
 import { Injectable, inject } from '@angular/core';
-import { Storage, getDownloadURL, ref as storageRef, uploadBytes } from '@angular/fire/storage';
+import { FirebaseStorage, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage';
 import { AuthService } from '../../../core/services/auth.service';
+import { SITES_STORAGE } from '../../../core/firebase/sites-firebase.tokens';
+import { SitesFirebaseSessionService } from '../../../core/services/sites-firebase-session.service';
 
 const TAMANO_MAXIMO = 5 * 1024 * 1024; // debe coincidir con storage.rules
 
 /** Subida de imagenes del sitio a Storage: sitios/{tenantId}/media/... (lectura publica). */
 @Injectable({ providedIn: 'root' })
 export class SitioMediaService {
-  private readonly storage = inject(Storage);
+  private readonly storage: FirebaseStorage = inject(SITES_STORAGE);
   private readonly authService = inject(AuthService);
+  private readonly sitesSession = inject(SitesFirebaseSessionService);
 
   async subirImagen(archivo: File): Promise<string> {
+    await this.sitesSession.ensureReady();
     if (!archivo.type.startsWith('image/')) {
       throw new Error('Solo se permiten imagenes.');
     }

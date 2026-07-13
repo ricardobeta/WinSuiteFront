@@ -1,0 +1,44 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "sitios": {
+      "$tenantId": {
+        ".read": "auth != null && auth.token.tenantId === $tenantId",
+        ".write": "auth != null && auth.token.tenantId === $tenantId"
+      }
+    },
+    "sitios_catalogo": {
+      "$tenantId": {
+        ".read": "auth != null && auth.token.tenantId === $tenantId",
+        ".write": "auth != null && auth.token.tenantId === $tenantId"
+      }
+    },
+    "sitios_resumen": {
+      "$tenantId": {
+        ".read": "auth != null && auth.token.tenantId === $tenantId",
+        ".write": "auth != null && auth.token.tenantId === $tenantId"
+      }
+    },
+    "publicaciones": {
+      "$tenantId": {
+        ".read": "auth != null && auth.token.tenantId === $tenantId",
+        ".write": "auth != null && auth.token.tenantId === $tenantId"
+      }
+    },
+    "subdominios": {
+      ".read": "auth != null",
+      "$subdominio": {
+        ".write": "auth != null && ((!data.exists() && newData.child('tenantId').val() === auth.token.tenantId) || (!newData.exists() && data.child('tenantId').val() === auth.token.tenantId))",
+        ".validate": "!newData.exists() || ($subdominio.matches(/^[a-z0-9][a-z0-9-]{2,30}$/) && newData.hasChildren(['tenantId', 'sitioId', 'creadoEn']))"
+      }
+    },
+    "dominios_custom": {
+      ".read": "auth != null",
+      "$dominioEscapado": {
+        ".write": "auth != null && ((!data.exists() && newData.child('tenantId').val() === auth.token.tenantId) || (!newData.exists() && data.child('tenantId').val() === auth.token.tenantId))",
+        ".validate": "!newData.exists() || newData.hasChildren(['tenantId', 'sitioId', 'dominio', 'tokenVerificacion', 'creadoEn'])"
+      }
+    }
+  }
+}

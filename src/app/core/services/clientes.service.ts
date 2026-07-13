@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, get, onValue, push, ref, remove, set, update } from '@angular/fire/database';
+import { Database, equalTo, get, limitToFirst, onValue, orderByChild, push, query, ref, remove, set, startAfter, update } from '@angular/fire/database';
 import { Observable } from 'rxjs';
 
 import { AuthService } from './auth.service';
@@ -45,6 +45,36 @@ export class ClientesService {
     });
   }
 
+  async getClientesPage(
+    limit = 25,
+    cursor: { value: string; key: string } | null = null,
+  ): Promise<{
+    items: Cliente[];
+    nextCursor: { value: string; key: string } | null;
+    hasMore: boolean;
+  }> {
+    const boundedLimit = Math.max(1, Math.min(limit, 100));
+    const constraints = [orderByChild('nombreBusqueda')];
+    if (cursor) constraints.push(startAfter(cursor.value, cursor.key));
+    constraints.push(limitToFirst(boundedLimit + 1));
+    const snapshot = await get(query(ref(this.database, this.getBasePath()), ...constraints));
+    const items: Cliente[] = [];
+    snapshot.forEach((child) => {
+      items.push({ id: child.key ?? undefined, ...(child.val() as Omit<Cliente, 'id'>) });
+      return false;
+    });
+    const hasMore = items.length > boundedLimit;
+    if (hasMore) items.pop();
+    const last = items.at(-1);
+    return {
+      items,
+      nextCursor: hasMore && last?.id
+        ? { value: this.normalizeSearch(last.nombreCompleto), key: last.id }
+        : null,
+      hasMore,
+    };
+  }
+
   getClienteById(id: string): Observable<Cliente | null> {
     return new Observable<Cliente | null>((subscriber) => {
       const clienteRef = ref(this.database, `${this.getBasePath()}/${id}`);
@@ -78,6 +108,8 @@ export class ClientesService {
 
     await set(nuevoClienteRef, {
       ...cliente,
+      nombreBusqueda: this.normalizeSearch(cliente.nombreCompleto),
+      identificacionKey: this.identificationKey(cliente.tipoDeIdentificacion, cliente.identificacion),
       ...metadata
     });
 
@@ -104,6 +136,15 @@ export class ClientesService {
 
     await update(clienteRef, {
       ...datos,
+      ...(datos.nombreCompleto ? { nombreBusqueda: this.normalizeSearch(datos.nombreCompleto) } : {}),
+      ...(datos.identificacion || datos.tipoDeIdentificacion
+        ? {
+            identificacionKey: this.identificationKey(
+              datos.tipoDeIdentificacion ?? actual?.tipoDeIdentificacion ?? 'cedula',
+              datos.identificacion ?? actual?.identificacion ?? '',
+            )
+          }
+        : {}),
       ...this.audit.createMetadata('actualizar', actual)
     });
 
@@ -143,7 +184,23 @@ export class ClientesService {
     identificacion: string,
     tipoDeIdentificacion: TipoIdentificacion
   ): Promise<Cliente | null> {
-    const snapshot = await get(ref(this.database, this.getBasePath()));
+    const key = this.identificationKey(tipoDeIdentificacion, identificacion);
+    let snapshot = await get(query(
+      ref(this.database, this.getBasePath()),
+      orderByChild('identificacionKey'),
+      equalTo(key),
+      limitToFirst(1),
+    ));
+
+    // Compatibilidad temporal para registros anteriores al indice compuesto.
+    if (!snapshot.exists()) {
+      snapshot = await get(query(
+        ref(this.database, this.getBasePath()),
+        orderByChild('identificacion'),
+        equalTo(identificacion),
+        limitToFirst(10),
+      ));
+    }
 
     if (!snapshot.exists()) {
       return null;
@@ -160,5 +217,13 @@ export class ClientesService {
 
     const [id, cliente] = encontrado;
     return { id, ...cliente };
+  }
+
+  private normalizeSearch(value: string): string {
+    return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim().toLocaleLowerCase('es');
+  }
+
+  private identificationKey(tipo: TipoIdentificacion, identificacion: string): string {
+    return `${tipo}|${identificacion.trim()}`;
   }
 }

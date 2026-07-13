@@ -1,0 +1,13 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "auditoria": {
+      "$tenantId": {
+        "eventos": {
+          ".indexOn": ["timestamp", "module", "entityKey", "userId", "action"]
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "database": {
+    "rules": "sites-realtime-database.rules.json"
+  },
+  "storage": {
+    "rules": "sites-storage.rules"
+  }
+}

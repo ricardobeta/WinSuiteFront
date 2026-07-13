@@ -25,6 +25,7 @@
           ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
         },
         "lista": {
+          ".indexOn": ["nombreBusqueda", "identificacionKey", "identificacion"],
           ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
           "$clienteId": {
             ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
@@ -97,7 +98,7 @@
     },
     "auditoria": {
       "$tenantId": {
-        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".read": false,
         "eventos": {
           ".indexOn": [
             "timestamp",
@@ -107,7 +108,7 @@
             "userId"
           ],
           "$eventId": {
-            ".write": "auth != null && !data.exists() && newData.exists() && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true && newData.child('actor').child('userId').val() === auth.uid && newData.child('userId').val() === auth.uid",
+            ".write": false,
             ".validate": "newData.hasChildren(['tenantId', 'timestamp', 'userId', 'actor', 'action', 'origin', 'module', 'entityType', 'entityId', 'target', 'summary']) && newData.child('tenantId').val() === $tenantId && newData.child('timestamp').isNumber() && newData.child('summary').isString()"
           }
         }
@@ -461,20 +462,24 @@
     },
     "pedidos_web": {
       "$tenantId": {
-        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true && query.orderByChild === 'sitioId' && query.limitToLast <= 100",
         ".indexOn": [
           "creadoEn",
-          "estado"
+          "estado",
+          "sitioId"
         ],
         "$pedidoId": {
+          ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
           ".write": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
         }
       }
     },
     "form_submissions": {
       "$tenantId": {
-        ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
-        ".write": false
+        ".write": false,
+        "$formularioId": {
+          ".read": "auth != null && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true && query.orderByKey && query.limitToLast <= 100"
+        }
       }
     },
     "subdominios": {

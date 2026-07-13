@@ -1,8 +1,8 @@
 import { Injectable, inject } from '@angular/core';
 import { Database, onValue, ref } from '@angular/fire/database';
 import { EChartsCoreOption } from 'echarts/core';
-import { combineLatest, from, Observable, of } from 'rxjs';
-import { catchError, map, switchMap } from 'rxjs/operators';
+import { forkJoin, from, Observable, of } from 'rxjs';
+import { catchError, map, switchMap, take } from 'rxjs/operators';
 
 import { ClientesService } from '../../../core/services/clientes.service';
 import { ServiciosService } from '../../../core/services/servicios.service';
@@ -31,15 +31,15 @@ export class DashboardMetricsService {
 
   getDashboardData(): Observable<DashboardDataMap> {
     return from(this.auth.waitForInitialBootstrap()).pipe(
-      switchMap(() => combineLatest([
-        this.ventasService.getVentas(),
-        this.ventasService.getPagosPorVenta(),
-        this.clientesService.getClientes(),
-        this.productosService.getProductos(),
-        this.kardexService.getStockTotalesPorProducto(),
-        this.serviciosService.getServicios(),
-        this.observeSriFacturas(),
-        this.getAccountingMonthData()
+      switchMap(() => forkJoin([
+        this.ventasService.getVentas().pipe(take(1)),
+        this.ventasService.getPagosPorVenta().pipe(take(1)),
+        this.clientesService.getClientes().pipe(take(1)),
+        this.productosService.getProductos().pipe(take(1)),
+        this.kardexService.getStockTotalesPorProducto().pipe(take(1)),
+        this.serviciosService.getServicios().pipe(take(1)),
+        this.observeSriFacturas().pipe(take(1)),
+        this.getAccountingMonthData().pipe(take(1))
       ])),
       map(([ventas, pagos, clientes, productos, stock, servicios, facturasSri, accounting]) => {
         const completadas = ventas.filter((venta) => venta.estado === 'COMPLETADA');
@@ -126,18 +126,6 @@ export class DashboardMetricsService {
     );
   }
 
-  private observeAccountingPulse(): Observable<unknown> {
-    return new Observable<unknown>((subscriber) => {
-      const unsubscribe = onValue(
-        ref(this.database, `contabilidad/${this.auth.getTenantId()}/asientos`),
-        (snapshot) => subscriber.next(snapshot.val()),
-        (error) => subscriber.error(error)
-      );
-
-      return () => unsubscribe();
-    });
-  }
-
   private observeSriFacturas(): Observable<FacturaSriRegistro[]> {
     return new Observable<FacturaSriRegistro[]>((subscriber) => {
       const unsubscribe = onValue(
@@ -189,8 +177,7 @@ export class DashboardMetricsService {
     const today = new Date();
     const desde = this.dateInput(new Date(today.getFullYear(), today.getMonth(), 1));
     const hasta = this.dateInput(today);
-    return this.observeAccountingPulse().pipe(
-      switchMap(() => from(this.reportesService.generarEstadoResultadoIntegral(desde, hasta))),
+    return from(this.reportesService.generarEstadoResultadoIntegral(desde, hasta)).pipe(
       map((value) => ({
         totalIngresos: value.totalIngresos,
         totalCostos: value.totalCostos,

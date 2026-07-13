@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -162,6 +163,7 @@ import { TiposGastoCompraService } from '../../services/tipos-gasto-compra.servi
 })
 export class TiposGastoCompraComponent implements OnInit {
   private readonly service = inject(TiposGastoCompraService);
+  private readonly destroyRef = inject(DestroyRef);
   private readonly planCuentasService = inject(PlanCuentasService);
   private readonly snackBar = inject(MatSnackBar);
 
@@ -179,7 +181,7 @@ export class TiposGastoCompraComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     this.cuentas.set(await this.planCuentasService.getCuentasOnce());
-    this.service.listar().subscribe((tipos) => this.tipos.set(tipos));
+    this.service.listar().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((tipos) => this.tipos.set(tipos));
   }
 
   protected nuevo(): void {

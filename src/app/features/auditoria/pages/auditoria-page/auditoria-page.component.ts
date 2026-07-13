@@ -1,5 +1,6 @@
 import { DatePipe, NgClass } from '@angular/common';
-import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -8,7 +9,6 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTableModule } from '@angular/material/table';
-import { Subscription } from 'rxjs';
 
 import { AuditEvent } from '../../../../core/models/audit.models';
 import { AuditService } from '../../../../core/services/audit.service';
@@ -45,7 +45,7 @@ import { AuditService } from '../../../../core/services/audit.service';
       <section class="surface-card filters">
         <mat-form-field appearance="outline">
           <mat-label>Modulo</mat-label>
-          <mat-select [(ngModel)]="moduleFilter">
+          <mat-select [(ngModel)]="moduleFilter" (selectionChange)="reload()">
             <mat-option value="">Todos</mat-option>
             @for (module of modules(); track module) {
               <mat-option [value]="module">{{ module }}</mat-option>
@@ -114,6 +114,13 @@ import { AuditService } from '../../../../core/services/audit.service';
               <tr mat-row *matRowDef="let row; columns: columns"></tr>
             </table>
           </div>
+          @if (hasMore()) {
+            <div class="load-more">
+              <button mat-stroked-button type="button" [disabled]="loadingMore()" (click)="loadMore()">
+                {{ loadingMore() ? 'Cargando...' : 'Cargar más' }}
+              </button>
+            </div>
+          }
         }
       </section>
     </section>
@@ -215,6 +222,12 @@ import { AuditService } from '../../../../core/services/audit.service';
         height: 2rem;
       }
 
+      .load-more {
+        display: flex;
+        justify-content: center;
+        padding-top: 1rem;
+      }
+
       @media (max-width: 760px) {
         .header {
           align-items: start;
@@ -228,13 +241,16 @@ import { AuditService } from '../../../../core/services/audit.service';
     `
   ]
 })
-export class AuditoriaPageComponent implements OnInit, OnDestroy {
+export class AuditoriaPageComponent implements OnInit {
   private readonly audit = inject(AuditService);
-  private eventsSubscription: Subscription | null = null;
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly columns = ['timestamp', 'action', 'module', 'target', 'actor', 'summary'];
   protected readonly events = signal<AuditEvent[]>([]);
   protected readonly loading = signal(true);
+  protected readonly loadingMore = signal(false);
+  protected readonly hasMore = signal(false);
+  private readonly nextCursor = signal<string | null>(null);
   protected moduleFilter = '';
   protected textFilter = '';
 
@@ -269,24 +285,46 @@ export class AuditoriaPageComponent implements OnInit, OnDestroy {
     this.reload();
   }
 
-  ngOnDestroy(): void {
-    this.eventsSubscription?.unsubscribe();
-  }
-
   protected reload(): void {
     this.loading.set(true);
-    this.eventsSubscription?.unsubscribe();
-    this.eventsSubscription = this.audit
-      .getRecentEvents(150)
+    this.nextCursor.set(null);
+    this.audit
+      .getEventsPage(50, null, this.moduleFilter)
+      .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
-        next: (events) => {
-          this.events.set(events);
+        next: (page) => {
+          this.events.set(page.items);
+          this.nextCursor.set(page.nextCursor);
+          this.hasMore.set(page.hasMore);
           this.loading.set(false);
         },
         error: () => {
           this.events.set([]);
+          this.nextCursor.set(null);
+          this.hasMore.set(false);
           this.loading.set(false);
         }
+      });
+  }
+
+  protected loadMore(): void {
+    const cursor = this.nextCursor();
+    if (!cursor || this.loadingMore()) {
+      return;
+    }
+
+    this.loadingMore.set(true);
+    this.audit
+      .getEventsPage(50, cursor, this.moduleFilter)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe({
+        next: (page) => {
+          this.events.update((events) => [...events, ...page.items]);
+          this.nextCursor.set(page.nextCursor);
+          this.hasMore.set(page.hasMore);
+          this.loadingMore.set(false);
+        },
+        error: () => this.loadingMore.set(false)
       });
   }
 

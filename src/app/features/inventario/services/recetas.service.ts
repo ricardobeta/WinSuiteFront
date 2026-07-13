@@ -1,8 +1,9 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, get, onValue, push, ref, runTransaction, set } from '@angular/fire/database';
-import { Observable } from 'rxjs';
+import { Database, get, ref, runTransaction, set } from '@angular/fire/database';
+import { Observable, from, map } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
+import { AuditService } from '../../../core/services/audit.service';
 import {
   KardexEntry,
   Producto,
@@ -82,13 +83,10 @@ export class RecetasService {
   private readonly productosService = inject(ProductosService);
   private readonly costosService = inject(CostosService);
   private readonly kardexService = inject(KardexService);
+  private readonly audit = inject(AuditService);
 
   private getTenantPath(): string {
     return `inventario/${this.authService.getTenantId()}`;
-  }
-
-  private getRecetasAuditoriaPath(recetaId: string): string {
-    return `${this.getTenantPath()}/recetasAuditoria/${recetaId}`;
   }
 
   private getRecetaLockPath(recetaId: string, almacenId: string): string {
@@ -284,56 +282,39 @@ export class RecetasService {
   }
 
   async registrarAuditoriaReceta(entry: Omit<RecetaAuditoria, 'id' | 'creadoEn'>): Promise<void> {
-    const auditoriaRef = push(ref(this.database, this.getRecetasAuditoriaPath(entry.recetaId)));
-    const payload: Record<string, unknown> = {
-      recetaId: entry.recetaId,
-      accion: entry.accion,
-      creadoPor: entry.creadoPor,
-      creadoEn: Date.now()
-    };
-
-    if (auditoriaRef.key) {
-      payload['id'] = auditoriaRef.key;
-    }
-
-    if (entry.cambiosAntes !== undefined) {
-      payload['cambiosAntes'] = entry.cambiosAntes;
-    }
-
-    if (entry.cambiosDespues !== undefined) {
-      payload['cambiosDespues'] = entry.cambiosDespues;
-    }
-
-    await set(auditoriaRef, payload);
+    const action = entry.accion === 'CREADA'
+      ? 'crear'
+      : entry.accion === 'DESHABILITADA'
+        ? 'eliminar'
+        : 'actualizar';
+    await this.audit.recordSafe({
+      action,
+      target: { module: 'inventario', entityType: 'receta', entityId: entry.recetaId },
+      summary: `Receta ${entry.accion.toLowerCase().replaceAll('_', ' ')}`,
+      changesBefore: entry.cambiosAntes ?? null,
+      changesAfter: { ...(entry.cambiosDespues ?? {}), _recetaAccion: entry.accion }
+    });
   }
 
   getAuditoriaReceta(recetaId: string): Observable<RecetaAuditoria[]> {
-    return new Observable<RecetaAuditoria[]>((subscriber) => {
-      const auditoriaRef = ref(this.database, this.getRecetasAuditoriaPath(recetaId));
+    return from(this.audit.getEventsForEntity('inventario', 'receta', recetaId)).pipe(
+      map((events) => events.map((event) => ({
+        id: event.id,
+        recetaId,
+        accion: this.toRecetaAuditAction(event.action, event.changesAfter?.['_recetaAccion']),
+        cambiosAntes: event.changesBefore ?? undefined,
+        cambiosDespues: event.changesAfter ?? undefined,
+        creadoPor: event.userId,
+        creadoEn: event.timestamp
+      })))
+    );
+  }
 
-      const unsubscribe = onValue(
-        auditoriaRef,
-        (snapshot) => {
-          if (!snapshot.exists()) {
-            subscriber.next([]);
-            return;
-          }
-
-          const raw = snapshot.val() as Record<string, RecetaAuditoria>;
-          const rows = Object.entries(raw)
-            .map(([id, value]) => ({
-              ...value,
-              id: value.id ?? id
-            }))
-            .sort((a, b) => b.creadoEn - a.creadoEn);
-
-          subscriber.next(rows);
-        },
-        (error) => subscriber.error(error)
-      );
-
-      return () => unsubscribe();
-    });
+  private toRecetaAuditAction(action: string, stored: unknown): RecetaAuditoria['accion'] {
+    if (stored === 'CREADA' || stored === 'EDITADA' || stored === 'INGREDIENTES_CAMBIADOS' || stored === 'DESHABILITADA') {
+      return stored;
+    }
+    return action === 'crear' ? 'CREADA' : action === 'eliminar' ? 'DESHABILITADA' : 'EDITADA';
   }
 
   private async getRecetaByIdOrThrow(recetaId: string): Promise<Producto> {

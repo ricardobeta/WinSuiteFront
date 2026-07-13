@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { AfterViewInit, Component, DestroyRef, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
-import { MatPaginator, MatPaginatorModule } from '@angular/material/paginator';
+import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatSort, MatSortModule } from '@angular/material/sort';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -87,7 +87,14 @@ import { SuccessSnackbarComponent } from '../../../../shared/components/success-
         </table>
       </div>
 
-      <mat-paginator [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons></mat-paginator>
+      <mat-paginator
+        [length]="totalEstimado()"
+        [pageIndex]="pageIndex()"
+        [pageSize]="pageSize()"
+        [pageSizeOptions]="[10, 25, 50]"
+        [showFirstLastButtons]="false"
+        (page)="cambiarPagina($event)"
+      ></mat-paginator>
     </section>
   `,
   styles: [
@@ -110,17 +117,20 @@ export class ListaClientesComponent implements OnInit, AfterViewInit {
   private readonly snackBar = inject(MatSnackBar);
   private readonly destroyRef = inject(DestroyRef);
 
-  @ViewChild(MatPaginator) protected paginator!: MatPaginator;
   @ViewChild(MatSort) protected sort!: MatSort;
 
   protected readonly dataSource = new MatTableDataSource<Cliente>([]);
   protected readonly camposPersonalizados = signal<CampoPersonalizado[]>([]);
   protected readonly columnasFijas = ['nombreCompleto', 'email', 'telefono', 'identificacion'];
+  protected readonly cargando = signal(false);
+  protected readonly pageIndex = signal(0);
+  protected readonly pageSize = signal(25);
+  protected readonly hasMore = signal(false);
+  protected readonly totalEstimado = signal(0);
+  private readonly cursors = new Map<number, { value: string; key: string } | null>([[0, null]]);
 
   ngOnInit(): void {
-    this.clientesService.getClientes().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((clientes) => {
-      this.dataSource.data = clientes;
-    });
+    void this.cargarPagina(0, this.pageSize());
 
     this.configuracionService.getConfiguracion().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((configuracion) => {
       this.camposPersonalizados.set(configuracion.camposPersonalizados ?? []);
@@ -128,7 +138,6 @@ export class ListaClientesComponent implements OnInit, AfterViewInit {
   }
 
   ngAfterViewInit(): void {
-    this.dataSource.paginator = this.paginator;
     this.dataSource.sort = this.sort;
   }
 
@@ -149,6 +158,7 @@ export class ListaClientesComponent implements OnInit, AfterViewInit {
     dialogRef.afterClosed().subscribe((resultado) => {
       if (resultado?.cliente) {
         this.mostrarExito('Cliente creado correctamente.', 'person_add');
+        void this.cargarPagina(0, this.pageSize());
       }
     });
   }
@@ -167,6 +177,7 @@ export class ListaClientesComponent implements OnInit, AfterViewInit {
     dialogRef.afterClosed().subscribe((resultado) => {
       if (resultado?.cliente) {
         this.mostrarExito('Cliente actualizado correctamente.', 'edit');
+        void this.cargarPagina(this.pageIndex(), this.pageSize());
       }
     });
   }
@@ -188,8 +199,34 @@ export class ListaClientesComponent implements OnInit, AfterViewInit {
 
       void this.clientesService.eliminarCliente(cliente.id).then(() => {
         this.mostrarExito('Cliente eliminado correctamente.', 'delete');
+        void this.cargarPagina(this.pageIndex(), this.pageSize());
       });
     });
+  }
+
+  protected cambiarPagina(event: PageEvent): void {
+    void this.cargarPagina(event.pageIndex, event.pageSize);
+  }
+
+  private async cargarPagina(pageIndex: number, pageSize: number): Promise<void> {
+    if (!this.cursors.has(pageIndex)) return;
+    this.cargando.set(true);
+    try {
+      if (pageSize !== this.pageSize()) {
+        this.cursors.clear();
+        this.cursors.set(0, null);
+        pageIndex = 0;
+      }
+      const page = await this.clientesService.getClientesPage(pageSize, this.cursors.get(pageIndex) ?? null);
+      this.dataSource.data = page.items;
+      this.pageIndex.set(pageIndex);
+      this.pageSize.set(pageSize);
+      this.hasMore.set(page.hasMore);
+      this.totalEstimado.set((pageIndex + 1) * pageSize + (page.hasMore ? 1 : 0));
+      if (page.nextCursor) this.cursors.set(pageIndex + 1, page.nextCursor);
+    } finally {
+      this.cargando.set(false);
+    }
   }
 
   private mostrarExito(message: string, icon: string): void {

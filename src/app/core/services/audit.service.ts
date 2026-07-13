@@ -1,27 +1,28 @@
 import { Injectable, inject } from '@angular/core';
+import { HttpClient, HttpParams } from '@angular/common/http';
 import {
   Database,
-  DataSnapshot,
-  get,
-  limitToLast,
-  onValue,
-  orderByChild,
-  push,
-  query,
   ref,
-  set,
   update
 } from '@angular/fire/database';
-import { Observable } from 'rxjs';
+import { Observable, firstValueFrom, map } from 'rxjs';
 
 import {
   AuditAction,
   AuditActor,
   AuditEvent,
   AuditMetadata,
+  AuditPageResult,
   RecordAuditInput
 } from '../models/audit.models';
 import { AuthService } from './auth.service';
+import { environment } from '../../../environments/environment';
+
+interface AuditApiPage {
+  items: Array<{ id: string; event: Omit<AuditEvent, 'id'> }>;
+  nextCursor: string | null;
+  hasMore: boolean;
+}
 
 @Injectable({
   providedIn: 'root'
@@ -29,33 +30,43 @@ import { AuthService } from './auth.service';
 export class AuditService {
   private readonly database = inject(Database);
   private readonly auth = inject(AuthService);
-
-  private getTenantId(): string {
-    return this.auth.getTenantId();
-  }
-
-  private getEventsPath(): string {
-    return `auditoria/${this.getTenantId()}/eventos`;
-  }
+  private readonly http = inject(HttpClient);
+  private readonly apiUrl = `${environment.apiBaseUrl}/api/audit/events`;
 
   getRecentEvents(limit = 100): Observable<AuditEvent[]> {
-    return new Observable<AuditEvent[]>((subscriber) => {
-      const eventsQuery = query(ref(this.database, this.getEventsPath()), orderByChild('timestamp'), limitToLast(limit));
-      const unsubscribe = onValue(
-        eventsQuery,
-        (snapshot) => subscriber.next(this.snapshotToEvents(snapshot).reverse()),
-        (error) => subscriber.error(error)
-      );
-
-      return () => unsubscribe();
-    });
+    return this.getEventsPage(limit).pipe(map((page) => page.items));
   }
 
   async getEventsForEntity(module: string, entityType: string, entityId: string): Promise<AuditEvent[]> {
-    const snapshot = await get(ref(this.database, this.getEventsPath()));
-    return this.snapshotToEvents(snapshot)
-      .filter((event) => event.module === module && event.entityType === entityType && event.entityId === entityId)
-      .sort((a, b) => b.timestamp - a.timestamp);
+    let params = new HttpParams()
+      .set('limit', '100')
+      .set('module', module)
+      .set('entityType', entityType)
+      .set('entityId', entityId);
+    const page = await firstValueFrom(
+      this.http.get<AuditApiPage>(`${this.apiUrl}/entity`, { params }).pipe(
+        map((result) => result.items.map((item) => ({ ...item.event, id: item.id })))
+      )
+    );
+    return page.sort((a, b) => b.timestamp - a.timestamp);
+  }
+
+  getEventsPage(limit = 50, cursor: string | null = null, module = ''): Observable<AuditPageResult> {
+    let params = new HttpParams().set('limit', String(Math.max(1, Math.min(limit, 100))));
+    if (cursor) {
+      params = params.set('cursor', cursor);
+    }
+    if (module.trim()) {
+      params = params.set('module', module.trim());
+    }
+
+    return this.http.get<AuditApiPage>(this.apiUrl, { params }).pipe(
+      map((page) => ({
+        items: page.items.map((item) => ({ ...item.event, id: item.id })),
+        nextCursor: page.nextCursor,
+        hasMore: page.hasMore
+      }))
+    );
   }
 
   createMetadata(action: AuditAction, existing?: Partial<AuditMetadata> | null, timestamp = Date.now()): AuditMetadata {
@@ -77,27 +88,13 @@ export class AuditService {
   }
 
   async record(input: RecordAuditInput): Promise<void> {
-    const tenantId = this.getTenantId();
-    const timestamp = Date.now();
-    const actor = this.currentActor();
-    const eventRef = push(ref(this.database, `auditoria/${tenantId}/eventos`));
-    const event: Omit<AuditEvent, 'id'> = {
-      tenantId,
-      timestamp,
-      userId: actor.userId,
-      actor,
+    await firstValueFrom(this.http.post<void>(this.apiUrl, {
       action: input.action,
-      origin: input.origin ?? 'frontend',
-      module: input.target.module,
-      entityType: input.target.entityType,
-      entityId: input.target.entityId,
       target: input.target,
       summary: input.summary ?? this.defaultSummary(input.action, input.target.entityType, input.target.label),
       changesBefore: input.changesBefore ?? null,
       changesAfter: input.changesAfter ?? null
-    };
-
-    await set(eventRef, event);
+    }));
   }
 
   async recordSafe(input: RecordAuditInput): Promise<void> {
@@ -119,17 +116,6 @@ export class AuditService {
       fullName: profile?.fullName ?? user?.displayName ?? null,
       role: profile?.role ?? null
     };
-  }
-
-  private snapshotToEvents(snapshot: DataSnapshot): AuditEvent[] {
-    if (!snapshot.exists()) {
-      return [];
-    }
-
-    const raw = snapshot.val() as Record<string, Omit<AuditEvent, 'id'>>;
-    return Object.entries(raw)
-      .map(([id, event]) => ({ ...event, id }))
-      .sort((a, b) => a.timestamp - b.timestamp);
   }
 
   private defaultSummary(action: AuditAction, entityType: string, label?: string | null): string {

@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, onValue, ref, update } from '@angular/fire/database';
+import { Database, endAt, equalTo, get, limitToLast, orderByChild, query, ref, update } from '@angular/fire/database';
 import { Observable } from 'rxjs';
 import { EstadoPedidoWeb, PedidoWeb } from '@winsuite/bloques';
 import { AuthService } from '../../../core/services/auth.service';
@@ -14,21 +14,31 @@ export class PedidosWebService {
     return `pedidos_web/${this.authService.getTenantId()}`;
   }
 
-  getPedidos(): Observable<PedidoWeb[]> {
-    return new Observable<PedidoWeb[]>((subscriber) => {
-      const unsubscribe = onValue(
-        ref(this.database, this.getTenantPath()),
-        (snapshot) => {
-          const valor = (snapshot.val() ?? {}) as Record<string, PedidoWeb>;
-          const pedidos = Object.entries(valor)
-            .map(([id, pedido]) => ({ ...pedido, id }))
-            .sort((a, b) => b.creadoEn - a.creadoEn);
-          subscriber.next(pedidos);
-        },
-        (error) => subscriber.error(error),
-      );
-      return () => unsubscribe();
+  async getPedidosPage(
+    sitioId: string,
+    limit = 25,
+    cursor: string | null = null,
+  ): Promise<{ items: PedidoWeb[]; nextCursor: string | null; hasMore: boolean }> {
+    const boundedLimit = Math.max(1, Math.min(limit, 100));
+    const constraints = [orderByChild('sitioId'), equalTo(sitioId)];
+    if (cursor) constraints.push(endAt(sitioId, cursor));
+    constraints.push(limitToLast(boundedLimit + (cursor ? 2 : 1)));
+    const snapshot = await get(query(ref(this.database, this.getTenantPath()), ...constraints));
+    const items: PedidoWeb[] = [];
+    snapshot.forEach((child) => {
+      if (child.key !== cursor) {
+        items.push({ ...(child.val() as PedidoWeb), id: child.key ?? undefined });
+      }
+      return false;
     });
+    const hasMore = items.length > boundedLimit;
+    if (hasMore) items.shift();
+    items.reverse();
+    return {
+      items,
+      nextCursor: hasMore && items.length ? items.at(-1)?.id ?? null : null,
+      hasMore,
+    };
   }
 
   async cambiarEstado(pedidoId: string, estado: EstadoPedidoWeb): Promise<void> {

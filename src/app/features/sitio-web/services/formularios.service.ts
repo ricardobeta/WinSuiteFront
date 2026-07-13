@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, get, onValue, ref, remove, set } from '@angular/fire/database';
+import { Database, endAt, get, limitToLast, onValue, orderByKey, query, ref, remove, set } from '@angular/fire/database';
 import { Observable } from 'rxjs';
 import { CampoFormulario, FormSubmission, FormularioDef, formularioDefSchema } from '@winsuite/bloques';
 import { AuthService } from '../../../core/services/auth.service';
@@ -73,21 +73,46 @@ export class FormulariosService {
   }
 
   getRespuestas(formularioId: string): Observable<FormSubmission[]> {
-    const tenantId = this.authService.getTenantId();
     return new Observable<FormSubmission[]>((subscriber) => {
-      const unsubscribe = onValue(
-        ref(this.database, `form_submissions/${tenantId}/${formularioId}`),
-        (snapshot) => {
-          const valor = (snapshot.val() ?? {}) as Record<string, FormSubmission>;
-          const respuestas = Object.entries(valor)
-            .map(([id, respuesta]) => ({ ...respuesta, id }))
-            .sort((a, b) => b.creadoEn - a.creadoEn);
-          subscriber.next(respuestas);
+      void this.getRespuestasPage(formularioId).then(
+        (page) => {
+          subscriber.next(page.items);
+          subscriber.complete();
         },
         (error) => subscriber.error(error),
       );
-      return () => unsubscribe();
     });
+  }
+
+  async getRespuestasPage(
+    formularioId: string,
+    limit = 25,
+    cursor: string | null = null,
+  ): Promise<{ items: FormSubmission[]; nextCursor: string | null; hasMore: boolean }> {
+    const tenantId = this.authService.getTenantId();
+    const boundedLimit = Math.max(1, Math.min(limit, 100));
+    const constraints = [orderByKey()];
+    if (cursor) constraints.push(endAt(cursor));
+    constraints.push(limitToLast(boundedLimit + (cursor ? 2 : 1)));
+
+    const snapshot = await get(
+      query(ref(this.database, `form_submissions/${tenantId}/${formularioId}`), ...constraints),
+    );
+    const items: FormSubmission[] = [];
+    snapshot.forEach((child) => {
+      if (child.key !== cursor) {
+        items.push({ ...(child.val() as FormSubmission), id: child.key ?? undefined });
+      }
+      return false;
+    });
+    const hasMore = items.length > boundedLimit;
+    if (hasMore) items.shift();
+    items.reverse();
+    return {
+      items,
+      nextCursor: hasMore && items.length ? items.at(-1)?.id ?? null : null,
+      hasMore,
+    };
   }
 
   /** RTDB elimina arrays vacios: restaura campos/opciones. */

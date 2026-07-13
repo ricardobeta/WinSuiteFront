@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, inject } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
@@ -77,6 +78,7 @@ export class CampoFormDialogComponent implements OnInit {
   private readonly data = inject<CampoFormDialogData>(MAT_DIALOG_DATA, { optional: true }) ?? {};
   private readonly dialogRef = inject(MatDialogRef<CampoFormDialogComponent>);
   private readonly formBuilder = inject(FormBuilder);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly tipos: TipoCampo[] = ['texto', 'textarea', 'booleano', 'lista_simple', 'lista_multiple', 'catalogo', 'fecha'];
   protected readonly esEdicion = computed(() => !!this.data.campo);
@@ -106,7 +108,7 @@ export class CampoFormDialogComponent implements OnInit {
       this.form.controls.tipo.disable({ emitEvent: false });
     }
 
-    this.form.controls.tipo.valueChanges.subscribe((tipo) => {
+    this.form.controls.tipo.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((tipo) => {
       this.actualizarOpcionesSegunTipo(tipo);
     });
 

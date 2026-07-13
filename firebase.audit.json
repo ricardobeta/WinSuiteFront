@@ -1,0 +1,5 @@
+{
+  "database": {
+    "rules": "audit-realtime-database.rules.json"
+  }
+}

@@ -58,3 +58,9 @@ export interface RecordAuditInput {
   changesBefore?: Record<string, unknown> | null;
   changesAfter?: Record<string, unknown> | null;
 }
+
+export interface AuditPageResult {
+  items: AuditEvent[];
+  nextCursor: string | null;
+  hasMore: boolean;
+}

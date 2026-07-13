@@ -1,10 +1,12 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, get, onValue, ref, update } from '@angular/fire/database';
-import { Observable, firstValueFrom } from 'rxjs';
+import { Database, get, onValue, ref, update } from 'firebase/database';
+import { Observable, firstValueFrom, from, switchMap } from 'rxjs';
 import { ProductoPublicado, slugify } from '@winsuite/bloques';
 import { AuthService } from '../../../core/services/auth.service';
 import { ProductosService } from '../../inventario/services/productos.service';
 import { Producto } from '../../inventario/models/inventario.models';
+import { SITES_DATABASE } from '../../../core/firebase/sites-firebase.tokens';
+import { SitesFirebaseSessionService } from '../../../core/services/sites-firebase-session.service';
 
 /**
  * Capa de publicacion del catalogo: sitios_catalogo/{tenantId}/productos/{productoId}.
@@ -14,26 +16,28 @@ import { Producto } from '../../inventario/models/inventario.models';
  */
 @Injectable({ providedIn: 'root' })
 export class CatalogoPublicacionService {
-  private readonly database = inject(Database);
+  private readonly database = inject(SITES_DATABASE);
   private readonly authService = inject(AuthService);
   private readonly productosService = inject(ProductosService);
+  private readonly sitesSession = inject(SitesFirebaseSessionService);
 
   private catalogoPath(): string {
     return `sitios_catalogo/${this.authService.getTenantId()}/productos`;
   }
 
   getCatalogo(): Observable<Record<string, ProductoPublicado>> {
-    return new Observable((subscriber) => {
+    return from(this.sitesSession.ensureReady()).pipe(switchMap(() => new Observable<Record<string, ProductoPublicado>>((subscriber) => {
       const unsubscribe = onValue(
         ref(this.database, this.catalogoPath()),
         (snapshot) => subscriber.next((snapshot.val() ?? {}) as Record<string, ProductoPublicado>),
         (error) => subscriber.error(error),
       );
       return () => unsubscribe();
-    });
+    })));
   }
 
   async setVisible(producto: Producto, visible: boolean): Promise<void> {
+    await this.sitesSession.ensureReady();
     const productoId = producto.id;
     if (!productoId) return;
     const existente = await get(ref(this.database, `${this.catalogoPath()}/${productoId}`));
@@ -49,6 +53,7 @@ export class CatalogoPublicacionService {
   }
 
   async setImagenes(productoId: string, imagenes: string[]): Promise<void> {
+    await this.sitesSession.ensureReady();
     await update(ref(this.database, `${this.catalogoPath()}/${productoId}`), {
       imagenes,
       actualizadoEn: Date.now(),
@@ -60,6 +65,7 @@ export class CatalogoPublicacionService {
     productoId: string,
     ficha: { descripcionLarga?: string; badge?: string },
   ): Promise<void> {
+    await this.sitesSession.ensureReady();
     await update(ref(this.database, `${this.catalogoPath()}/${productoId}`), {
       descripcionLarga: ficha.descripcionLarga?.trim() || null,
       badge: ficha.badge?.trim() || null,
@@ -72,6 +78,7 @@ export class CatalogoPublicacionService {
    * publicados desde el inventario actual. Los usa "Publicar" para no dejar precios viejos.
    */
   async cambiosRefrescoCatalogo(): Promise<Record<string, unknown>> {
+    await this.sitesSession.ensureReady();
     const [catalogo, productos] = await Promise.all([
       get(ref(this.database, this.catalogoPath())),
       firstValueFrom(this.productosService.getProductos()),

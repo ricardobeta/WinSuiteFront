@@ -1,5 +1,6 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -162,6 +163,7 @@ export class CostosComponent implements OnInit {
   private readonly configService = inject(ConfiguracionInventarioService);
   private readonly costosService = inject(CostosService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly destroyRef = inject(DestroyRef);
 
   protected readonly metodos: MetodoCosteo[] = ['FIFO', 'LIFO', 'PROMEDIO'];
   protected readonly columns = ['producto', 'saldoInicial', 'entradas', 'salidas', 'saldoFinal', 'costoPromedio', 'valorTotal'];
@@ -183,7 +185,7 @@ export class CostosComponent implements OnInit {
   }
 
   private async initData(): Promise<void> {
-    this.productosService.getProductos().subscribe((productos) => {
+    this.productosService.getProductos().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((productos) => {
       this.productos.set(productos);
     });
 

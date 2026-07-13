@@ -1,11 +1,9 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
-import { toSignal } from '@angular/core/rxjs-interop';
-import { toObservable } from '@angular/core/rxjs-interop';
-import { switchMap } from 'rxjs';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormulariosService } from '../../services/formularios.service';
 
 /** Respuestas recibidas de un formulario prehecho (form_submissions/{t}/{formularioId}). */
@@ -29,6 +27,9 @@ import { FormulariosService } from '../../services/formularios.service';
           (click)="exportarCsv()"
         >
           <mat-icon>download</mat-icon> Exportar CSV
+        </button>
+        <button mat-stroked-button type="button" [disabled]="cargando()" (click)="recargar()">
+          <mat-icon>refresh</mat-icon> Actualizar
         </button>
       </header>
 
@@ -62,6 +63,11 @@ import { FormulariosService } from '../../services/formularios.service';
             </tbody>
           </table>
         </div>
+        @if (hayMas()) {
+          <button mat-stroked-button type="button" [disabled]="cargando()" (click)="cargarMas()">
+            {{ cargando() ? 'Cargando...' : 'Cargar más respuestas' }}
+          </button>
+        }
       }
     </div>
   `,
@@ -140,16 +146,45 @@ export class RespuestasPageComponent {
   /** Route params (withComponentInputBinding). */
   readonly formId = input.required<string>();
 
-  readonly respuestas = toSignal(
-    toObservable(this.formId).pipe(
-      switchMap((formId) => this.formulariosService.getRespuestas(formId)),
-    ),
-    { initialValue: [] },
-  );
+  readonly respuestas = signal<import('@winsuite/bloques').FormSubmission[]>([]);
+  readonly cargando = signal(false);
+  readonly hayMas = signal(false);
+  private readonly cursor = signal<string | null>(null);
 
   private readonly formularios = toSignal(this.formulariosService.getFormularios(), {
     initialValue: [],
   });
+
+  constructor() {
+    toObservable(this.formId)
+      .pipe(takeUntilDestroyed())
+      .subscribe((formId) => void this.cargar(formId, true));
+  }
+
+  recargar(): void {
+    void this.cargar(this.formId(), true);
+  }
+
+  cargarMas(): void {
+    void this.cargar(this.formId(), false);
+  }
+
+  private async cargar(formId: string, reiniciar: boolean): Promise<void> {
+    if (this.cargando()) return;
+    this.cargando.set(true);
+    try {
+      const page = await this.formulariosService.getRespuestasPage(
+        formId,
+        25,
+        reiniciar ? null : this.cursor(),
+      );
+      this.respuestas.update((actuales) => reiniciar ? page.items : [...actuales, ...page.items]);
+      this.cursor.set(page.nextCursor);
+      this.hayMas.set(page.hasMore);
+    } finally {
+      this.cargando.set(false);
+    }
+  }
 
   readonly nombreFormulario = computed(
     () => this.formularios().find((f) => f.formularioId === this.formId())?.nombre ?? '...',

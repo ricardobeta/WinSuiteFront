@@ -1,4 +1,5 @@
-import { Component, forwardRef, inject, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { Component, DestroyRef, forwardRef, inject, Input, OnChanges, SimpleChanges } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ControlValueAccessor, FormBuilder, FormControl, NG_VALIDATORS, NG_VALUE_ACCESSOR, ReactiveFormsModule, ValidationErrors, Validator } from '@angular/forms';
 import { CommonModule } from '@angular/common';
 import { MatButtonModule } from '@angular/material/button';
@@ -69,6 +70,7 @@ export class CatalogoOpcionesComponent implements ControlValueAccessor, Validato
   @Input() disabled = false;
 
   private readonly formBuilder = inject(FormBuilder);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly opciones = this.formBuilder.array([
     this.crearGrupoOpcion()
   ]);
@@ -76,6 +78,15 @@ export class CatalogoOpcionesComponent implements ControlValueAccessor, Validato
   private onChange: (value: OpcionLista[]) => void = () => undefined;
   private onTouched: () => void = () => undefined;
   private onValidatorChange: () => void = () => undefined;
+
+  constructor() {
+    this.opciones.valueChanges
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((value) => {
+        this.onChange((value as OpcionLista[]).filter((opcion) => !!opcion.clave || !!opcion.valor));
+        this.onValidatorChange();
+      });
+  }
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes['disabled']) {
@@ -96,10 +107,6 @@ export class CatalogoOpcionesComponent implements ControlValueAccessor, Validato
 
   registerOnChange(fn: (value: OpcionLista[]) => void): void {
     this.onChange = fn;
-    this.opciones.valueChanges.subscribe((value) => {
-      this.onChange((value as OpcionLista[]).filter((opcion) => !!opcion.clave || !!opcion.valor));
-      this.onValidatorChange();
-    });
   }
 
   registerOnTouched(fn: () => void): void {

@@ -1,18 +1,21 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, get, ref, update } from '@angular/fire/database';
+import { Database, get, ref, update } from 'firebase/database';
 import { FormularioDef, PaginaDoc, migrarPagina, temaSitioSchema, SitioConfig } from '@winsuite/bloques';
 import { AuthService } from '../../../core/services/auth.service';
 import { SitioBorradorService } from './sitio-borrador.service';
 import { CatalogoPublicacionService } from './catalogo-publicacion.service';
 import { FormulariosService } from './formularios.service';
+import { SITES_DATABASE } from '../../../core/firebase/sites-firebase.tokens';
+import { SitesFirebaseSessionService } from '../../../core/services/sites-firebase-session.service';
 
 @Injectable({ providedIn: 'root' })
 export class SitioPublicacionService {
-  private readonly database = inject(Database);
+  private readonly database = inject(SITES_DATABASE);
   private readonly authService = inject(AuthService);
   private readonly borradorService = inject(SitioBorradorService);
   private readonly catalogoService = inject(CatalogoPublicacionService);
   private readonly formulariosService = inject(FormulariosService);
+  private readonly sitesSession = inject(SitesFirebaseSessionService);
 
   /**
    * Publica el borrador: valida con Zod (bloquea si falla), copia borrador -> publicado,
@@ -20,6 +23,7 @@ export class SitioPublicacionService {
    * Todo en un update() multipath atomico.
    */
   async publicar(config: SitioConfig): Promise<number> {
+    await this.sitesSession.ensureReady();
     const tenantId = this.authService.getTenantId();
     const sitioId = config.sitioId;
 
@@ -41,14 +45,22 @@ export class SitioPublicacionService {
     const ahora = Date.now();
     const uid = this.authService.currentUser()?.uid ?? '';
 
+    const release = {
+      meta: { version: nuevaVersion, publicadoEn: ahora, publicadoPor: uid },
+      tema: borrador.tema,
+      paginas: paginasValidadas,
+      // Snapshot derivado: las definiciones canonicas permanecen en el proyecto principal.
+      formularios: await this.formulariosUsados(Object.values(paginasValidadas)),
+    };
+
+    // La version se escribe primero. Solo cuando termina se cambia el puntero visible.
+    await update(ref(this.database), {
+      [`sitios/${tenantId}/${sitioId}/releases/${nuevaVersion}`]: release,
+    });
+
     const cambios: Record<string, unknown> = {
-      [`sitios/${tenantId}/${sitioId}/publicado`]: {
-        meta: { version: nuevaVersion, publicadoEn: ahora, publicadoPor: uid },
-        tema: borrador.tema,
-        paginas: paginasValidadas,
-        // Definiciones de formularios prehechos usados: el renderer no lee sitios_formularios.
-        formularios: await this.formulariosUsados(Object.values(paginasValidadas)),
-      },
+      [`sitios/${tenantId}/${sitioId}/activeVersion`]: nuevaVersion,
+      [`sitios_resumen/${tenantId}/${sitioId}/versionPublicada`]: nuevaVersion,
       [`publicaciones/${tenantId}/${sitioId}`]: { version: nuevaVersion, publicadoEn: ahora },
     };
 

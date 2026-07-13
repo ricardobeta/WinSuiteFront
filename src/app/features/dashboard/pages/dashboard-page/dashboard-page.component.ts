@@ -56,7 +56,7 @@ import { DashboardDataMap, DashboardLayoutItem, DashboardWidgetData, DashboardWi
             <app-tour-trigger-button (open)="startTourManually()" />
           </div>
           <h1>Dashboard</h1>
-          <p>Metricas operativas del negocio en tiempo real.</p>
+          <p>Metricas operativas calculadas al abrir el panel.</p>
           <div class="dashboard-chips">
             <span>
               <span class="material-symbols-outlined">widgets</span>
@@ -64,7 +64,7 @@ import { DashboardDataMap, DashboardLayoutItem, DashboardWidgetData, DashboardWi
             </span>
             <span>
               <span class="material-symbols-outlined">sync</span>
-              Tiempo real
+              Lectura puntual
             </span>
             @if (editing()) {
               <span class="editing-chip">

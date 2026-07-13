@@ -1,6 +1,7 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject, input, signal } from '@angular/core';
 import { CurrencyPipe, DatePipe } from '@angular/common';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { MatButtonModule } from '@angular/material/button';
+import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
 import { MatIconModule } from '@angular/material/icon';
 import { EstadoPedidoWeb } from '@winsuite/bloques';
 import { PedidosWebService } from '../../services/pedidos-web.service';
@@ -8,18 +9,21 @@ import { PedidosWebService } from '../../services/pedidos-web.service';
 @Component({
   selector: 'app-pedidos-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CurrencyPipe, DatePipe, MatIconModule],
+  imports: [CurrencyPipe, DatePipe, MatIconModule, MatButtonModule],
   template: `
     <div class="pagina">
       <h2>Pedidos del sitio</h2>
-      @if (pedidosDelSitio().length === 0) {
+      <button mat-stroked-button type="button" [disabled]="cargando()" (click)="recargar()">
+        <mat-icon>refresh</mat-icon> Actualizar
+      </button>
+      @if (pedidos().length === 0 && !cargando()) {
         <div class="vacio">
           <mat-icon>receipt_long</mat-icon>
           <p>Aun no hay pedidos. Cuando publiques tu tienda y recibas pedidos, apareceran aqui.</p>
         </div>
       } @else {
         <div class="tabla">
-          @for (pedido of pedidosDelSitio(); track pedido.id) {
+          @for (pedido of pedidos(); track pedido.id) {
             <div class="pedido">
               <div class="cabecera">
                 <strong>{{ pedido.cliente.nombre }}</strong>
@@ -64,6 +68,11 @@ import { PedidosWebService } from '../../services/pedidos-web.service';
             </div>
           }
         </div>
+        @if (hayMas()) {
+          <button mat-stroked-button type="button" [disabled]="cargando()" (click)="cargarMas()">
+            {{ cargando() ? 'Cargando...' : 'Cargar más pedidos' }}
+          </button>
+        }
       }
     </div>
   `,
@@ -158,13 +167,48 @@ export class PedidosPageComponent {
 
   readonly sitioId = input.required<string>();
 
-  private readonly pedidos = toSignal(this.pedidosService.getPedidos(), { initialValue: [] });
-  readonly pedidosDelSitio = computed(() =>
-    this.pedidos().filter((pedido) => pedido.sitioId === this.sitioId()),
-  );
+  readonly pedidos = signal<import('@winsuite/bloques').PedidoWeb[]>([]);
+  readonly cargando = signal(false);
+  readonly hayMas = signal(false);
+  private readonly cursor = signal<string | null>(null);
+
+  constructor() {
+    toObservable(this.sitioId)
+      .pipe(takeUntilDestroyed())
+      .subscribe((sitioId) => void this.cargar(sitioId, true));
+  }
+
+  recargar(): void {
+    void this.cargar(this.sitioId(), true);
+  }
+
+  cargarMas(): void {
+    void this.cargar(this.sitioId(), false);
+  }
+
+  private async cargar(sitioId: string, reiniciar: boolean): Promise<void> {
+    if (this.cargando()) return;
+    this.cargando.set(true);
+    try {
+      const page = await this.pedidosService.getPedidosPage(
+        sitioId,
+        25,
+        reiniciar ? null : this.cursor(),
+      );
+      this.pedidos.update((actuales) => reiniciar ? page.items : [...actuales, ...page.items]);
+      this.cursor.set(page.nextCursor);
+      this.hayMas.set(page.hasMore);
+    } finally {
+      this.cargando.set(false);
+    }
+  }
 
   cambiarEstado(pedidoId: string, evento: Event): void {
     const estado = (evento.target as HTMLSelectElement).value as EstadoPedidoWeb;
-    void this.pedidosService.cambiarEstado(pedidoId, estado);
+    void this.pedidosService.cambiarEstado(pedidoId, estado).then(() => {
+      this.pedidos.update((pedidos) =>
+        pedidos.map((pedido) => pedido.id === pedidoId ? { ...pedido, estado } : pedido),
+      );
+    });
   }
 }

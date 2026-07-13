@@ -1,8 +1,9 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, get, onValue, push, ref, set, update } from '@angular/fire/database';
+import { Database, get, onValue, ref, set, update } from '@angular/fire/database';
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
+import { AuditService } from '../../../core/services/audit.service';
 import {
   AsientoContable,
   AuditoriaPeriodoContable,
@@ -16,6 +17,7 @@ import {
 export class ConfiguracionContableService {
   private readonly database = inject(Database);
   private readonly authService = inject(AuthService);
+  private readonly audit = inject(AuditService);
 
   private getTenantPath(): string {
     return `contabilidad/${this.authService.getTenantId()}`;
@@ -261,14 +263,12 @@ export class ConfiguracionContableService {
     accion: AuditoriaPeriodoContable['accion'],
     motivo: string | null = null
   ): Promise<void> {
-    const auditoriaRef = push(ref(this.database, `${this.getTenantPath()}/auditoriaPeriodos/${periodoId}`));
-    await set(auditoriaRef, {
-      periodoId,
-      accion,
-      motivo,
-      usuarioId: this.authService.currentUser()?.uid ?? null,
-      creadoEn: Date.now()
-    } satisfies AuditoriaPeriodoContable);
+    await this.audit.recordSafe({
+      action: accion === 'CREAR' ? 'crear' : 'configurar',
+      target: { module: 'contabilidad', entityType: 'periodo', entityId: periodoId },
+      summary: motivo ? `${accion}: ${motivo}` : `Periodo ${accion.toLowerCase()}`,
+      changesAfter: { periodoId, accion, motivo }
+    });
   }
 
 }

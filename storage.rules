@@ -1,24 +1,38 @@
 rules_version = '2';
+
 service firebase.storage {
   match /b/{bucket}/o {
-    // Archivos module rules
+
+    function esUsuarioDelTenant(tenantId) {
+      return request.auth != null
+        && request.auth.token.tenantId == tenantId;
+    }
+
+    // Archivos generales, XML, PDF, Excel e imágenes del negocio.
+    // La aplicación también valida las extensiones permitidas; esta regla
+    // impone el límite de tamaño en el perímetro de Firebase.
     match /archivos/{tenantId}/{allPaths=**} {
-      // Allow access only for authenticated users.
-      allow read: if request.auth != null;
-      allow write: if request.auth != null;
-      allow delete: if request.auth != null;
+      allow read: if esUsuarioDelTenant(tenantId);
+
+      allow write: if esUsuarioDelTenant(tenantId)
+        && request.resource.size <= 2 * 1024 * 1024;
+
+      allow delete: if esUsuarioDelTenant(tenantId);
     }
 
-    // Sitio Web module: assets de los sitios publicos (lectura publica deliberada)
-    match /sitios/{tenantId}/{allPaths=**} {
-      allow read: if true;
-      allow write: if request.auth != null
-        && request.resource.size < 5 * 1024 * 1024
-        && request.resource.contentType.matches('image/.*');
-      allow delete: if request.auth != null;
+    // Certificados digitales: se gestionan únicamente desde WinServer
+    // mediante Firebase Admin SDK, que no está sujeto a estas reglas.
+    match /firmas/{tenantId}/{allPaths=**} {
+      allow read, write, delete: if false;
     }
 
-    // Deny all other access
+    // XML y RIDE generados por el backend.
+    match /facturacion/{tenantId}/{allPaths=**} {
+      allow read, write, delete: if false;
+    }
+
+    // Los assets de sitios viven en el proyecto Firebase Sites.
+    // Todo path no declarado queda bloqueado por defecto.
     match /{allPaths=**} {
       allow read, write: if false;
     }
