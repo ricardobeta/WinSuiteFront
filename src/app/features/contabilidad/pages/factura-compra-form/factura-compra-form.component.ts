@@ -2,7 +2,7 @@ import { CommonModule } from '@angular/common';
 import { ChangeDetectorRef, Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { firstValueFrom } from 'rxjs';
-import { FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
+import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, ReactiveFormsModule, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
@@ -191,7 +191,12 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Identificación proveedor</mat-label>
-                <input matInput formControlName="idProv" />
+                <input matInput formControlName="idProv" inputmode="numeric" />
+                @if (form.controls.idProv.hasError('required')) {
+                  <mat-error>Requerido</mat-error>
+                } @else if (form.controls.idProv.hasError('identificacion')) {
+                  <mat-error>{{ form.controls.idProv.getError('identificacion') }}</mat-error>
+                }
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Parte relacionada</mat-label>
@@ -205,6 +210,7 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
             <mat-form-field appearance="outline" class="full">
               <mat-label>Razón social del proveedor</mat-label>
               <input matInput formControlName="razonSocialProv" />
+              <mat-error>Requerido</mat-error>
             </mat-form-field>
 
             <div class="grid-3">
@@ -234,14 +240,17 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
               <mat-form-field appearance="outline">
                 <mat-label>Estab.</mat-label>
                 <input matInput formControlName="establecimiento" maxlength="3" />
+                <mat-error>Requerido</mat-error>
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Pto. emisión</mat-label>
                 <input matInput formControlName="puntoEmision" maxlength="3" />
+                <mat-error>Requerido</mat-error>
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Secuencial</mat-label>
                 <input matInput formControlName="secuencial" maxlength="9" />
+                <mat-error>Requerido</mat-error>
               </mat-form-field>
               <mat-form-field appearance="outline">
                 <mat-label>Autorización / clave acceso</mat-label>
@@ -286,6 +295,16 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
                     <mat-label>Secuencial</mat-label>
                     <input matInput formControlName="docModSecuencial" maxlength="9" />
                   </mat-form-field>
+                </div>
+                <div class="docmod-actions">
+                  <button mat-stroked-button type="button" (click)="completarAutorizacionDocModificado(true)" [disabled]="buscandoDocMod() || soloLectura()">
+                    <mat-icon>search</mat-icon> {{ buscandoDocMod() ? 'Buscando…' : 'Buscar autorización' }}
+                  </button>
+                  @if (docModVinculado()) {
+                    <span class="docmod-ok"><mat-icon>link</mat-icon> Autorización vinculada desde la compra original (irá en autModificado del ATS).</span>
+                  } @else {
+                    <span class="muted-hint">Se autocompleta con la clave de acceso de la factura que modifica esta nota de crédito.</span>
+                  }
                 </div>
               </div>
             }
@@ -349,6 +368,7 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
                   <mat-form-field appearance="outline">
                     <mat-label>Descripción</mat-label>
                     <input matInput formControlName="descripcion" />
+                    <mat-error>Requerida</mat-error>
                   </mat-form-field>
                   <mat-form-field appearance="outline">
                     <mat-label>Cant.</mat-label>
@@ -508,6 +528,9 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
     mat-button-toggle-group { border-radius: 999px; overflow: hidden; align-self: flex-start; }
     .docmod-block { border: 1px dashed color-mix(in srgb, var(--primary) 30%, transparent); border-radius: .75rem; padding: .9rem 1rem; display: grid; gap: .6rem; background: color-mix(in srgb, var(--primary) 4%, var(--card)); }
     .docmod-block h4 { margin: 0; }
+    .docmod-actions { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+    .docmod-ok { display: flex; align-items: center; gap: .4rem; color: var(--success, #1a7f52); font-size: .85rem; font-weight: 500; }
+    .docmod-ok mat-icon { font-size: 1.15rem; width: 1.15rem; height: 1.15rem; }
     .muted-hint { margin: 0; color: var(--muted-foreground); font-size: .85rem; }
     .parsing-hint, .parse-error { display: flex; align-items: center; gap: .5rem; font-weight: 500; }
     .parse-error { color: var(--destructive); }
@@ -556,6 +579,8 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
     .totals-grid .grand strong { font-size: 1.5rem; }
     .totals-actions { display: flex; gap: .5rem; align-items: center; }
     .totals-actions a[mat-button] { color: #fff; }
+    .totals-actions button[mat-stroked-button] { color: #fff; border-color: color-mix(in srgb, #fff 55%, transparent); }
+    .totals-actions button[mat-stroked-button][disabled] { color: color-mix(in srgb, #fff 55%, transparent); }
 
     .pill { padding: .28rem .8rem; border-radius: 999px; font-weight: 600; font-size: .8rem; }
     .pill-draft { background: color-mix(in srgb, #b7791f 22%, transparent); color: #fff; }
@@ -597,6 +622,9 @@ export class FacturaCompraFormComponent implements OnInit {
 
   protected readonly modo = signal<OrigenDocumentoCompra>('XML');
   protected readonly soporteAdjunto = signal(false);
+  /** true cuando se localizó y vinculó la autorización del documento modificado (NC). */
+  protected readonly docModVinculado = signal(false);
+  protected readonly buscandoDocMod = signal(false);
   protected readonly guardando = signal(false);
   protected readonly parseando = signal(false);
   protected readonly parseado = signal(false);
@@ -619,9 +647,39 @@ export class FacturaCompraFormComponent implements OnInit {
   private pdfArchivoId: string | null = null;
   private ordenCompraId: string | null = null;
 
+  /**
+   * Valida la identificación del proveedor según el tipo (tabla SRI):
+   * RUC (01) → 13 dígitos, provincia válida y terminación "001"; cédula (02) → 10 dígitos.
+   * El pasaporte (03) no se valida. La obligatoriedad la cubre `Validators.required`.
+   */
+  private readonly idProvValidator = (control: AbstractControl): ValidationErrors | null => {
+    const valor = String(control.value ?? '').trim();
+    if (!valor) {
+      return null;
+    }
+    const tipo = this.form?.getRawValue().tpIdProv ?? '01';
+    if (tipo === '01') {
+      if (!/^\d{13}$/.test(valor)) {
+        return { identificacion: 'El RUC debe tener 13 dígitos.' };
+      }
+      const provincia = Number(valor.slice(0, 2));
+      if (provincia < 1 || (provincia > 24 && provincia !== 30)) {
+        return { identificacion: 'Los 2 primeros dígitos del RUC no son una provincia válida.' };
+      }
+      if (!valor.endsWith('001')) {
+        return { identificacion: 'El RUC debe terminar en 001.' };
+      }
+    } else if (tipo === '02') {
+      if (!/^\d{10}$/.test(valor)) {
+        return { identificacion: 'La cédula debe tener 10 dígitos.' };
+      }
+    }
+    return null;
+  };
+
   protected readonly form = this.fb.nonNullable.group({
     tpIdProv: ['01' as TipoIdProveedor],
-    idProv: ['', [Validators.required]],
+    idProv: ['', [Validators.required, this.idProvValidator]],
     razonSocialProv: ['', [Validators.required]],
     parteRel: ['NO'],
     codSustento: ['01', [Validators.required]],
@@ -703,6 +761,10 @@ export class FacturaCompraFormComponent implements OnInit {
     this.tiposGastoService.listar().pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((tipos) => this.tiposGasto.set(tipos.filter((t) => t.activo)));
     this.planCuentasService.getCuentasOnce().then((cuentas) => (this.cuentas = cuentas));
+
+    // Al cambiar el tipo de identificación, revalida el RUC/cédula con la regla correcta.
+    this.form.controls.tpIdProv.valueChanges.pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.form.controls.idProv.updateValueAndValidity());
 
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
@@ -888,6 +950,55 @@ export class FacturaCompraFormComponent implements OnInit {
     this.parseado.set(true);
     await this.validarFacturaParaEmpresa(parsed);
     await this.buscarPdfAsociado(parsed.claveAcceso);
+    await this.completarAutorizacionDocModificado();
+  }
+
+  /**
+   * Completa (si falta) la autorización del documento modificado de una nota de crédito, buscando
+   * la compra original por su número (est-pto-secuencial) del mismo proveedor. Ese valor se guarda
+   * como `docModificado.autorizacion` y el backend lo emite en `<autModificado>` del ATS.
+   * Silencioso por defecto; con `forzar = true` re-busca y avisa el resultado (botón manual).
+   */
+  protected async completarAutorizacionDocModificado(forzar = false): Promise<void> {
+    if (!this.esNotaCredito()) {
+      return;
+    }
+    const v = this.form.getRawValue();
+    if (!forzar && (v.docModAutorizacion ?? '').trim()) {
+      return;
+    }
+    if (!v.docModEstablecimiento || !v.docModPuntoEmision || !v.docModSecuencial) {
+      if (forzar) {
+        this.toast('Ingresa establecimiento, punto de emisión y secuencial del documento modificado.', 'warning');
+      }
+      return;
+    }
+    this.buscandoDocMod.set(true);
+    try {
+      const original = await this.facturasService.buscarDocumentoPorNumero({
+        idProv: v.idProv,
+        establecimiento: v.docModEstablecimiento,
+        puntoEmision: v.docModPuntoEmision,
+        secuencial: v.docModSecuencial,
+        tipoComprobante: v.docModTipo
+      });
+      const aut = (original?.autorizacion || original?.claveAcceso || '').trim();
+      if (aut) {
+        this.form.patchValue({ docModAutorizacion: aut });
+        this.docModVinculado.set(true);
+        if (forzar) {
+          this.toast('Autorización del documento modificado vinculada.', 'task_alt');
+        }
+      } else {
+        this.docModVinculado.set(false);
+        if (forzar) {
+          this.toast('No se encontró una compra registrada con ese número de documento.', 'warning');
+        }
+      }
+    } finally {
+      this.buscandoDocMod.set(false);
+      this.cdr.markForCheck();
+    }
   }
 
   /**
@@ -1046,26 +1157,38 @@ export class FacturaCompraFormComponent implements OnInit {
     }, { emitEvent: false });
   }
 
-  protected async guardar(): Promise<string | null> {
+  /**
+   * Guarda la factura. Como BORRADOR (por defecto) no exige el formulario completo: se persiste
+   * tal cual el usuario lo tenga. La validación completa solo se aplica al registrar
+   * (`esBorrador = false`), donde además el mensaje nombra los campos que faltan.
+   */
+  protected async guardar(esBorrador = true): Promise<string | null> {
     this.recalcularTotalesDesdeItems();
-    if (this.form.invalid || this.guardando()) {
-      this.form.markAllAsTouched();
-      this.toast('Revisa los campos obligatorios.', 'error');
+    if (this.guardando()) {
       return null;
     }
-    if (this.requiereFormaPago() && (this.form.value.formasDePago?.length ?? 0) === 0) {
-      this.toast('Selecciona al menos una forma de pago (compra ≥ $500).', 'warning');
-      return null;
-    }
+    // El soporte adjunto es la única condición dura del registro manual (también para borrador).
     if (this.modo() === 'MANUAL' && !this.archivoId) {
       this.toast('Adjunta el documento escaneado (obligatorio en registro manual).', 'warning');
       return null;
     }
-    if (this.esNotaCredito()) {
-      const v = this.form.getRawValue();
-      if (!v.docModEstablecimiento || !v.docModPuntoEmision || !v.docModSecuencial) {
-        this.toast('Completa el documento modificado por la nota de crédito.', 'warning');
+    if (!esBorrador) {
+      if (this.form.invalid) {
+        this.form.markAllAsTouched();
+        this.cdr.markForCheck();
+        this.toast(this.mensajeCamposFaltantes(), 'error');
         return null;
+      }
+      if (this.requiereFormaPago() && (this.form.value.formasDePago?.length ?? 0) === 0) {
+        this.toast('Selecciona al menos una forma de pago (compra ≥ $500).', 'warning');
+        return null;
+      }
+      if (this.esNotaCredito()) {
+        const v = this.form.getRawValue();
+        if (!v.docModEstablecimiento || !v.docModPuntoEmision || !v.docModSecuencial) {
+          this.toast('Completa el documento modificado por la nota de crédito.', 'warning');
+          return null;
+        }
       }
     }
 
@@ -1095,7 +1218,7 @@ export class FacturaCompraFormComponent implements OnInit {
   }
 
   protected async guardarYRegistrar(): Promise<void> {
-    const id = await this.guardar();
+    const id = await this.guardar(false);
     if (!id) {
       return;
     }
@@ -1189,6 +1312,31 @@ export class FacturaCompraFormComponent implements OnInit {
     this.parseado.set(false);
     this.parseError.set(null);
     this.advertenciaEmpresa.set(null);
+  }
+
+  /** Etiquetas legibles de los campos obligatorios de cabecera, para armar el aviso al registrar. */
+  private readonly etiquetasCampos: Record<string, string> = {
+    idProv: 'Identificación del proveedor',
+    razonSocialProv: 'Razón social del proveedor',
+    codSustento: 'Sustento tributario',
+    establecimiento: 'Establecimiento',
+    puntoEmision: 'Punto de emisión',
+    secuencial: 'Secuencial',
+    fechaEmision: 'Fecha de emisión',
+    fechaRegistro: 'Fecha de registro'
+  };
+
+  /** Construye un mensaje que nombra los campos obligatorios que faltan (o el genérico si no hay). */
+  private mensajeCamposFaltantes(): string {
+    const faltantes = Object.entries(this.etiquetasCampos)
+      .filter(([control]) => this.form.get(control)?.invalid)
+      .map(([, etiqueta]) => etiqueta);
+    if (this.items.controls.some((g) => g.invalid)) {
+      faltantes.push('Descripción, cantidad y costo de cada ítem');
+    }
+    return faltantes.length
+      ? `Faltan datos obligatorios: ${faltantes.join(', ')}.`
+      : 'Revisa los campos obligatorios.';
   }
 
   private construirFactura(): Omit<FacturaCompra, 'id' | 'numero' | 'creadoEn' | 'actualizadoEn'> {

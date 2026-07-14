@@ -11,7 +11,7 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
-import { FacturaCompra, MONTO_MINIMO_FORMA_PAGO } from '../../models/compras.models';
+import { CODIGOS_SUSTENTO, FacturaCompra, MONTO_MINIMO_FORMA_PAGO, TIPOS_COMPROBANTE } from '../../models/compras.models';
 import { AtsResult, AtsService } from '../../services/ats.service';
 import { FacturasCompraService } from '../../services/facturas-compra.service';
 
@@ -20,6 +20,32 @@ interface ChecklistItem {
   label: string;
   detalle?: string;
   facturaIds?: string[];
+}
+
+/** Fila del resumen de compras del talón ATS, agrupada por tipo de comprobante. */
+interface ResumenCompraRow {
+  codigo: string;
+  etiqueta: string;
+  registros: number;
+  base0: number;        // BI tarifa 0%
+  baseGravada: number;  // BI tarifa diferente de 0%
+  noObjeto: number;     // BI no objeto + exento de IVA
+  iva: number;          // Valor IVA
+}
+
+/** Fila del resumen de retención de IVA por porcentaje. */
+interface ResumenRetIvaRow {
+  etiqueta: string;
+  valor: number;
+}
+
+/** Fila del resumen por código de sustento tributario. */
+interface ResumenSustentoRow {
+  codigo: string;
+  etiqueta: string;
+  registros: number;
+  base: number;
+  iva: number;
 }
 
 @Component({
@@ -141,6 +167,114 @@ interface ChecklistItem {
           <p class="result-ok"><mat-icon>task_alt</mat-icon> ATS generado con {{ res.numeroCompras }} compras. Listo para descargar y validar en el SRI.</p>
         }
       </section>
+
+      @if (resultado(); as res) {
+        <section class="surface-card resumen-card">
+          <header class="resumen-head">
+            <div class="resumen-title">
+              <span class="resumen-badge" aria-hidden="true"><mat-icon>fact_check</mat-icon></span>
+              <div>
+                <h3>Talón resumen · Anexo Transaccional</h3>
+                <p class="resumen-sub">
+                  Período {{ nombreMes() }} {{ anioSignal() }} · {{ res.numeroCompras }} compra(s)
+                  @if (generadoEn(); as g) { · generado {{ g | date: 'dd/MM/yyyy HH:mm' }} }
+                </p>
+              </div>
+            </div>
+            <button mat-flat-button color="primary" (click)="descargar()">
+              <mat-icon>download</mat-icon> Descargar XML
+            </button>
+          </header>
+
+          <div class="resumen-block">
+            <div class="block-title"><mat-icon>receipt_long</mat-icon> Compras por tipo de comprobante</div>
+            <div class="table-scroll">
+              <table class="resumen-table compras">
+                <thead>
+                  <tr>
+                    <th class="l">Transacción</th>
+                    <th class="c">Registros</th>
+                    <th class="r">BI tarifa 0%</th>
+                    <th class="r">BI tarifa &gt; 0%</th>
+                    <th class="r">No objeto / exento</th>
+                    <th class="r">Valor IVA</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of resumenCompras(); track row.codigo) {
+                    <tr>
+                      <td class="l"><span class="cod-chip">{{ row.codigo }}</span> {{ row.etiqueta }}</td>
+                      <td class="c">{{ row.registros }}</td>
+                      <td class="r">{{ row.base0 | currency: 'USD':'symbol-narrow':'1.2-2' }}</td>
+                      <td class="r">{{ row.baseGravada | currency: 'USD':'symbol-narrow':'1.2-2' }}</td>
+                      <td class="r">{{ row.noObjeto | currency: 'USD':'symbol-narrow':'1.2-2' }}</td>
+                      <td class="r strong">{{ row.iva | currency: 'USD':'symbol-narrow':'1.2-2' }}</td>
+                    </tr>
+                  } @empty {
+                    <tr><td colspan="6" class="empty">Sin compras en el período seleccionado.</td></tr>
+                  }
+                </tbody>
+                @if (resumenCompras().length) {
+                  <tfoot>
+                    <tr>
+                      <td class="l">TOTAL</td>
+                      <td class="c">{{ totalCompras().registros }}</td>
+                      <td class="r">{{ totalCompras().base0 | currency: 'USD':'symbol-narrow':'1.2-2' }}</td>
+                      <td class="r">{{ totalCompras().baseGravada | currency: 'USD':'symbol-narrow':'1.2-2' }}</td>
+                      <td class="r">{{ totalCompras().noObjeto | currency: 'USD':'symbol-narrow':'1.2-2' }}</td>
+                      <td class="r">{{ totalCompras().iva | currency: 'USD':'symbol-narrow':'1.2-2' }}</td>
+                    </tr>
+                  </tfoot>
+                }
+              </table>
+            </div>
+          </div>
+
+          <div class="resumen-cols">
+            <div class="resumen-block">
+              <div class="block-title"><mat-icon>percent</mat-icon> Retención en la fuente de IVA</div>
+              <div class="table-scroll">
+                <table class="resumen-table">
+                  <tbody>
+                    @for (r of resumenRetIva(); track r.etiqueta) {
+                      <tr>
+                        <td class="l">{{ r.etiqueta }}</td>
+                        <td class="r" [class.muted]="!r.valor">{{ r.valor | currency: 'USD':'symbol-narrow':'1.2-2' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                  <tfoot>
+                    <tr><td class="l">TOTAL retenido</td><td class="r strong">{{ totalRetIva() | currency: 'USD':'symbol-narrow':'1.2-2' }}</td></tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+
+            <div class="resumen-block">
+              <div class="block-title"><mat-icon>account_balance</mat-icon> Sustento tributario</div>
+              <div class="table-scroll">
+                <table class="resumen-table">
+                  <thead>
+                    <tr><th class="l">Sustento</th><th class="c">Reg.</th><th class="r">Base</th><th class="r">IVA</th></tr>
+                  </thead>
+                  <tbody>
+                    @for (s of resumenSustento(); track s.codigo) {
+                      <tr>
+                        <td class="l"><span class="cod-chip">{{ s.codigo }}</span> {{ s.etiqueta }}</td>
+                        <td class="c">{{ s.registros }}</td>
+                        <td class="r">{{ s.base | currency: 'USD':'symbol-narrow':'1.2-2' }}</td>
+                        <td class="r">{{ s.iva | currency: 'USD':'symbol-narrow':'1.2-2' }}</td>
+                      </tr>
+                    } @empty {
+                      <tr><td colspan="4" class="empty">Sin registros.</td></tr>
+                    }
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+      }
     </section>
   `,
   styles: [`
@@ -186,10 +320,39 @@ interface ChecklistItem {
     .actions { display: flex; gap: .75rem; flex-wrap: wrap; }
     .result-ok { display: flex; align-items: center; gap: .5rem; color: var(--success, #1a7f52); margin: 0; }
 
+    /* --- Talón resumen --- */
+    .resumen-card { padding: 1.25rem 1.5rem; display: grid; gap: 1.4rem; }
+    .resumen-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .resumen-title { display: flex; align-items: center; gap: .85rem; }
+    .resumen-badge { width: 2.75rem; height: 2.75rem; flex: 0 0 auto; display: grid; place-items: center; border-radius: .85rem; color: #fff; background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 70%, #0a1f1b)); }
+    .resumen-title h3 { margin: 0; font-size: 1.15rem; }
+    .resumen-sub { margin: .2rem 0 0; color: var(--muted-foreground); font-size: .85rem; }
+    .resumen-cols { display: grid; grid-template-columns: 1fr 1.35fr; gap: 1.4rem; align-items: start; }
+
+    .resumen-block { display: grid; gap: .55rem; }
+    .block-title { display: flex; align-items: center; gap: .45rem; font-weight: 700; font-size: .82rem; text-transform: uppercase; letter-spacing: .06em; color: var(--primary); }
+    .block-title mat-icon { font-size: 1.15rem; width: 1.15rem; height: 1.15rem; }
+
+    .table-scroll { overflow-x: auto; border: 1px solid var(--tc-ghost-border); border-radius: var(--tc-radius-md, .75rem); }
+    .resumen-table { width: 100%; border-collapse: collapse; font-size: .88rem; min-width: 100%; }
+    .resumen-table th, .resumen-table td { padding: .6rem .85rem; white-space: nowrap; }
+    .resumen-table thead th { background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--foreground); font-weight: 700; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; text-align: left; }
+    .resumen-table tbody tr + tr td { border-top: 1px solid var(--tc-ghost-border); }
+    .resumen-table tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--primary) 3%, transparent); }
+    .resumen-table .l { text-align: left; }
+    .resumen-table .c { text-align: center; }
+    .resumen-table .r { text-align: right; font-variant-numeric: tabular-nums; }
+    .resumen-table .strong { font-weight: 700; }
+    .resumen-table .muted { color: var(--muted-foreground); }
+    .resumen-table .empty { text-align: center; color: var(--muted-foreground); padding: 1rem; }
+    .resumen-table tfoot td { border-top: 2px solid color-mix(in srgb, var(--primary) 45%, transparent); font-weight: 700; background: color-mix(in srgb, var(--primary) 6%, transparent); }
+    .cod-chip { display: inline-grid; place-items: center; min-width: 1.6rem; padding: .05rem .35rem; margin-right: .35rem; border-radius: .4rem; background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); font-weight: 700; font-size: .74rem; }
+
     @media (max-width: 900px) {
       .period-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .borradores-toggle { grid-column: 1 / -1; }
       .kpi-row { grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .resumen-cols { grid-template-columns: 1fr; }
     }
     @media (max-width: 600px) {
       .period-card { padding: 1rem; }
@@ -220,13 +383,14 @@ export class AtsGenerarComponent {
   protected readonly mes = new FormControl(this.hoy.getMonth() + 1, { nonNullable: true });
 
   private readonly facturas = signal<FacturaCompra[]>([]);
-  private readonly anioSignal = signal(this.hoy.getFullYear());
+  protected readonly anioSignal = signal(this.hoy.getFullYear());
   private readonly mesSignal = signal(this.hoy.getMonth() + 1);
 
   protected readonly generando = signal(false);
   protected readonly buscando = signal(false);
   protected readonly periodoBuscado = signal<string | null>(null);
   protected readonly resultado = signal<AtsResult | null>(null);
+  protected readonly generadoEn = signal<Date | null>(null);
   // Por defecto solo se incluyen las REGISTRADA; el usuario puede activar los borradores.
   protected readonly incluirBorradores = signal(false);
 
@@ -299,6 +463,77 @@ export class AtsGenerarComponent {
     ];
   });
 
+  private readonly etiquetaComprobante = new Map(TIPOS_COMPROBANTE.map((t) => [t.codigo, t.descripcion]));
+  private readonly etiquetaSustento = new Map(CODIGOS_SUSTENTO.map((s) => [s.codigo, s.descripcion]));
+
+  /** Resumen de compras agrupado por tipo de comprobante (como el talón resumen del SRI). */
+  protected readonly resumenCompras = computed<ResumenCompraRow[]>(() => {
+    const grupos = new Map<string, ResumenCompraRow>();
+    for (const f of this.facturasPeriodo()) {
+      const codigo = f.tipoComprobante || '01';
+      const row = grupos.get(codigo) ?? {
+        codigo,
+        etiqueta: this.etiquetaComprobante.get(codigo) ?? `Comprobante ${codigo}`,
+        registros: 0, base0: 0, baseGravada: 0, noObjeto: 0, iva: 0
+      };
+      row.registros += 1;
+      row.base0 += Number(f.baseImponible ?? 0);
+      row.baseGravada += Number(f.baseImpGrav ?? 0);
+      row.noObjeto += Number(f.baseNoGraIva ?? 0) + Number(f.baseImpExe ?? 0);
+      row.iva += Number(f.montoIva ?? 0);
+      grupos.set(codigo, row);
+    }
+    return [...grupos.values()].sort((a, b) => a.codigo.localeCompare(b.codigo));
+  });
+
+  protected readonly totalCompras = computed<ResumenCompraRow>(() =>
+    this.resumenCompras().reduce((t, r) => ({
+      codigo: '', etiqueta: 'TOTAL',
+      registros: t.registros + r.registros,
+      base0: t.base0 + r.base0,
+      baseGravada: t.baseGravada + r.baseGravada,
+      noObjeto: t.noObjeto + r.noObjeto,
+      iva: t.iva + r.iva
+    }), { codigo: '', etiqueta: 'TOTAL', registros: 0, base0: 0, baseGravada: 0, noObjeto: 0, iva: 0 })
+  );
+
+  /** Retención de IVA en la fuente, repartida por porcentaje (esquema SRI vigente). */
+  protected readonly resumenRetIva = computed<ResumenRetIvaRow[]>(() => {
+    const buckets = new Map<number, number>([[10, 0], [20, 0], [30, 0], [50, 0], [70, 0], [100, 0]]);
+    for (const f of this.facturasPeriodo()) {
+      for (const r of (f.retencionesIva ?? [])) {
+        let p = Number(r.porcentajeIva ?? 0);
+        if (p > 0 && p <= 1) { p *= 100; }
+        p = Math.round(p);
+        const key = buckets.has(p) ? p : 70;
+        buckets.set(key, (buckets.get(key) ?? 0) + Number(r.valRetIva ?? 0));
+      }
+    }
+    return [...buckets.entries()].map(([porcentaje, valor]) => ({ etiqueta: `Retención IVA ${porcentaje}%`, valor }));
+  });
+
+  protected readonly totalRetIva = computed(() => this.resumenRetIva().reduce((t, r) => t + r.valor, 0));
+
+  /** Resumen por código de sustento tributario. */
+  protected readonly resumenSustento = computed<ResumenSustentoRow[]>(() => {
+    const grupos = new Map<string, ResumenSustentoRow>();
+    for (const f of this.facturasPeriodo()) {
+      const codigo = f.codSustento || '01';
+      const row = grupos.get(codigo) ?? {
+        codigo,
+        etiqueta: this.etiquetaSustento.get(codigo) ?? `Sustento ${codigo}`,
+        registros: 0, base: 0, iva: 0
+      };
+      row.registros += 1;
+      row.base += Number(f.baseImpGrav ?? 0) + Number(f.baseImponible ?? 0) + Number(f.baseNoGraIva ?? 0) + Number(f.baseImpExe ?? 0);
+      row.iva += Number(f.montoIva ?? 0);
+      grupos.set(codigo, row);
+    }
+    return [...grupos.values()].sort((a, b) => a.codigo.localeCompare(b.codigo));
+  });
+
+  protected readonly nombreMes = computed(() => this.meses.find((m) => m.valor === this.mesSignal())?.etiqueta ?? '');
+
   constructor() {
     this.anio.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((v) => { this.anioSignal.set(v); this.invalidarBusqueda(); });
     this.mes.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((v) => { this.mesSignal.set(v); this.invalidarBusqueda(); });
@@ -313,6 +548,7 @@ export class AtsGenerarComponent {
     this.atsService.generar(this.anio.value, this.mes.value, this.incluirBorradores()).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (res) => {
         this.resultado.set(res);
+        this.generadoEn.set(new Date());
         this.generando.set(false);
         this.toast(`ATS generado con ${res.numeroCompras} compras.`, 'task_alt');
       },
@@ -350,6 +586,7 @@ export class AtsGenerarComponent {
     this.facturas.set([]);
     this.periodoBuscado.set(null);
     this.resultado.set(null);
+    this.generadoEn.set(null);
   }
 
   private clavePeriodo(): string {

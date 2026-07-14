@@ -185,6 +185,48 @@ export class FacturasCompraService {
     return candidatos.find((factura) => factura.estado === 'REGISTRADA') ?? candidatos[0];
   }
 
+  /**
+   * Busca la autorización / clave de acceso de un comprobante ya cargado a partir de su número
+   * (establecimiento-puntoEmisión-secuencial) del mismo proveedor. Se usa para completar el
+   * `autModificado` de una nota de crédito desde su `numDocModificado`. Devuelve la factura
+   * encontrada (con su autorización) o `null` si no hay ninguna registrada con ese número.
+   */
+  async buscarDocumentoPorNumero(input: {
+    idProv?: string;
+    establecimiento: string;
+    puntoEmision: string;
+    secuencial: string;
+    tipoComprobante?: string;
+  }): Promise<FacturaCompra | null> {
+    const est = (input.establecimiento ?? '').trim();
+    const pto = (input.puntoEmision ?? '').trim();
+    const sec = (input.secuencial ?? '').trim();
+    if (!est || !pto || !sec) {
+      return null;
+    }
+    const snapshot = await get(this.getFacturasRef());
+    if (!snapshot.exists()) {
+      return null;
+    }
+    const raw = snapshot.val() as Record<string, FacturaCompra>;
+    const idProv = (input.idProv ?? '').trim();
+    const tipo = (input.tipoComprobante ?? '').trim();
+    const candidatos = Object.entries(raw)
+      .map(([id, factura]) => ({ ...factura, id }))
+      .filter((f) => f.estado !== 'ANULADA')
+      .filter((f) =>
+        (f.establecimiento ?? '').trim() === est &&
+        (f.puntoEmision ?? '').trim() === pto &&
+        (f.secuencial ?? '').trim() === sec &&
+        (!idProv || (f.idProv ?? '').trim() === idProv) &&
+        (!tipo || (f.tipoComprobante ?? '') === tipo));
+    if (candidatos.length === 0) {
+      return null;
+    }
+    // Prioriza una REGISTRADA (autorización confirmada) sobre un borrador.
+    return candidatos.find((f) => f.estado === 'REGISTRADA') ?? candidatos[0];
+  }
+
   async getItems(facturaId: string): Promise<FacturaCompraItem[]> {
     const snapshot = await get(this.getItemsRef(facturaId));
     if (!snapshot.exists()) {
