@@ -4,6 +4,7 @@ import {
   DOCUMENT,
   DestroyRef,
   ElementRef,
+  Injector,
   computed,
   effect,
   inject,
@@ -43,7 +44,12 @@ import {
 import { toSignal } from '@angular/core/rxjs-interop';
 import { SitiosService } from '../../services/sitios.service';
 import { FormulariosService } from '../../services/formularios.service';
-import { SitioBorradorService } from '../../services/sitio-borrador.service';
+import { EstadoIaSitio, SitioBorradorService } from '../../services/sitio-borrador.service';
+import {
+  AiSiteChatDialogComponent,
+  AiSiteChatDialogData,
+  AiSiteChatDialogResult,
+} from '../../components/ai-site-chat-dialog/ai-site-chat-dialog.component';
 import { SitioPublicacionService } from '../../services/sitio-publicacion.service';
 import { EditorHistorialService } from '../../services/editor-historial.service';
 import { CatalogoEditorAdapter } from '../../services/catalogo-editor.adapter';
@@ -72,12 +78,14 @@ const AUTOSAVE_MS = 1500;
       provide: PICKER_IMAGEN,
       useFactory: (): PickerImagen => {
         const dialog = inject(MatDialog);
+        const injector = inject(Injector);
         return async () => {
           const ref = dialog.open<
             ArchivoSelectorDialogComponent,
             unknown,
             ArchivoSelectorDialogResult | null
           >(ArchivoSelectorDialogComponent, {
+            injector,
             data: {
               title: 'Imagenes de tu sitio',
               subtitle: 'Reutiliza una imagen ya subida o carga una nueva.',
@@ -178,6 +186,10 @@ const AUTOSAVE_MS = 1500;
           }
         </span>
 
+        <button mat-stroked-button matTooltip="Pide mejoras a la IA sobre este sitio" (click)="abrirCopiloto()">
+          <mat-icon>smart_toy</mat-icon>
+          Copiloto IA
+        </button>
         <button mat-stroked-button (click)="panel.set(panel() === 'tema' ? 'propiedades' : 'tema')">
           <mat-icon>palette</mat-icon>
           Tema
@@ -390,6 +402,7 @@ export class EditorPageComponent {
   private readonly publicacionService = inject(SitioPublicacionService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly dialog = inject(MatDialog);
+  private readonly injector = inject(Injector);
   private readonly documento = inject(DOCUMENT);
   private readonly destroyRef = inject(DestroyRef);
   protected readonly historial = inject(EditorHistorialService);
@@ -412,6 +425,8 @@ export class EditorPageComponent {
   readonly publicando = signal(false);
 
   private timerAutosave: ReturnType<typeof setTimeout> | null = null;
+  /** Estado del Copiloto IA (blueprint + imagenes) para seguir iterando el diseño. */
+  private estadoIa: EstadoIaSitio | null = null;
 
   readonly listaPaginas = computed<PaginaDoc[]>(() =>
     Object.values(this.contenido()?.paginas ?? {}),
@@ -522,11 +537,13 @@ export class EditorPageComponent {
   }
 
   private async cargar(sitioId: string): Promise<void> {
-    const [config, borrador] = await Promise.all([
+    const [config, borrador, estadoIa] = await Promise.all([
       this.sitiosService.getConfig(sitioId),
       this.borradorService.cargar(sitioId),
+      this.borradorService.cargarIa(sitioId).catch(() => null),
     ]);
     this.config.set(config);
+    this.estadoIa = estadoIa;
     if (borrador) {
       const preparado = this.asegurarPaginasSistema(borrador, config?.tipo === 'ecommerce');
       this.contenido.set(preparado);
@@ -567,6 +584,52 @@ export class EditorPageComponent {
       cambio = true;
     }
     return cambio ? { ...contenido, paginas } : contenido;
+  }
+
+  /**
+   * Abre el chat del Copiloto sobre el sitio actual: con blueprint guardado entra
+   * en modo mejora; sin el (sitio de plantilla) arranca la conversacion desde cero.
+   * Al aplicar, el diseño reemplaza las paginas normales (las de sistema __x se
+   * conservan) y queda en el historial: Ctrl+Z deshace el cambio completo.
+   */
+  async abrirCopiloto(): Promise<void> {
+    const ref = this.dialog.open<AiSiteChatDialogComponent, AiSiteChatDialogData, AiSiteChatDialogResult>(
+      AiSiteChatDialogComponent,
+      {
+        injector: this.injector,
+        data: {
+          type: this.config()?.tipo ?? null,
+          blueprint: this.estadoIa?.blueprint ?? null,
+          imageUrls: this.estadoIa?.imageUrls ?? [],
+        },
+        maxWidth: '96vw', maxHeight: '94vh', autoFocus: false, disableClose: true,
+        panelClass: 'ai-site-chat-panel',
+      },
+    );
+    const resultado = await firstValueFrom(ref.afterClosed());
+    if (!resultado) return;
+    this.mutar((actual) => {
+      const paginasSistema = Object.fromEntries(
+        Object.entries(actual.paginas).filter(([id]) => id.startsWith('__')),
+      );
+      return {
+        tema: resultado.contenido.tema,
+        paginas: { ...resultado.contenido.paginas, ...paginasSistema },
+      };
+    });
+    const primeraPagina = Object.keys(this.contenido()?.paginas ?? {})[0];
+    if (!this.contenido()?.paginas[this.paginaActualId()] && primeraPagina) {
+      this.paginaActualId.set(primeraPagina);
+    }
+    this.seleccionId.set(null);
+    this.estadoIa = {
+      type: resultado.tipo,
+      blueprint: resultado.blueprint,
+      imageUrls: resultado.imageUrls,
+      updatedAt: Date.now(),
+    };
+    void this.borradorService.guardarIa(this.sitioId(), this.estadoIa).catch(() => undefined);
+    this.snackBar.open('Diseño del Copiloto aplicado. Puedes deshacerlo con Ctrl+Z.', 'OK', { duration: 5000 });
   }
 
   /** Toda mutacion pasa por aqui: nuevo contenido -> historial -> autosave con debounce. */

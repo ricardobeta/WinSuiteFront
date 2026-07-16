@@ -71,12 +71,12 @@ import { ColaboradoresService } from '../../services/colaboradores.service';
         }
 
         <div class="actions-row">
-          <a mat-button routerLink="/workspace/colaboradores/lista">Cancelar</a>
+          <a mat-button routerLink="/workspace/empresa/colaboradores">Cancelar</a>
           <button
             mat-raised-button
             color="primary"
             type="submit"
-            [disabled]="form.invalid || !authorization.canAccess('colaboradores', isEditMode() ? 'update' : 'create')"
+            [disabled]="form.invalid || !authorization.canAccess('empresa_colaboradores', isEditMode() ? 'update' : 'create')"
           >
             {{ isEditMode() ? 'Guardar cambios' : 'Crear colaborador' }}
           </button>
@@ -234,6 +234,6 @@ export class ColaboradorFormComponent implements OnInit {
       horizontalPosition: 'end',
       verticalPosition: 'top'
     });
-    void this.router.navigate(['/workspace/colaboradores/lista']);
+    void this.router.navigate(['/workspace/empresa/colaboradores']);
   }
 }

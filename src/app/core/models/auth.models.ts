@@ -36,6 +36,33 @@ export interface TenantApiResponse {
   status?: string;
   createdAt?: number;
   activeModules?: string[];
+  email?: string;
+  mobilePhone?: string;
+}
+
+export interface CompanySummary {
+  tenantId: string;
+  name: string;
+  role: string;
+  plan: string;
+  status: string;
+  owned: boolean;
+}
+
+export interface TenantSessionResponse {
+  userId: string;
+  email: string;
+  activeTenantId: string;
+  firebaseCustomToken: string;
+  companies: CompanySummary[];
+  ownedCompanyLimit: number;
+  ownedCompanyCount: number;
+}
+
+export interface TenantAuthorizationContext {
+  tenant: TenantApiResponse;
+  profile: AppUserProfile;
+  roles: TenantRoleDefinition[];
 }
 
 export interface UpdateActiveModulesPayload {

@@ -83,7 +83,7 @@ export class BaseConocimientoComponent {
   });
 
   // form config
-  protected provider = 'anthropic';
+  protected provider = 'gemini';
   protected model = '';
   protected systemPrompt = '';
   protected apiKey = '';
@@ -97,7 +97,8 @@ export class BaseConocimientoComponent {
     ],
     gemini: [
       { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite', hint: 'Rapido y de bajo coste' },
-      { value: 'gemma-4-31b-it', label: 'Gemma 4 31B', hint: 'Abierto (Apache 2.0), misma API key' }
+      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', hint: 'Modelo estable de uso general' },
+      { value: 'gemma-4-31b-it', label: 'Gemma 4 31B IT', hint: 'Modelo abierto de Google para la clave propia de la empresa' }
     ]
   };
 
@@ -151,11 +152,12 @@ export class BaseConocimientoComponent {
       this.config.set(config);
       this.knowledge.set(knowledge ?? []);
       this.customTypes.set(sourceTypes ?? []);
-      this.provider = config.provider || 'anthropic';
+      this.provider = config.provider || 'gemini';
       this.model = config.model || '';
       this.systemPrompt = config.systemPrompt || '';
       this.enabled = config.enabled;
-      if (!this.model) {
+      // Corrige configuraciones antiguas que ya no aparecen en el catalogo actual.
+      if (!this.availableModels.some((candidate) => candidate.value === this.model)) {
         this.onProviderChange();
       }
     } catch (error) {

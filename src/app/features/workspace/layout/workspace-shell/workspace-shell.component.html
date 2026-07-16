@@ -53,7 +53,7 @@
     </nav>
 
     <div class="sidebar-footer">
-      <button type="button" class="menu-item" routerLink="/workspace/configuracion/modulos">
+      <button type="button" class="menu-item" routerLink="/workspace/empresa/general">
         <span class="material-symbols-outlined">settings</span>
         <span class="item-label">Configuracion</span>
       </button>
@@ -81,11 +81,6 @@
       </div>
 
       <div class="topbar-actions">
-        <label class="search-box" aria-label="Busqueda contextual">
-          <span class="material-symbols-outlined">search</span>
-          <input type="search" [placeholder]="moduleSearchPlaceholder()" />
-        </label>
-
         <button
           type="button"
           class="icon-btn theme-toggle-btn"
@@ -97,15 +92,65 @@
           </span>
         </button>
 
-        <div class="profile-chip">
+        <button type="button" class="icon-btn notification-trigger" [matMenuTriggerFor]="notificationsMenu" aria-label="Abrir notificaciones" (click)="openNotifications()">
+          <span class="material-symbols-outlined">notifications</span>
+          @if (notifications.unreadCount() > 0) {<span class="notification-badge">{{ notifications.unreadCount() > 9 ? '9+' : notifications.unreadCount() }}</span>}
+        </button>
+
+        <mat-menu #notificationsMenu="matMenu" class="notifications-menu-panel" xPosition="before">
+          <div class="notifications-heading" (click)="$event.stopPropagation()"><div><strong>Notificaciones</strong><small>{{ auth.currentTenant()?.name }}</small></div>@if (notifications.unreadCount() > 0) {<button type="button" (click)="notifications.markAllRead()">Marcar leidas</button>}</div>
+          @if (notifications.items().length === 0) {
+            <div class="notifications-empty" (click)="$event.stopPropagation()"><span class="material-symbols-outlined">notifications_none</span><strong>Todo al dia</strong><small>Las novedades de esta empresa apareceran aqui.</small></div>
+          } @else {
+            @for (item of notifications.items(); track item.id) {
+              <button mat-menu-item type="button" class="notification-item" [class.unread]="!item.readAt" (click)="openNotification(item)">
+                <span class="notification-dot"></span><span class="notification-copy"><strong>{{ item.title }}</strong><small>{{ item.message }}</small><time>{{ item.createdAt | date:'short' }}</time></span>
+              </button>
+            }
+          }
+          <div class="menu-divider" (click)="$event.stopPropagation()"></div>
+          <button mat-menu-item type="button" routerLink="/workspace/empresa/notificaciones"><span class="material-symbols-outlined">tune</span><span>Configurar notificaciones</span></button>
+        </mat-menu>
+
+        <app-global-copilot [context]="copilotContext()" />
+
+        <button type="button" class="profile-chip" [matMenuTriggerFor]="profileMenu" aria-label="Abrir menu de usuario y empresa">
           <div class="profile-text">
             <strong>{{ auth.currentUser()?.displayName || 'Usuario WinSuite' }}</strong>
-            <small>{{ auth.currentUser()?.email || 'ADMIN' }}</small>
+            <small>{{ auth.currentTenant()?.name || 'Mi empresa' }}</small>
           </div>
           <div class="avatar">
             {{ (auth.currentUser()?.displayName || auth.currentUser()?.email || 'W').charAt(0).toUpperCase() }}
           </div>
-        </div>
+          <span class="material-symbols-outlined profile-chevron">expand_more</span>
+        </button>
+
+        <mat-menu #profileMenu="matMenu" class="profile-menu-panel" xPosition="before">
+          <div class="profile-menu-header" (click)="$event.stopPropagation()">
+            <div class="avatar large">{{ (auth.currentUser()?.displayName || auth.currentUser()?.email || 'W').charAt(0).toUpperCase() }}</div>
+            <div><strong>{{ auth.currentUser()?.displayName || 'Usuario WinSuite' }}</strong><small>{{ auth.currentUser()?.email }}</small></div>
+          </div>
+          <div class="menu-section-label" (click)="$event.stopPropagation()">Empresa activa</div>
+          @for (company of auth.companies(); track company.tenantId) {
+            <button mat-menu-item type="button" (click)="switchCompany(company.tenantId)">
+              <span class="material-symbols-outlined">{{ company.tenantId === auth.tenantId() ? 'check_circle' : 'domain' }}</span>
+              <span class="company-option"><strong>{{ company.name }}</strong><small>{{ company.role }}</small></span>
+            </button>
+          }
+          <div class="menu-divider" (click)="$event.stopPropagation()"></div>
+          <button mat-menu-item type="button" (click)="openCreateCompany()" [disabled]="auth.ownedCompanyCount() >= auth.ownedCompanyLimit()">
+            <span class="material-symbols-outlined">domain_add</span><span>Crear nueva empresa</span>
+          </button>
+          @if (auth.ownedCompanyCount() >= auth.ownedCompanyLimit()) {
+            <p class="plan-limit" (click)="$event.stopPropagation()">Tu plan permite {{ auth.ownedCompanyLimit() }} empresas propias.</p>
+          }
+          <button mat-menu-item type="button" routerLink="/workspace/empresa/general">
+            <span class="material-symbols-outlined">settings</span><span>Configurar empresa</span>
+          </button>
+          <button mat-menu-item type="button" (click)="onLogout()">
+            <span class="material-symbols-outlined">logout</span><span>Cerrar sesion</span>
+          </button>
+        </mat-menu>
       </div>
     </header>
 

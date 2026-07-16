@@ -81,20 +81,24 @@ export const routes: Routes = [
           import('./features/ventas/ventas.routes').then((routes) => routes.VENTAS_ROUTES),
       },
       {
-        path: 'colaboradores',
-        canMatch: [moduleAccessGuard('colaboradores', 'read')],
-        loadChildren: () =>
-          import('./features/colaboradores/colaboradores.routes').then(
-            (routes) => routes.COLABORADORES_ROUTES,
-          ),
+        path: 'empresa',
+        loadChildren: () => import('./features/empresa/empresa.routes').then((routes) => routes.EMPRESA_ROUTES),
       },
       {
+        path: 'colaboradores',
+        redirectTo: 'empresa/colaboradores',
+        pathMatch: 'full',
+      },
+      { path: 'colaboradores/lista', redirectTo: 'empresa/colaboradores', pathMatch: 'full' },
+      { path: 'colaboradores/nuevo', redirectTo: 'empresa/colaboradores/nuevo', pathMatch: 'full' },
+      { path: 'colaboradores/roles', redirectTo: 'empresa/roles', pathMatch: 'full' },
+      { path: 'colaboradores/roles/nuevo', redirectTo: 'empresa/roles/nuevo', pathMatch: 'full' },
+      { path: 'colaboradores/roles/:id/editar', redirectTo: 'empresa/roles/:id/editar', pathMatch: 'full' },
+      { path: 'colaboradores/:id/editar', redirectTo: 'empresa/colaboradores/:id/editar', pathMatch: 'full' },
+      {
         path: 'auditoria',
-        canMatch: [moduleAccessGuard('colaboradores', 'read')],
-        loadComponent: () =>
-          import('./features/auditoria/pages/auditoria-page/auditoria-page.component').then(
-            (component) => component.AuditoriaPageComponent,
-          ),
+        redirectTo: 'empresa/auditoria',
+        pathMatch: 'full',
       },
       {
         path: 'archivos',
@@ -144,9 +148,10 @@ export const routes: Routes = [
       },
       {
         path: 'configuracion',
-        loadChildren: () =>
-          import('./features/settings/settings.routes').then((routes) => routes.SETTINGS_ROUTES),
+        redirectTo: 'empresa/general',
+        pathMatch: 'full',
       },
+      { path: 'configuracion/modulos', redirectTo: 'empresa/modulos', pathMatch: 'full' },
     ],
   },
   {

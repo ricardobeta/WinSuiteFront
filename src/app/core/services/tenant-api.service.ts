@@ -8,6 +8,7 @@ import {
   CollaboratorPayload,
   CreateTenantPayload,
   TenantApiResponse,
+  TenantAuthorizationContext,
   TenantRoleDefinition,
   TenantUserUpdatePayload
 } from '../models/auth.models';
@@ -27,6 +28,14 @@ export class TenantApiService {
 
   getCurrentTenant(): Observable<TenantApiResponse> {
     return this.http.get<TenantApiResponse>(`${environment.apiBaseUrl}/api/tenants/current`);
+  }
+
+  getAuthorizationContext(): Observable<TenantAuthorizationContext> {
+    return this.http.get<TenantAuthorizationContext>(`${environment.apiBaseUrl}/api/tenants/current/context`);
+  }
+
+  updateTenantProfile(payload: { name: string; mobilePhone: string; email: string }): Observable<TenantApiResponse> {
+    return this.http.patch<TenantApiResponse>(`${environment.apiBaseUrl}/api/tenants/current/profile`, payload);
   }
 
   updateActiveModules(activeModules: string[]): Observable<TenantApiResponse> {

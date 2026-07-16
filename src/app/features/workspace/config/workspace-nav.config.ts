@@ -311,47 +311,6 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
     ]
   },
   {
-    id: 'colaboradores',
-    label: moduleMeta('colaboradores').label,
-    icon: moduleMeta('colaboradores').icon,
-    requiredModule: 'colaboradores',
-    requiredAction: 'read',
-    children: [
-      {
-        id: 'colaboradores-lista',
-        label: 'Lista',
-        icon: 'groups',
-        route: '/workspace/colaboradores/lista',
-        requiredModule: 'colaboradores',
-        requiredAction: 'read'
-      },
-      {
-        id: 'colaboradores-crear',
-        label: 'Crear',
-        icon: 'person_add',
-        route: '/workspace/colaboradores/nuevo',
-        requiredModule: 'colaboradores',
-        requiredAction: 'create'
-      },
-      {
-        id: 'colaboradores-roles',
-        label: 'Roles',
-        icon: 'admin_panel_settings',
-        route: '/workspace/colaboradores/roles',
-        requiredModule: 'colaboradores',
-        requiredAction: 'update'
-      }
-    ]
-  },
-  {
-    id: 'auditoria',
-    label: 'Auditoria',
-    icon: 'manage_search',
-    route: '/workspace/auditoria',
-    requiredModule: 'colaboradores',
-    requiredAction: 'read'
-  },
-  {
     id: 'archivos',
     label: moduleMeta('archivos').label,
     icon: moduleMeta('archivos').icon,

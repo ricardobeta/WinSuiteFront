@@ -53,6 +53,11 @@ export class LoginPageComponent {
     await this.router.navigateByUrl('/workspace');
   }
 
+  protected async continueWithGoogle(): Promise<void> {
+    await this.auth.loginWithGoogle();
+    await this.router.navigateByUrl('/workspace');
+  }
+
   protected hasControlError(controlName: 'email' | 'password', errorName: string): boolean {
     const control = this.form.controls[controlName];
     return control.hasError(errorName) && (control.touched || control.dirty);

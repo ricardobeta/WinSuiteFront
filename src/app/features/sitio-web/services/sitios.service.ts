@@ -112,13 +112,17 @@ export class SitiosService {
       actualizadoEn: ahora,
     };
     sitioConfigSchema.parse(config);
+    // Las plantillas y los bloques IA tienen propiedades opcionales. RTDB no
+    // admite undefined; el round-trip conserva null/arrays y elimina solo esas
+    // propiedades antes del update multipath inicial.
+    const contenidoLimpio = JSON.parse(JSON.stringify(contenidoInicial)) as ContenidoSitio;
 
     try {
       await update(ref(this.database), {
         [`${this.getTenantPath()}/${sitioId}/config`]: config,
         [`${this.getTenantPath()}/${sitioId}/borrador`]: {
           meta: { updatedAt: ahora, updatedBy: this.authService.currentUser()?.uid ?? '' },
-          ...contenidoInicial,
+          ...contenidoLimpio,
         },
         [`${this.getResumenPath()}/${sitioId}`]: { config, versionPublicada: null },
       });

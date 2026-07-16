@@ -246,7 +246,9 @@ export class RoleFormComponent implements OnInit {
       ventas: { canCreate: false, canRead: true, canUpdate: false, canDelete: false },
       servicios: { canCreate: false, canRead: true, canUpdate: false, canDelete: false },
       archivos: { canCreate: false, canRead: true, canUpdate: false, canDelete: false },
-      colaboradores: { canCreate: false, canRead: false, canUpdate: false, canDelete: false }
+      empresa_calendario: { canCreate: false, canRead: true, canUpdate: false, canDelete: false },
+      empresa_colaboradores: { canCreate: false, canRead: false, canUpdate: false, canDelete: false },
+      empresa_roles: { canCreate: false, canRead: false, canUpdate: false, canDelete: false }
     };
   }
 

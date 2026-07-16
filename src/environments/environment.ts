@@ -3,6 +3,7 @@ import { FirebaseOptions } from 'firebase/app';
 export interface AppEnvironment {
   production: boolean;
   firebase: FirebaseOptions;
+  firebaseVapidKey?: string;
   sitesFirebase: FirebaseOptions;
   apiBaseUrl: string;
   // URL del worker SRI local (agente) en la maquina del cliente.
@@ -42,6 +43,7 @@ export const environment: AppEnvironment = {
     appId: "1:1098700113511:web:ca5e38d15972a3c016f6c2",
     measurementId: "G-S0SRTBVSXJ"
   },
+  firebaseVapidKey: '',
   // Durante la migracion puede apuntar al proyecto principal. En despliegue debe
   // reemplazarse por la configuracion publica del proyecto exclusivo de sitios.
   sitesFirebase: {

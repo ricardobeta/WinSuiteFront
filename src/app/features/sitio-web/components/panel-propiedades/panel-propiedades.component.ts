@@ -565,6 +565,23 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
               [ngModel]="b.textoBoton"
               (ngModelChange)="patch({ textoBoton: $event })"
           /></label>
+          <h4>Colores del botón</h4>
+          <div class="fila">
+            <label>Fondo
+              <input type="color" [ngModel]="b.colorBotonFondo ?? '#2563eb'"
+                (ngModelChange)="patch({ colorBotonFondo: $event })" />
+            </label>
+            <label>Texto
+              <input type="color" [ngModel]="b.colorBotonTexto ?? '#ffffff'"
+                (ngModelChange)="patch({ colorBotonTexto: $event })" />
+            </label>
+          </div>
+          @if (b.colorBotonFondo || b.colorBotonTexto) {
+            <button type="button" class="agregar"
+              (click)="patch({ colorBotonFondo: undefined, colorBotonTexto: undefined })">
+              Usar colores del tema
+            </button>
+          }
         }
         @case ('planes') {
           <p class="ayuda">
@@ -650,6 +667,33 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
               >
                 Usar colores del tema
               </button>
+              <div class="fila">
+                <label>
+                  Fondo boton
+                  <input
+                    type="color"
+                    [ngModel]="plan.ctaColorFondo ?? '#2563eb'"
+                    (ngModelChange)="patchPlan(i, { ctaColorFondo: $event })"
+                  />
+                </label>
+                <label>
+                  Texto boton
+                  <input
+                    type="color"
+                    [ngModel]="plan.ctaColorTexto ?? '#ffffff'"
+                    (ngModelChange)="patchPlan(i, { ctaColorTexto: $event })"
+                  />
+                </label>
+              </div>
+              @if (plan.ctaColorFondo || plan.ctaColorTexto) {
+                <button
+                  type="button"
+                  class="agregar"
+                  (click)="patchPlan(i, { ctaColorFondo: undefined, ctaColorTexto: undefined })"
+                >
+                  Boton con colores del tema
+                </button>
+              }
               <button
                 type="button"
                 class="quitar"
@@ -674,6 +718,23 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
               [ngModel]="b.enlace"
               (ngModelChange)="patch({ enlace: $event })"
           /></label>
+          <h4>Colores del botón</h4>
+          <div class="fila">
+            <label>Fondo
+              <input type="color" [ngModel]="b.colorBotonFondo ?? '#ffffff'"
+                (ngModelChange)="patch({ colorBotonFondo: $event })" />
+            </label>
+            <label>Texto
+              <input type="color" [ngModel]="b.colorBotonTexto ?? '#2563eb'"
+                (ngModelChange)="patch({ colorBotonTexto: $event })" />
+            </label>
+          </div>
+          @if (b.colorBotonFondo || b.colorBotonTexto) {
+            <button type="button" class="agregar"
+              (click)="patch({ colorBotonFondo: undefined, colorBotonTexto: undefined })">
+              Usar colores automáticos
+            </button>
+          }
           <p class="ayuda">El titulo, texto y boton se editan sobre el bloque.</p>
         }
         @case ('caracteristicas') {
@@ -994,6 +1055,23 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
               [ngModel]="b.mensajeExito"
               (ngModelChange)="patch({ mensajeExito: $event })"
           /></label>
+          <h4>Colores del botón enviar</h4>
+          <div class="fila">
+            <label>Fondo
+              <input type="color" [ngModel]="b.colorBotonFondo ?? '#2563eb'"
+                (ngModelChange)="patch({ colorBotonFondo: $event })" />
+            </label>
+            <label>Texto
+              <input type="color" [ngModel]="b.colorBotonTexto ?? '#ffffff'"
+                (ngModelChange)="patch({ colorBotonTexto: $event })" />
+            </label>
+          </div>
+          @if (b.colorBotonFondo || b.colorBotonTexto) {
+            <button type="button" class="agregar"
+              (click)="patch({ colorBotonFondo: undefined, colorBotonTexto: undefined })">
+              Usar colores del tema
+            </button>
+          }
           @if (b.campos?.length) {
             <p class="ayuda">
               Este bloque aun usa campos propios (version anterior). Al elegir un formulario
@@ -1080,6 +1158,23 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
               Mostrar precio
             </label>
           </div>
+          <h4>Colores del botón "Agregar"</h4>
+          <div class="fila">
+            <label>Fondo
+              <input type="color" [ngModel]="b.colorBotonFondo ?? '#2563eb'"
+                (ngModelChange)="patch({ colorBotonFondo: $event })" />
+            </label>
+            <label>Texto
+              <input type="color" [ngModel]="b.colorBotonTexto ?? '#ffffff'"
+                (ngModelChange)="patch({ colorBotonTexto: $event })" />
+            </label>
+          </div>
+          @if (b.colorBotonFondo || b.colorBotonTexto) {
+            <button type="button" class="agregar"
+              (click)="patch({ colorBotonFondo: undefined, colorBotonTexto: undefined })">
+              Usar colores del tema
+            </button>
+          }
           <p class="ayuda">
             Cada tarjeta abre la pagina propia del producto (con su descripcion larga y galeria,
             editable en la pestaña Catalogo).
@@ -1345,6 +1440,31 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
             <label class="check">
               <input
                 type="checkbox"
+                [ngModel]="!!divisor.gradiente"
+                (ngModelChange)="alternarGradienteDivisor(posicion, $event)"
+              />
+              Degradado (continua un fondo gradiente)
+            </label>
+            @if (divisor.gradiente; as g) {
+              <div class="fila">
+                <label class="mini">Desde
+                  <input type="color" [ngModel]="g.desde"
+                    (ngModelChange)="patchGradienteDivisor(posicion, { desde: $event })" />
+                </label>
+                <label class="mini">Hasta
+                  <input type="color" [ngModel]="g.hasta"
+                    (ngModelChange)="patchGradienteDivisor(posicion, { hasta: $event })" />
+                </label>
+              </div>
+              <label>
+                Angulo ({{ g.angulo }}°)
+                <input type="range" min="0" max="360" step="15" [ngModel]="g.angulo"
+                  (ngModelChange)="patchGradienteDivisor(posicion, { angulo: numero($event) })" />
+              </label>
+            }
+            <label class="check">
+              <input
+                type="checkbox"
                 [ngModel]="divisor.voltear ?? false"
                 (ngModelChange)="patchDivisor(posicion, { voltear: $event || undefined })"
               />
@@ -1354,8 +1474,8 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
         </div>
       }
       <p class="ayuda">
-        Tip: usa como color del divisor el fondo de la seccion vecina para lograr el efecto de
-        "ola" entre bloques.
+        Tip: para continuar un fondo gradiente, activa "Degradado" con los mismos colores del fondo
+        de la seccion vecina; asi la "ola" mantiene el degradado.
       </p>
 
       @if (viewport() !== 'desktop' && tieneOverridesVp()) {
@@ -1811,7 +1931,13 @@ export class PanelPropiedadesComponent {
 
   // --- Divisores de seccion ---
 
-  divisorDe(posicion: string): { tipo: string; color: string; altura?: number; voltear?: boolean } | undefined {
+  divisorDe(posicion: string): {
+    tipo: string;
+    color: string;
+    altura?: number;
+    voltear?: boolean;
+    gradiente?: { desde: string; hasta: string; angulo: number };
+  } | undefined {
     return (this.b.estilos ?? {})[posicion];
   }
 
@@ -1834,6 +1960,25 @@ export class PanelPropiedadesComponent {
       if (nuevo[clave] === undefined) delete nuevo[clave];
     }
     this.patchEstilos({ [posicion]: nuevo });
+  }
+
+  alternarGradienteDivisor(posicion: string, activar: boolean): void {
+    const actual = this.divisorDe(posicion);
+    if (!actual) return;
+    if (!activar) {
+      this.patchDivisor(posicion, { gradiente: undefined });
+      return;
+    }
+    // Arranca el degradado desde el color plano actual del divisor.
+    this.patchDivisor(posicion, {
+      gradiente: { desde: actual.color, hasta: this.b.estilos?.fondo ?? '#ffffff', angulo: 180 },
+    });
+  }
+
+  patchGradienteDivisor(posicion: string, cambios: object): void {
+    const actual = this.divisorDe(posicion)?.gradiente;
+    if (!actual) return;
+    this.patchDivisor(posicion, { gradiente: { ...actual, ...cambios } });
   }
 
   quitarOverridesVp(): void {

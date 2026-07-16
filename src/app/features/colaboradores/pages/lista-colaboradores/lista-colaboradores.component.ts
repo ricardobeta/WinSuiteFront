@@ -39,8 +39,8 @@ import { ColaboradoresService } from '../../services/colaboradores.service';
           <h2>Lista de colaboradores</h2>
           <p>Consulta colaboradores y ajusta su acceso por rol.</p>
         </div>
-        @if (authorization.canAccess('colaboradores', 'create')) {
-          <a mat-raised-button color="primary" routerLink="/workspace/colaboradores/nuevo">
+        @if (authorization.canAccess('empresa_colaboradores', 'create')) {
+          <a mat-raised-button color="primary" routerLink="/workspace/empresa/colaboradores/nuevo">
             <mat-icon>person_add</mat-icon>
             Crear colaborador
           </a>
@@ -76,13 +76,13 @@ import { ColaboradoresService } from '../../services/colaboradores.service';
           <ng-container matColumnDef="acciones">
             <th mat-header-cell *matHeaderCellDef>Acciones</th>
             <td mat-cell *matCellDef="let row">
-              @if (authorization.canAccess('colaboradores', 'update')) {
+              @if (authorization.canAccess('empresa_colaboradores', 'update')) {
                 <button mat-icon-button color="primary" type="button" matTooltip="Editar" (click)="editar(row)">
                   <mat-icon>edit</mat-icon>
                 </button>
               }
 
-              @if (authorization.canAccess('colaboradores', 'delete') && row.active) {
+              @if (authorization.canAccess('empresa_colaboradores', 'delete') && row.active) {
                 <button mat-icon-button color="warn" type="button" matTooltip="Desactivar" (click)="desactivar(row)">
                   <mat-icon>person_off</mat-icon>
                 </button>
@@ -173,7 +173,7 @@ export class ListaColaboradoresComponent implements OnInit {
   }
 
   protected editar(user: AppUserProfile): void {
-    void this.router.navigate(['/workspace/colaboradores', user.userId, 'editar']);
+    void this.router.navigate(['/workspace/empresa/colaboradores', user.userId, 'editar']);
   }
 
   protected desactivar(user: AppUserProfile): void {

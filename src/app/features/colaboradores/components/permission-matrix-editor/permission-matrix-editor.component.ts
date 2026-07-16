@@ -33,7 +33,7 @@ export interface PermissionMatrixModel {
         <tbody>
           @for (moduleKey of modules; track moduleKey) {
             <tr>
-              <td class="module-name">{{ moduleKey }}</td>
+              <td class="module-name">{{ moduleLabel(moduleKey) }}</td>
               <td class="permission-cell">
                 <mat-checkbox
                   [checked]="getPermission(moduleKey)?.canCreate ?? false"
@@ -143,7 +143,7 @@ export interface PermissionMatrixModel {
 })
 export class PermissionMatrixEditorComponent implements OnInit {
   @Input() permissions: PermissionMatrixModel = {};
-  @Input() modules: string[] = ['clientes', 'facturacion', 'inventario', 'contabilidad', 'ventas', 'servicios', 'archivos', 'colaboradores'];
+  @Input() modules: string[] = ['clientes', 'facturacion', 'inventario', 'contabilidad', 'ventas', 'servicios', 'archivos', 'empresa_calendario', 'empresa_colaboradores', 'empresa_roles'];
 
   @Output() permissionsChanged = new EventEmitter<PermissionMatrixModel>();
 
@@ -176,6 +176,14 @@ export class PermissionMatrixEditorComponent implements OnInit {
    */
   getPermission(moduleKey: string): RolePermission | undefined {
     return this.permissions[moduleKey];
+  }
+
+  moduleLabel(moduleKey: string): string {
+    return ({
+      clientes: 'Clientes', facturacion: 'Facturacion', inventario: 'Inventario', contabilidad: 'Contabilidad',
+      ventas: 'Ventas', servicios: 'Servicios', archivos: 'Archivos', empresa_calendario: 'Calendario y eventos',
+      empresa_colaboradores: 'Colaboradores', empresa_roles: 'Roles y permisos'
+    } as Record<string, string>)[moduleKey] ?? moduleKey;
   }
 
   /**

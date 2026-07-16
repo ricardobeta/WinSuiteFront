@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { AfterViewInit, Component, DestroyRef, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, DestroyRef, Injector, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatChipsModule } from '@angular/material/chips';
@@ -457,6 +457,7 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
   private readonly sitioMediaService = inject(SitioMediaService);
   private readonly authorization = inject(AuthorizationService);
   private readonly dialog = inject(MatDialog);
+  private readonly injector = inject(Injector);
   private readonly snackBar = inject(MatSnackBar);
   private readonly destroyRef = inject(DestroyRef);
   private readonly fb = inject(FormBuilder);
@@ -658,6 +659,7 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
   protected openSelector(): void {
     const sites = this.isSitesModuleSelected();
     const dialogRef = this.dialog.open(ArchivoSelectorDialogComponent, {
+      injector: this.injector,
       width: 'min(1100px, 96vw)',
       maxWidth: '96vw',
       disableClose: true,

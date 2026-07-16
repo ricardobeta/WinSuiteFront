@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Injector, inject, input, output, signal } from '@angular/core';
 import { MatDialog } from '@angular/material/dialog';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
@@ -101,6 +101,7 @@ export class SelectorImagenComponent {
   private readonly mediaService = inject(SitioMediaService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly dialog = inject(MatDialog);
+  private readonly injector = inject(Injector);
 
   /** Abre el popup compartido de archivos de winsuite (buscar/reutilizar/subir). */
   async abrirArchivos(): Promise<void> {
@@ -109,6 +110,7 @@ export class SelectorImagenComponent {
       unknown,
       ArchivoSelectorDialogResult | null
     >(ArchivoSelectorDialogComponent, {
+      injector: this.injector,
       data: {
         title: 'Imagenes de tu sitio',
         subtitle: 'Reutiliza una imagen ya subida o carga una nueva.',

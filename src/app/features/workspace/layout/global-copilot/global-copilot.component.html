@@ -1,0 +1,84 @@
+@if (isOpen()) {
+  <button type="button" class="copilot-backdrop" aria-label="Cerrar copiloto" (click)="toggle()"></button>
+  <aside id="global-copilot-panel" class="copilot-panel" aria-label="Copiloto global de WinSuite">
+    <header>
+      <div class="copilot-brand">
+        <span class="material-symbols-outlined">auto_awesome</span>
+        <div>
+          <strong>Copiloto WinSuite</strong>
+          <small>{{ context.module }} · {{ context.page }}</small>
+        </div>
+      </div>
+      <button type="button" class="icon-button" aria-label="Cerrar copiloto" (click)="toggle()">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </header>
+
+    <section class="conversation" aria-live="polite">
+      @if (messages().length === 0) {
+        <div class="welcome-card">
+          <span class="material-symbols-outlined">neurology</span>
+          <h2>¿En que te ayudo?</h2>
+          <p>Puedo explicarte esta pantalla y guiarte por los procesos de WinSuite.</p>
+          <button type="button" (click)="useExample('Explicame como funciona esta pantalla')">
+            Explicame esta pantalla
+          </button>
+          <button type="button" (click)="useExample('¿Que pasos debo seguir en este modulo?')">
+            ¿Que pasos debo seguir?
+          </button>
+        </div>
+      }
+
+      @for (message of messages(); track $index) {
+        <article class="message" [class.user-message]="message.role === 'user'">
+          <div class="message-label">{{ message.role === 'user' ? 'Tu' : 'Copiloto' }}</div>
+          <p>{{ message.text }}</p>
+          @if (message.sources?.length) {
+            <div class="sources">
+              <span>Fuentes consultadas</span>
+              @for (source of message.sources; track source) {
+                <small>{{ source }}</small>
+              }
+            </div>
+          }
+          @for (suggestion of message.navigation ?? []; track suggestion.route) {
+            <button type="button" class="route-button" (click)="navigate(suggestion.route)">
+              {{ suggestion.label }}
+              <span class="material-symbols-outlined">arrow_forward</span>
+            </button>
+          }
+        </article>
+      }
+      @if (isSending()) {
+        <div class="thinking"><span></span><span></span><span></span> Consultando WinSuite...</div>
+      }
+    </section>
+
+    <footer>
+      <textarea
+        rows="2"
+        maxlength="4000"
+        aria-label="Pregunta para el copiloto"
+        placeholder="Pregunta sobre WinSuite..."
+        [value]="draft()"
+        (input)="updateDraft($event)"
+        (keydown)="handleKeydown($event)"
+      ></textarea>
+      <button type="button" class="send-button" aria-label="Enviar pregunta" [disabled]="!draft().trim() || isSending()" (click)="send()">
+        <span class="material-symbols-outlined">arrow_upward</span>
+      </button>
+      <small>Las acciones y cifras en vivo se habilitaran mediante funciones seguras.</small>
+    </footer>
+  </aside>
+}
+
+<button
+  type="button"
+  class="copilot-trigger"
+  [attr.aria-label]="isOpen() ? 'Cerrar Copiloto WinSuite' : 'Abrir Copiloto WinSuite'"
+  [attr.aria-expanded]="isOpen()"
+  aria-controls="global-copilot-panel"
+  (click)="toggle()"
+>
+  <span class="material-symbols-outlined">{{ isOpen() ? 'close' : 'auto_awesome' }}</span>
+</button>

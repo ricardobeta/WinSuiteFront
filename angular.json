@@ -31,6 +31,9 @@
             ],
             "styles": [
               "node_modules/@foblex/flow/styles/default.scss",
+              "node_modules/@fullcalendar/angular/skeleton.css",
+              "node_modules/@fullcalendar/angular/themes/monarch/theme.css",
+              "node_modules/@fullcalendar/angular/themes/monarch/palettes/blue.css",
               "src/styles.scss"
             ]
           },

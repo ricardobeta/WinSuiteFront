@@ -158,6 +158,15 @@
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
+  overflow: hidden;
+}
+
+.crumb-muted,
+.crumb-active {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .crumb-muted {
@@ -172,6 +181,7 @@
   display: flex;
   align-items: center;
   gap: var(--space-4);
+  flex: 0 0 auto;
 }
 
 .theme-toggle-btn {
@@ -182,31 +192,42 @@
   box-shadow: none !important;
 }
 
-.search-box {
-  border-radius: var(--tc-radius-lg);
-  background: var(--tc-surface-container-low) !important;
-  display: inline-flex;
-  align-items: center;
-  min-width: 260px;
-  gap: var(--space-2);
-  padding: 0 12px;
-  height: 40px;
-  border: none !important;
-}
-
-.search-box input {
-  border: 0;
-  outline: 0;
-  background: transparent;
-  width: 100%;
-}
-
 .profile-chip {
   display: inline-flex;
   align-items: center;
   gap: var(--space-3);
   padding-left: var(--space-4);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
 }
+
+.notification-trigger { position: relative; background: var(--tc-surface-container-low) !important; border: 0 !important; }
+.notification-badge { position: absolute; top: -4px; right: -5px; min-width: 18px; height: 18px; padding: 0 4px; border: 2px solid var(--background); border-radius: 999px; display: grid; place-items: center; background: var(--destructive); color: white; font-size: 10px; font-weight: 700; }
+:host ::ng-deep .notifications-menu-panel { width: min(390px, 94vw); max-width: 94vw; }
+.notifications-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; padding: .85rem 1rem .65rem; }
+.notifications-heading > div { display: grid; } .notifications-heading small { color: var(--muted-foreground); }
+.notifications-heading button { border: 0; background: transparent; color: var(--primary); cursor: pointer; font-weight: 600; }
+.notifications-empty { min-height: 190px; padding: 1.25rem; display: grid; place-content: center; justify-items: center; text-align: center; gap: .35rem; }
+.notifications-empty > span { font-size: 42px; color: var(--muted-foreground); } .notifications-empty small { max-width: 240px; color: var(--muted-foreground); }
+:host ::ng-deep .notification-item { height: auto !important; min-height: 76px; padding-block: .55rem !important; }
+:host ::ng-deep .notification-item .mat-mdc-menu-item-text { display: grid; grid-template-columns: 8px 1fr; align-items: start; gap: .55rem; width: 100%; }
+.notification-dot { width: 7px; height: 7px; margin-top: .45rem; border-radius: 999px; background: transparent; }
+.notification-item.unread .notification-dot { background: var(--primary); }
+.notification-copy { display: grid; min-width: 0; white-space: normal; } .notification-copy strong { font-size: .84rem; } .notification-copy small { color: var(--muted-foreground); line-height: 1.35; } .notification-copy time { margin-top: .2rem; color: var(--muted-foreground); font-size: .69rem; }
+
+.profile-chip:hover { color: var(--primary); }
+.profile-chevron { font-size: 18px; }
+:host ::ng-deep .profile-menu-panel { min-width: 310px; max-width: min(360px, 92vw); }
+.profile-menu-header { display: flex; align-items: center; gap: 0.75rem; padding: 0.9rem 1rem; }
+.profile-menu-header div:last-child, .company-option { display: flex; flex-direction: column; min-width: 0; }
+.profile-menu-header small, .company-option small { color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; }
+.menu-section-label { padding: 0.45rem 1rem 0.25rem; color: var(--muted-foreground); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.1em; }
+.menu-divider { height: 1px; background: var(--tc-ghost-border); margin: 0.35rem 0; }
+.plan-limit { margin: -0.25rem 1rem 0.5rem 3rem; color: var(--muted-foreground); font-size: 0.76rem; line-height: 1.35; }
+.avatar.large { width: 42px; height: 42px; flex: 0 0 auto; }
 
 .profile-text {
   display: grid;
@@ -274,20 +295,13 @@
 
   .topbar {
     padding: 0 var(--space-4);
-    flex-wrap: wrap;
     height: auto;
     min-height: var(--topbar-height);
     padding-block: var(--space-2);
   }
 
   .topbar-actions {
-    width: 100%;
-    justify-content: space-between;
-  }
-
-  .search-box {
-    min-width: 0;
-    flex: 1;
+    justify-content: flex-end;
   }
 }
 
@@ -301,6 +315,5 @@
   }
 
   .topbar-actions { gap: var(--space-2); }
-  .search-box { order: 3; flex-basis: 100%; }
   .profile-chip { padding-left: 0; }
 }

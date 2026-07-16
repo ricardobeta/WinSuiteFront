@@ -8,21 +8,15 @@
     <div class="overlay"></div>
     <div class="hero-content">
       <img class="brand-logo" src="/images/winsuite-logo.png" alt="Winsuite" />
-      <h1>Registro guiado para tu empresa</h1>
+      <h1>Empieza a trabajar en minutos</h1>
       <p class="subtitle">
-        Crea tu cuenta y deja listo el espacio de trabajo para gestionar contabilidad, facturacion y operaciones de tu negocio.
+        Crea tu cuenta. WinSuite preparara tu primera empresa y luego podras completar sus datos cuando quieras.
       </p>
 
-      <div class="steps">
-        @for (step of steps; track step.id) {
-          <div class="step-chip" [class.active]="currentStep() === step.id">
-            <span>{{ step.id }}</span>
-            <div>
-              <strong>{{ step.title }}</strong>
-              <small>{{ step.description }}</small>
-            </div>
-          </div>
-        }
+      <div class="steps benefits">
+        <div class="step-chip active"><span>1</span><div><strong>Una sola cuenta</strong><small>Cambia entre tus empresas con seguridad.</small></div></div>
+        <div class="step-chip"><span>2</span><div><strong>Configuracion despues</strong><small>Sin formularios largos para comenzar.</small></div></div>
+        <div class="step-chip"><span>3</span><div><strong>Tu equipo conectado</strong><small>Roles y permisos por cada empresa.</small></div></div>
       </div>
     </div>
   </section>
@@ -30,14 +24,20 @@
   <section class="form-panel">
     <mat-card appearance="outlined" class="auth-card">
       <h2>Crear cuenta</h2>
-      <p class="muted">Paso {{ currentStep() }} de 3</p>
+      <p class="muted">Solo necesitamos tus datos de acceso.</p>
 
       @if (auth.error(); as apiError) {
         <p class="error-banner">{{ apiError }}</p>
       }
 
-      @if  (currentStep() === 1) {
-        <form [formGroup]="userForm" (ngSubmit)="nextStep()" novalidate>
+      <button mat-stroked-button class="google-button" type="button" [disabled]="auth.loading()" (click)="continueWithGoogle()">
+        <span class="google-mark" aria-hidden="true">G</span>
+        Continuar con Google
+      </button>
+
+      <div class="auth-divider"><span>o registrate con correo</span></div>
+
+        <form [formGroup]="userForm" (ngSubmit)="submit()" novalidate>
           <mat-form-field appearance="outline">
             <mat-label>Nombre completo</mat-label>
             <input matInput formControlName="fullName" />
@@ -88,81 +88,20 @@
             }
           </mat-form-field>
 
-          <button mat-flat-button color="primary" class="full-width" type="submit">
-            Continuar con datos del negocio
-          </button>
-        </form>
-      } @else if (currentStep() === 2) {
-        <form [formGroup]="businessForm" (ngSubmit)="nextStep()" novalidate>
-          <mat-form-field appearance="outline">
-            <mat-label>Nombre del negocio</mat-label>
-            <input matInput formControlName="businessName" />
-            @if (hasBusinessError('businessName', 'required')) {
-              <mat-error>El nombre del negocio es obligatorio.</mat-error>
-            }
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Pais</mat-label>
-            <mat-select formControlName="country">
-              @for (country of countries; track country) {
-                <mat-option [value]="country">{{ country }}</mat-option>
-              }
-            </mat-select>
-            @if (hasBusinessError('country', 'required')) {
-              <mat-error>Selecciona un pais.</mat-error>
-            }
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>Telefono celular</mat-label>
-            <input matInput placeholder="+593999999999" formControlName="mobilePhone" />
-            @if (hasBusinessError('mobilePhone', 'required')) {
-              <mat-error>El telefono celular es obligatorio.</mat-error>
-            } @else if (hasBusinessError('mobilePhone', 'pattern')) {
-              <mat-error>Ingresa un telefono celular valido.</mat-error>
-            }
-          </mat-form-field>
-
-          <div class="actions">
-            <button mat-stroked-button type="button" (click)="prevStep()">Volver</button>
-            <button mat-flat-button color="primary" type="submit">
-              Continuar con modulos
-            </button>
-          </div>
-        </form>
-      } @else {
-        <p class="muted modules-intro">
-          Elige los modulos que necesita tu negocio. Dashboard y Clientes vienen incluidos siempre;
-          el resto lo puedes activar o desactivar despues desde Ajustes.
-        </p>
-
-        <div class="module-grid">
-          @for (module of moduleCatalog; track module.id) {
-            <app-module-card
-              [module]="module"
-              [selected]="isModuleSelected(module.id)"
-              (toggle)="toggleModule(module.id)"
-            />
-          }
-        </div>
-
-        <div class="actions">
-          <button mat-stroked-button type="button" (click)="prevStep()">Volver</button>
-          <button mat-flat-button color="primary" type="button" [disabled]="auth.loading()" (click)="submit()">
+          <button mat-flat-button color="primary" class="full-width" type="submit" [disabled]="auth.loading()">
             @if (auth.loading()) {
               <mat-spinner diameter="18"></mat-spinner>
             } @else {
-              <span>Crear cuenta</span>
+              Crear mi cuenta
             }
           </button>
-        </div>
-      }
+        </form>
 
       <p class="switch-text">
         Ya tienes cuenta?
         <a routerLink="/auth/login">Inicia sesion</a>
       </p>
+      <button mat-button class="copilot-help" type="button" (click)="openHelp()"><mat-icon>auto_awesome</mat-icon>Necesitas ayuda? Pregunta al asistente</button>
     </mat-card>
   </section>
 </div>

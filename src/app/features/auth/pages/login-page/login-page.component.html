@@ -24,6 +24,13 @@
         <p class="error-banner">{{ apiError }}</p>
       }
 
+      <button mat-stroked-button class="google-button" type="button" [disabled]="auth.loading()" (click)="continueWithGoogle()">
+        <span class="google-mark" aria-hidden="true">G</span>
+        Continuar con Google
+      </button>
+
+      <div class="auth-divider"><span>o usa tu correo</span></div>
+
       <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
         <mat-form-field appearance="outline">
           <mat-label>Correo electronico</mat-label>

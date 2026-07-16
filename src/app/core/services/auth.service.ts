@@ -3,18 +3,23 @@ import {
   Auth,
   User,
   createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  linkWithPopup,
+  signInWithCustomToken,
   signInWithEmailAndPassword,
+  signInWithPopup,
   signOut,
   updateProfile
 } from '@angular/fire/auth';
-import { Firestore, doc, serverTimestamp, setDoc } from '@angular/fire/firestore';
 import { firstValueFrom } from 'rxjs';
 
 import {
   AppUserProfile,
+  CompanySummary,
   LoginPayload,
-  RegisterBusinessPayload,
-  RegisterUserPayload
+  RegisterUserPayload,
+  TenantApiResponse,
+  TenantSessionResponse
 } from '../models/auth.models';
 import { RoleDefinition } from '../models/rbac.models';
 import { TenantApiService } from './tenant-api.service';
@@ -37,6 +42,11 @@ export class AuthService {
   readonly tenantId = signal<string | null>(null);
   readonly currentProfile = signal<AppUserProfile | null>(null);
   readonly roles = signal<RoleDefinition[]>([]);
+  readonly companies = signal<CompanySummary[]>([]);
+  readonly currentTenant = signal<TenantApiResponse | null>(null);
+  readonly activeModules = signal<string[]>([]);
+  readonly ownedCompanyLimit = signal(2);
+  readonly ownedCompanyCount = signal(0);
   readonly isAuthenticated = computed(() => this.currentUser() !== null);
   private readonly http = inject(HttpClient);
   private authStateReadyResolver: (() => void) | null = null;
@@ -48,6 +58,7 @@ export class AuthService {
   private readonly initialBootstrapReady = new Promise<void>((resolve) => {
     this.initialBootstrapResolver = resolve;
   });
+  private bootstrapInFlight: Promise<void> | null = null;
 
   constructor() {
     this.restoreTenantFromStorage();
@@ -63,6 +74,9 @@ export class AuthService {
           this.tenantId.set(null);
           this.currentProfile.set(null);
           this.roles.set([]);
+          this.companies.set([]);
+          this.currentTenant.set(null);
+          this.activeModules.set([]);
           this.clearTenantFromStorage();
           return;
         }
@@ -85,9 +99,6 @@ export class AuthService {
       }
     });
 
-    if (this.auth.currentUser) {
-      void this.hydrateTenantId(this.auth.currentUser).then(() => this.loadAuthorizationContext(this.auth.currentUser!.uid));
-    }
   }
 
   async login(payload: LoginPayload): Promise<void> {
@@ -100,10 +111,7 @@ export class AuthService {
       if (token) {
         this.authToken.set(token);
       }
-      await this.verifyAuth();
-      if (this.auth.currentUser?.uid) {
-        await this.loadAuthorizationContext(this.auth.currentUser.uid);
-      }
+      await this.bootstrapSession();
 
     } catch (error: unknown) {
       this.error.set(this.toReadableAuthError(error));
@@ -113,11 +121,7 @@ export class AuthService {
     }
   }
 
-  async register(
-    user: RegisterUserPayload,
-    business: RegisterBusinessPayload,
-    activeModules: string[]
-  ): Promise<void> {
+  async register(user: RegisterUserPayload): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
 
@@ -130,39 +134,9 @@ export class AuthService {
 
       await updateProfile(credential.user, { displayName: user.fullName });
 
-      // Get and store the auth token
       const token = await credential.user.getIdToken();
       this.authToken.set(token);
-
-      await firstValueFrom(
-        this.tenantApi.createTenant({
-          name: business.businessName,
-          ownerId: credential.user.uid,
-          plan: 'free',
-          country: business.country,
-          mobilePhone: business.mobilePhone,
-          activeModules
-        })
-      );
-
-      // Force refresh so the token includes the tenant claim set by backend.
-      const refreshedToken = await credential.user.getIdToken(true);
-      this.authToken.set(refreshedToken);
-
-      console.info('TenantID ', credential.user.tenantId);
-
-      const profile: AppUserProfile = {
-        userId: credential.user.uid,
-        email: user.email,
-        fullName: user.fullName,
-        role: 'ADMIN'
-      };
-
-      await updateProfile(credential.user, { displayName: profile.fullName });
-      
-      await this.verifyAuth();
-      await firstValueFrom(this.tenantApi.createTenantUser(profile));
-      await this.loadAuthorizationContext(credential.user.uid);
+      await this.bootstrapSession();
     } catch (error: unknown) {
       this.error.set(this.toReadableAuthError(error));
       throw error;
@@ -171,12 +145,51 @@ export class AuthService {
     }
   }
 
+  async loginWithGoogle(): Promise<void> {
+    this.loading.set(true);
+    this.error.set(null);
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      await signInWithPopup(this.auth, provider);
+      await this.bootstrapSession();
+    } catch (error: unknown) {
+      this.error.set(this.toReadableAuthError(error));
+      throw error;
+    } finally {
+      this.loading.set(false);
+    }
+  }
+
+  async linkGoogleAccount(): Promise<void> {
+    const user = this.auth.currentUser;
+    if (!user) throw new Error('Debes iniciar sesion para vincular Google.');
+    await linkWithPopup(user, new GoogleAuthProvider());
+  }
+
+  async switchCompany(tenantId: string): Promise<void> {
+    const response = await firstValueFrom(
+      this.http.post<TenantSessionResponse>(`${environment.apiBaseUrl}/api/auth/session/switch`, { tenantId })
+    );
+    await this.activateSession(response);
+  }
+
+  async createCompany(name: string): Promise<void> {
+    const response = await firstValueFrom(
+      this.http.post<TenantSessionResponse>(`${environment.apiBaseUrl}/api/auth/companies`, { name })
+    );
+    await this.activateSession(response);
+  }
+
   async logout(): Promise<void> {
     await signOut(this.auth);
     this.authToken.set(null);
     this.tenantId.set(null);
     this.currentProfile.set(null);
     this.roles.set([]);
+    this.companies.set([]);
+    this.currentTenant.set(null);
+    this.activeModules.set([]);
     this.clearTenantFromStorage();
   }
 
@@ -266,7 +279,7 @@ export class AuthService {
     }
 
     try {
-      await this.verifyAuth();
+      await this.bootstrapSession();
     } catch {
       // Keep cached tenantId if available; consumers can retry later.
       const cachedTenantId = this.normalizeTenantId(this.readTenantFromStorage());
@@ -332,18 +345,52 @@ export class AuthService {
 
   private async loadAuthorizationContext(userId: string): Promise<void> {
     try {
-      const [users, roles] = await Promise.all([
-        firstValueFrom(this.tenantApi.getTenantUsers()),
-        firstValueFrom(this.tenantApi.getRoles())
-      ]);
-
-      this.roles.set(roles ?? []);
-      const profile = users.find((user) => user.userId === userId) ?? null;
-      this.currentProfile.set(profile);
+      const context = await firstValueFrom(this.tenantApi.getAuthorizationContext());
+      this.roles.set(context.roles ?? []);
+      this.currentTenant.set(context.tenant);
+      this.activeModules.set(context.tenant.activeModules ?? []);
+      this.currentProfile.set(context.profile?.userId === userId ? context.profile : null);
     } catch {
       this.currentProfile.set(null);
       this.roles.set([]);
+      this.currentTenant.set(null);
+      this.activeModules.set([]);
     }
+  }
+
+  private async bootstrapSession(): Promise<void> {
+    if (this.bootstrapInFlight) {
+      return this.bootstrapInFlight;
+    }
+    this.bootstrapInFlight = this.performBootstrapSession();
+    try {
+      await this.bootstrapInFlight;
+    } finally {
+      this.bootstrapInFlight = null;
+    }
+  }
+
+  private async performBootstrapSession(): Promise<void> {
+    const preferredTenantId = this.normalizeTenantId(this.readTenantFromStorage());
+    const response = await firstValueFrom(
+      this.http.post<TenantSessionResponse>(`${environment.apiBaseUrl}/api/auth/session/bootstrap`, {
+        preferredTenantId
+      })
+    );
+    await this.activateSession(response);
+  }
+
+  private async activateSession(response: TenantSessionResponse): Promise<void> {
+    const credential = await signInWithCustomToken(this.auth, response.firebaseCustomToken);
+    const token = await credential.user.getIdToken(true);
+    this.currentUser.set(credential.user);
+    this.authToken.set(token);
+    this.tenantId.set(response.activeTenantId);
+    this.persistTenantInStorage(response.activeTenantId);
+    this.companies.set(response.companies ?? []);
+    this.ownedCompanyLimit.set(response.ownedCompanyLimit);
+    this.ownedCompanyCount.set(response.ownedCompanyCount);
+    await this.loadAuthorizationContext(credential.user.uid);
   }
 
   private toReadableAuthError(error: unknown): string {
@@ -358,6 +405,9 @@ export class AuthService {
       'auth/invalid-email': 'El correo no es valido.',
       'auth/weak-password': 'La contrasena debe tener al menos 6 caracteres.',
       'auth/network-request-failed': 'No hay conexion de red.'
+      ,
+      'auth/account-exists-with-different-credential': 'Este correo ya usa contrasena. Inicia sesion y vincula Google desde tu perfil.',
+      'auth/popup-closed-by-user': 'Cerraste la ventana de Google antes de terminar.'
     };
 
     return dictionary[code] ?? 'No se pudo completar la operacion.';

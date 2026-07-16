@@ -111,6 +111,40 @@ form {
   margin-top: 0.25rem;
 }
 
+.google-button {
+  width: 100%;
+  min-height: 46px;
+}
+
+.google-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-right: 0.5rem;
+  border-radius: 50%;
+  background: #fff;
+  color: #4285f4;
+  font-weight: 800;
+  box-shadow: 0 1px 4px rgb(15 23 42 / 18%);
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--tc-ghost-border);
+}
+
 .switch-text {
   margin: 0.5rem 0 0;
   color: var(--muted-foreground);

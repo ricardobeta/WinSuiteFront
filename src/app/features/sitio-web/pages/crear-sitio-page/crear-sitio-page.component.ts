@@ -1,13 +1,17 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Injector, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar } from '@angular/material/snack-bar';
-import { SUBDOMINIO_REGEX, TipoSitio, slugify } from '@winsuite/bloques';
+import { MatDialog } from '@angular/material/dialog';
+import { firstValueFrom } from 'rxjs';
+import { ContenidoSitio, SUBDOMINIO_REGEX, TipoSitio, slugify } from '@winsuite/bloques';
 import { SitiosService } from '../../services/sitios.service';
 import { PLANTILLAS_SITIO, PlantillaSitio, plantillasPorTipo } from '../../config/plantillas';
 import { esSubdominioReservado } from '../../config/subdominios-reservados';
+import { AiSiteChatDialogComponent, AiSiteChatDialogData, AiSiteChatDialogResult } from '../../components/ai-site-chat-dialog/ai-site-chat-dialog.component';
+import { SitioBorradorService } from '../../services/sitio-borrador.service';
 
 type EstadoSubdominio =
   | 'sin-verificar'
@@ -54,6 +58,15 @@ type EstadoSubdominio =
             <mat-icon>web</mat-icon>
             <h3>Landing page</h3>
             <p>Pagina de marketing con formularios para captar clientes.</p>
+          </button>
+          <button class="opcion opcion-ia" (click)="armarConIa()">
+            <div class="muestra muestra-ia">
+              <span class="orbita"></span><mat-icon>smart_toy</mat-icon><strong>Diseño único</strong>
+            </div>
+            <span class="categoria">Copiloto de sitios</span>
+            <h3>Armarlo con IA</h3>
+            <p>¿No sabes por dónde empezar? Conversa con el diseñador: descubre contigo si necesitas tienda o landing y crea todo el sitio.</p>
+            <div class="etiquetas"><span>Colores</span><span>Textos</span><span>Secciones</span></div>
           </button>
         </div>
       }
@@ -233,6 +246,11 @@ type EstadoSubdominio =
       color: white;
     }
     .muestra > mat-icon { position: absolute; right: 18px; top: 44px; font-size: 42px; width: 42px; height: 42px; opacity: 0.9; color: white; }
+    .opcion-ia { border-color: color-mix(in srgb, var(--primary) 45%, var(--tc-ghost-border)); position: relative; overflow: hidden; }
+    .muestra-ia { background: linear-gradient(135deg, #172554, #6d28d9 58%, #ec4899); display: grid; place-content: center; justify-items: center; gap: 5px; }
+    .muestra-ia mat-icon { position: static; font-size: 46px; width: 46px; height: 46px; color: white; animation: robot-flota 2.6s ease-in-out infinite; }
+    .muestra-ia strong { font-size: .78rem; letter-spacing: .08em; text-transform: uppercase; }
+    .orbita { position: absolute; width: 84px; height: 84px; border: 1px solid rgba(255,255,255,.35); border-radius: 50%; animation: orbita 7s linear infinite; }
     .mini-navegacion { height: 24px; padding: 7px 10px; display: flex; gap: 5px; background: rgba(255,255,255,.14); }
     .mini-navegacion span { width: 18px; height: 3px; border-radius: 3px; background: rgba(255,255,255,.7); }
     .mini-contenido { position: absolute; left: 14px; bottom: 18px; display: grid; gap: 6px; }
@@ -287,12 +305,17 @@ type EstadoSubdominio =
       justify-content: space-between;
       margin-top: 24px;
     }
+    @keyframes robot-flota { 50% { transform: translateY(-5px) rotate(3deg); } }
+    @keyframes orbita { to { transform: rotate(360deg); } }
   `,
 })
 export class CrearSitioPageComponent {
   private readonly sitiosService = inject(SitiosService);
+  private readonly borradorService = inject(SitioBorradorService);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly dialog = inject(MatDialog);
+  private readonly injector = inject(Injector);
 
   readonly paso = signal<1 | 2 | 3>(1);
   readonly tipo = signal<TipoSitio | null>(null);
@@ -302,9 +325,12 @@ export class CrearSitioPageComponent {
   readonly estadoSubdominio = signal<EstadoSubdominio>('sin-verificar');
   readonly errorVerificacion = signal('');
   readonly creando = signal(false);
+  readonly contenidoGenerado = signal<ContenidoSitio | null>(null);
 
   private subdominioEditadoManualmente = false;
   private timerVerificacion: ReturnType<typeof setTimeout> | null = null;
+  /** Resultado completo del chat IA (blueprint + imagenes) para persistirlo al crear. */
+  private aiResultado: AiSiteChatDialogResult | null = null;
 
   readonly plantillas = computed(() =>
     this.tipo() ? plantillasPorTipo(this.tipo() as TipoSitio) : PLANTILLAS_SITIO,
@@ -321,11 +347,31 @@ export class CrearSitioPageComponent {
   elegirTipo(tipo: TipoSitio): void {
     this.tipo.set(tipo);
     this.plantilla.set(null);
+    this.contenidoGenerado.set(null);
+    this.aiResultado = null;
     this.paso.set(2);
   }
 
   elegirPlantilla(plantilla: PlantillaSitio): void {
     this.plantilla.set(plantilla);
+    this.contenidoGenerado.set(null);
+    this.aiResultado = null;
+    this.paso.set(3);
+  }
+
+  async armarConIa(): Promise<void> {
+    // Desde el paso 1 el tipo puede ser null: la IA lo descubre conversando.
+    const ref = this.dialog.open<AiSiteChatDialogComponent, AiSiteChatDialogData, AiSiteChatDialogResult>(
+      AiSiteChatDialogComponent,
+      { injector: this.injector, data: { type: this.tipo() }, maxWidth: '96vw', maxHeight: '94vh', autoFocus: false, disableClose: true, panelClass: 'ai-site-chat-panel' },
+    );
+    const resultado = await firstValueFrom(ref.afterClosed());
+    if (!resultado) return;
+    const { contenido, tipo } = resultado;
+    this.aiResultado = resultado;
+    this.tipo.set(tipo);
+    this.contenidoGenerado.set(contenido);
+    this.plantilla.set({ id: 'generada-ia', nombre: 'Diseño creado con IA', descripcion: 'Borrador personalizado y editable.', tipo, colorPreview: contenido.tema.colorPrimario, crearContenido: () => contenido });
     this.paso.set(3);
   }
 
@@ -378,8 +424,16 @@ export class CrearSitioPageComponent {
         tipo,
         nombre: this.nombre().trim(),
         subdominio: this.subdominio(),
-        contenidoInicial: plantilla.crearContenido(),
+        contenidoInicial: this.contenidoGenerado() ?? plantilla.crearContenido(),
       });
+      // Persistir el estado del Copiloto: permite seguir iterando el diseño desde el editor.
+      if (this.aiResultado) {
+        await this.borradorService.guardarIa(sitioId, {
+          type: this.aiResultado.tipo,
+          blueprint: this.aiResultado.blueprint,
+          imageUrls: this.aiResultado.imageUrls,
+        }).catch(() => undefined);
+      }
       this.snackBar.open('Sitio creado. ¡A construir!', 'OK', { duration: 3000 });
       await this.router.navigate(['/workspace/sitio-web', sitioId, 'editor']);
     } catch (error) {
