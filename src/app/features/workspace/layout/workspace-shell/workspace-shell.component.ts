@@ -2,7 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { Router, RouterLink, RouterOutlet, NavigationEnd, ActivatedRoute } from '@angular/router';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { filter, map, startWith } from 'rxjs';
+import { filter, firstValueFrom, map, startWith } from 'rxjs';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -16,6 +16,8 @@ import { GlobalCopilotComponent } from '../global-copilot/global-copilot.compone
 import { CreateCompanyDialogComponent } from '../../components/create-company-dialog/create-company-dialog.component';
 import { CompanyNotification } from '../../../../core/models/notification.models';
 import { CompanyNotificationService } from '../../../../core/services/company-notification.service';
+import { CompanyInvitation } from '../../../../core/models/company-invitation.models';
+import { CompanyInvitationService } from '../../../../core/services/company-invitation.service';
 
 @Component({
   selector: 'app-workspace-shell',
@@ -33,6 +35,11 @@ export class WorkspaceShellComponent {
   protected readonly authorization = inject(AuthorizationService);
   protected readonly theme = inject(ThemeService);
   protected readonly notifications = inject(CompanyNotificationService);
+  protected readonly invitations = inject(CompanyInvitationService);
+  protected readonly invitationActionId = signal<string | null>(null);
+  protected readonly totalNotificationCount = computed(() =>
+    this.notifications.unreadCount() + this.invitations.pending().length
+  );
   protected readonly menuItems = computed(() => this.authorization.filterNavItems(WORKSPACE_NAV_ITEMS));
   protected readonly isSidebarCollapsed = signal(true);
   protected readonly expandedMenuIds = signal<Set<string>>(new Set(['sales']));
@@ -68,6 +75,7 @@ export class WorkspaceShellComponent {
 
   constructor() {
     this.notifications.load().subscribe({ error: () => undefined });
+    this.invitations.load().subscribe({ error: () => undefined });
   }
 
   protected toggleSidebar(): void {
@@ -127,6 +135,36 @@ export class WorkspaceShellComponent {
 
   protected openNotifications(): void {
     this.notifications.load().subscribe({ error: () => this.snackBar.open('No se pudieron cargar las notificaciones.', 'Cerrar', { duration: 3000 }) });
+    this.invitations.load().subscribe({ error: () => this.snackBar.open('No se pudieron cargar las invitaciones.', 'Cerrar', { duration: 3000 }) });
+  }
+
+  protected async acceptInvitation(invitation: CompanyInvitation): Promise<void> {
+    if (this.invitationActionId()) return;
+    this.invitationActionId.set(invitation.id);
+    try {
+      await firstValueFrom(this.invitations.accept(invitation.id));
+      await this.auth.refreshCompanies();
+      const message = this.snackBar.open(`Ahora formas parte de ${invitation.tenantName}.`, 'Cambiar empresa', { duration: 7000 });
+      message.onAction().subscribe(() => void this.switchCompany(invitation.tenantId));
+    } catch {
+      this.snackBar.open('No se pudo aceptar la invitación.', 'Cerrar', { duration: 3600 });
+      this.invitations.load().subscribe({ error: () => undefined });
+    } finally {
+      this.invitationActionId.set(null);
+    }
+  }
+
+  protected async rejectInvitation(invitation: CompanyInvitation): Promise<void> {
+    if (this.invitationActionId()) return;
+    this.invitationActionId.set(invitation.id);
+    try {
+      await firstValueFrom(this.invitations.reject(invitation.id));
+      this.snackBar.open(`Invitación de ${invitation.tenantName} rechazada.`, 'Cerrar', { duration: 3000 });
+    } catch {
+      this.snackBar.open('No se pudo responder la invitación.', 'Cerrar', { duration: 3600 });
+    } finally {
+      this.invitationActionId.set(null);
+    }
   }
 
   protected openNotification(item: CompanyNotification): void {

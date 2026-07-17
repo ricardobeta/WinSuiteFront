@@ -5,7 +5,9 @@ service firebase.storage {
 
     function esUsuarioDelTenant(tenantId) {
       return request.auth != null
-        && request.auth.token.tenantId == tenantId;
+        && request.auth.token.tenantId == tenantId
+        && request.auth.token.sessionId != null
+        && request.auth.token.sessionVersion != null;
     }
 
     // Archivos generales, XML, PDF, Excel e imágenes del negocio.

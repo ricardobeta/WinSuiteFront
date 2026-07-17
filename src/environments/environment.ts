@@ -24,7 +24,7 @@ export const environment: AppEnvironment = {
   production: false,
   apiBaseUrl: 'http://localhost:8080',
   sriWorkerBaseUrl: 'http://127.0.0.1:8010',
-  sriWorkerMinVersion: '1.0.014',
+  sriWorkerMinVersion: '1.0.020',
   support: {
     whatsappPhone: '',
     whatsappMessage: 'Hola, necesito ayuda con Winsuite.'

@@ -54,6 +54,8 @@ export interface TenantSessionResponse {
   email: string;
   activeTenantId: string;
   firebaseCustomToken: string;
+  sessionId: string;
+  sessionVersion: number;
   companies: CompanySummary[];
   ownedCompanyLimit: number;
   ownedCompanyCount: number;
@@ -82,7 +84,7 @@ export interface AppUserProfile {
 export interface CollaboratorPayload {
   fullName: string;
   email: string;
-  password: string;
+  password?: string;
   role: string;
 }
 

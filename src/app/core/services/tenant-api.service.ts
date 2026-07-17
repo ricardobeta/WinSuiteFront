@@ -12,6 +12,7 @@ import {
   TenantRoleDefinition,
   TenantUserUpdatePayload
 } from '../models/auth.models';
+import { CollaboratorEmailStatus, CollaboratorProvisioningResult } from '../models/company-invitation.models';
 
 @Injectable({
   providedIn: 'root'
@@ -56,8 +57,12 @@ export class TenantApiService {
     return this.http.get<AppUserProfile[]>(`${environment.apiBaseUrl}/api/tenants/current/users`);
   }
 
-  createCollaborator(payload: CollaboratorPayload): Observable<AppUserProfile> {
-    return this.http.post<AppUserProfile>(`${environment.apiBaseUrl}/api/tenants/current/collaborators`, payload);
+  checkCollaboratorEmail(email: string): Observable<CollaboratorEmailStatus> {
+    return this.http.post<CollaboratorEmailStatus>(`${environment.apiBaseUrl}/api/tenants/current/collaborators/check-email`, { email });
+  }
+
+  createCollaborator(payload: CollaboratorPayload): Observable<CollaboratorProvisioningResult> {
+    return this.http.post<CollaboratorProvisioningResult>(`${environment.apiBaseUrl}/api/tenants/current/collaborators`, payload);
   }
 
   updateTenantUser(userId: string, payload: TenantUserUpdatePayload): Observable<AppUserProfile> {

@@ -24,6 +24,7 @@ import {
 import { RoleDefinition } from '../models/rbac.models';
 import { TenantApiService } from './tenant-api.service';
 import { HttpClient } from '@angular/common/http';
+import { HttpErrorResponse } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
 
 @Injectable({
@@ -31,6 +32,7 @@ import { environment } from '../../../environments/environment';
 })
 export class AuthService {
   private static readonly TENANT_STORAGE_KEY = 'winsuite.tenantId';
+  private static readonly SESSION_STORAGE_KEY = 'winsuite.authSessionId';
 
   private readonly auth = inject(Auth);
   private readonly tenantApi = inject(TenantApiService);
@@ -59,9 +61,21 @@ export class AuthService {
     this.initialBootstrapResolver = resolve;
   });
   private bootstrapInFlight: Promise<void> | null = null;
+  private activatingSession = false;
+  private readonly deviceSessionId = this.getOrCreateDeviceSessionId();
 
   constructor() {
     this.restoreTenantFromStorage();
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', event => {
+        if (event.key === AuthService.TENANT_STORAGE_KEY
+            && this.currentUser()
+            && this.normalizeTenantId(event.newValue) !== this.tenantId()) {
+          window.location.reload();
+        }
+      });
+    }
 
     this.auth.onAuthStateChanged(async (user) => {
       this.currentUser.set(user);
@@ -169,19 +183,36 @@ export class AuthService {
 
   async switchCompany(tenantId: string): Promise<void> {
     const response = await firstValueFrom(
-      this.http.post<TenantSessionResponse>(`${environment.apiBaseUrl}/api/auth/session/switch`, { tenantId })
+      this.http.post<TenantSessionResponse>(`${environment.apiBaseUrl}/api/auth/session/switch`, {
+        tenantId,
+        sessionId: this.deviceSessionId
+      })
     );
     await this.activateSession(response);
   }
 
   async createCompany(name: string): Promise<void> {
     const response = await firstValueFrom(
-      this.http.post<TenantSessionResponse>(`${environment.apiBaseUrl}/api/auth/companies`, { name })
+      this.http.post<TenantSessionResponse>(`${environment.apiBaseUrl}/api/auth/companies`, {
+        name,
+        sessionId: this.deviceSessionId
+      })
     );
     await this.activateSession(response);
   }
 
+  async refreshCompanies(): Promise<void> {
+    await this.bootstrapSession();
+  }
+
   async logout(): Promise<void> {
+    try {
+      await firstValueFrom(this.http.post<void>(`${environment.apiBaseUrl}/api/auth/session/logout`, {
+        sessionId: this.deviceSessionId
+      }));
+    } catch {
+      // Firebase sign-out must still complete if the server is temporarily unavailable.
+    }
     await signOut(this.auth);
     this.authToken.set(null);
     this.tenantId.set(null);
@@ -272,7 +303,7 @@ export class AuthService {
       if (tenantId) {
         this.tenantId.set(tenantId);
         this.persistTenantInStorage(tenantId);
-        return;
+        if (this.activatingSession) return;
       }
     } catch {
       // Ignore and fallback to backend verification.
@@ -280,7 +311,12 @@ export class AuthService {
 
     try {
       await this.bootstrapSession();
-    } catch {
+    } catch (error: unknown) {
+      if (error instanceof HttpErrorResponse && error.status === 403) {
+        this.error.set('La empresa activa cambió en otra ventana. Inicia sesión nuevamente.');
+        await signOut(this.auth);
+        return;
+      }
       // Keep cached tenantId if available; consumers can retry later.
       const cachedTenantId = this.normalizeTenantId(this.readTenantFromStorage());
       if (cachedTenantId) {
@@ -374,23 +410,40 @@ export class AuthService {
     const preferredTenantId = this.normalizeTenantId(this.readTenantFromStorage());
     const response = await firstValueFrom(
       this.http.post<TenantSessionResponse>(`${environment.apiBaseUrl}/api/auth/session/bootstrap`, {
-        preferredTenantId
+        preferredTenantId,
+        sessionId: this.deviceSessionId
       })
     );
     await this.activateSession(response);
   }
 
   private async activateSession(response: TenantSessionResponse): Promise<void> {
-    const credential = await signInWithCustomToken(this.auth, response.firebaseCustomToken);
-    const token = await credential.user.getIdToken(true);
-    this.currentUser.set(credential.user);
-    this.authToken.set(token);
-    this.tenantId.set(response.activeTenantId);
-    this.persistTenantInStorage(response.activeTenantId);
-    this.companies.set(response.companies ?? []);
-    this.ownedCompanyLimit.set(response.ownedCompanyLimit);
-    this.ownedCompanyCount.set(response.ownedCompanyCount);
-    await this.loadAuthorizationContext(credential.user.uid);
+    this.activatingSession = true;
+    try {
+      const credential = await signInWithCustomToken(this.auth, response.firebaseCustomToken);
+      const token = await credential.user.getIdToken(true);
+      this.currentUser.set(credential.user);
+      this.authToken.set(token);
+      this.tenantId.set(response.activeTenantId);
+      this.persistTenantInStorage(response.activeTenantId);
+      this.companies.set(response.companies ?? []);
+      this.ownedCompanyLimit.set(response.ownedCompanyLimit);
+      this.ownedCompanyCount.set(response.ownedCompanyCount);
+      await this.loadAuthorizationContext(credential.user.uid);
+    } finally {
+      this.activatingSession = false;
+    }
+  }
+
+  private getOrCreateDeviceSessionId(): string {
+    if (typeof localStorage === 'undefined') return `server-${Date.now().toString(36)}-000000000000`;
+    const stored = localStorage.getItem(AuthService.SESSION_STORAGE_KEY);
+    if (stored && /^[A-Za-z0-9_-]{16,80}$/.test(stored)) return stored;
+    const generated = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+    localStorage.setItem(AuthService.SESSION_STORAGE_KEY, generated);
+    return generated;
   }
 
   private toReadableAuthError(error: unknown): string {
