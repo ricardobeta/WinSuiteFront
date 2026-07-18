@@ -47,6 +47,14 @@ import { CuentaBancariaDialogComponent } from './cuenta-bancaria-dialog.componen
             <mat-icon>fact_check</mat-icon>
             Conciliación
           </a>
+          <a mat-stroked-button color="primary" class="cta" routerLink="/workspace/contabilidad/bancos/tesoreria">
+            <mat-icon>savings</mat-icon>
+            Tesorería
+          </a>
+          <a mat-stroked-button color="primary" class="cta" routerLink="/workspace/contabilidad/bancos/configuracion/reglas">
+            <mat-icon>rule</mat-icon>
+            Reglas
+          </a>
           @if (canCreate()) {
             <button mat-flat-button color="primary" class="cta" (click)="nuevaCuenta()">
               <mat-icon>add</mat-icon>

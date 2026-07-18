@@ -21,6 +21,8 @@ import { BancosCuentasListComponent } from './pages/bancos/bancos-cuentas-list.c
 import { ExtractoImportComponent } from './pages/bancos/extracto-import.component';
 import { BancosMovimientosListComponent } from './pages/bancos/bancos-movimientos-list.component';
 import { ConciliacionWorkspaceComponent } from './pages/bancos/conciliacion-workspace.component';
+import { BancosReglasComponent } from './pages/bancos/bancos-reglas.component';
+import { TesoreriaListComponent } from './pages/bancos/tesoreria-list.component';
 import { NominaShellComponent } from '../nomina/pages/nomina-shell/nomina-shell.component';
 import { NominaRolesComponent } from './pages/nomina-roles/nomina-roles.component';
 import { NominaRolDetalleComponent } from '../nomina/pages/rol-detalle/nomina-rol-detalle.component';
@@ -217,6 +219,22 @@ export const CONTABILIDAD_ROUTES: Routes = [
         data: {
           module: 'Contabilidad',
           page: 'Conciliacion bancaria'
+        }
+      },
+      {
+        path: 'bancos/configuracion/reglas',
+        component: BancosReglasComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Reglas de conciliacion'
+        }
+      },
+      {
+        path: 'bancos/tesoreria',
+        component: TesoreriaListComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Tesoreria'
         }
       },
       {

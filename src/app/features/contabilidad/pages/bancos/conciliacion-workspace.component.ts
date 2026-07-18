@@ -13,6 +13,9 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { firstValueFrom } from 'rxjs';
+
 import { AuthorizationService } from '../../../../core/services/authorization.service';
 import {
   CuentaBancaria,
@@ -24,6 +27,7 @@ import {
 import { BancosApiService } from '../../services/bancos-api.service';
 import { BancosCuentasService } from '../../services/bancos-cuentas.service';
 import { BancosMovimientosService } from '../../services/bancos-movimientos.service';
+import { CrearAsientoBancoDialogComponent } from './crear-asiento-banco-dialog.component';
 
 @Component({
   selector: 'app-conciliacion-workspace',
@@ -37,6 +41,7 @@ import { BancosMovimientosService } from '../../services/bancos-movimientos.serv
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
+    MatDialogModule,
     MatProgressBarModule,
     MatSelectModule,
     MatSnackBarModule,
@@ -321,6 +326,7 @@ export class ConciliacionWorkspaceComponent {
   private readonly cuentasService = inject(BancosCuentasService);
   private readonly authorization = inject(AuthorizationService);
   private readonly route = inject(ActivatedRoute);
+  private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -454,9 +460,32 @@ export class ConciliacionWorkspaceComponent {
     if (!match.id) {
       return;
     }
+    let asientoId: string | null = null;
+    // Sugerencia CLASIFICAR (sin contraparte): crear el asiento antes de confirmar.
+    if (accion === 'ACEPTAR' && match.contrapartes.length === 0 && match.cuentaContableSugerida) {
+      const cuentaBancaria = this.cuentas().find((cuenta) => cuenta.id === this.cuenta.value);
+      const movimientos = this.movimientos()
+        .filter((movimiento) => match.movimientoIds.includes(movimiento.id ?? ''));
+      if (!cuentaBancaria || movimientos.length === 0) {
+        this.snackBar.open('No se encontraron los movimientos de la sugerencia.', 'OK', { duration: 4500 });
+        return;
+      }
+      const resultado = await firstValueFrom(this.dialog.open(CrearAsientoBancoDialogComponent, {
+        data: {
+          cuentaBancaria,
+          movimientos,
+          cuentaContableSugeridaId: match.cuentaContableSugerida,
+          motivo: match.motivo
+        }
+      }).afterClosed());
+      if (!resultado?.asientoId) {
+        return;
+      }
+      asientoId = resultado.asientoId;
+    }
     this.procesando.set(true);
     try {
-      await this.api.resolverMatch({ cuentaBancariaId: this.cuenta.value, matchId: match.id, accion });
+      await this.api.resolverMatch({ cuentaBancariaId: this.cuenta.value, matchId: match.id, accion, asientoId });
       await this.refrescar();
     } catch {
       this.snackBar.open('No se pudo actualizar la sugerencia.', 'OK', { duration: 4500 });
