@@ -37,6 +37,7 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
       id,
       visible: true,
       tipo: 'header',
+      posicion: 'normal',
       mostrarLogo: true,
       enlaces: [],
       mostrarCarrito: false,

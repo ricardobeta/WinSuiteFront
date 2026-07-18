@@ -1230,6 +1230,20 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
           </p>
         }
         @case ('header') {
+          <label>
+            Posicion del encabezado
+            <select
+              [ngModel]="b.posicion ?? 'normal'"
+              (ngModelChange)="patch({ posicion: $event })"
+            >
+              <option value="normal">Normal · se desplaza con la pagina</option>
+              <option value="sticky">Sticky · se fija al llegar arriba</option>
+              <option value="fijo">Fijo · siempre visible arriba</option>
+            </select>
+          </label>
+          <p class="ayuda">
+            Sticky conserva su espacio en la pagina. Fijo permanece sobre el contenido durante todo el desplazamiento.
+          </p>
           <label class="check">
             <input
               type="checkbox"
