@@ -59,6 +59,55 @@ describe('AiSiteBlueprintCompilerService', () => {
     expect(header?.tipo === 'header' && header.mostrarCarrito).toBe(true);
   });
 
+  it('aplica anclas, navegacion interna y estilos exactos sin alterar el tema', () => {
+    const content = new AiSiteBlueprintCompilerService().compile(withSections([
+      {
+        type: 'hero', anchor: 'presentacion', title: 'Hola', text: 'Bienvenido',
+        style: {
+          background: '#f97316',
+          title: { color: '#ffffff', font: 'montserrat', sizePx: 56, bold: true, align: 'center' },
+          text: { color: '#fff7ed', font: 'inter', sizePx: 20 },
+          button: { background: '#ffffff', color: '#9a3412', font: 'poppins', bold: true },
+        },
+      },
+      { type: 'features', anchor: 'beneficios', title: 'Beneficios', style: { background: '#ffffff' } },
+      { type: 'cta', anchor: 'contacto', title: 'Hablemos', style: { background: '#f97316' } },
+    ]), [], false);
+
+    expect(content.tema.colorPrimario).toBe('#2563eb');
+    const [header, hero, beneficios, contacto] = content.paginas['home'].bloques;
+    expect(header.tipo).toBe('header');
+    if (header.tipo === 'header') {
+      expect(header.enlaces.map(enlace => enlace.ancla)).toEqual(['presentacion', 'beneficios', 'contacto']);
+    }
+    expect(hero.ancla).toBe('presentacion');
+    expect(hero.estilos?.fondo).toBe('#f97316');
+    expect(hero.estilos?.fondoGradiente).toBeUndefined();
+    expect(hero.estilosTexto?.['titulo']).toMatchObject({
+      color: '#ffffff', fuente: 'montserrat', tamanoPx: 56, negrita: true, alineacion: 'centro',
+    });
+    if (hero.tipo === 'hero') {
+      expect(hero.cta?.colorFondo).toBe('#ffffff');
+      expect(hero.cta?.colorTexto).toBe('#9a3412');
+    }
+    expect(beneficios.estilos?.fondo).toBe('#ffffff');
+    expect(contacto.estilos?.fondo).toBe('#f97316');
+  });
+
+  it('compila el mapa moderno y omite correos invalidos del modelo', () => {
+    const [mapa] = bodyBlocks([{
+      type: 'map', title: 'Visitanos', text: 'Te esperamos', address: 'Av. Principal 123',
+      phone: '+593 99 999 9999', hours: 'Lunes a viernes', email: 'correo-invalido',
+    }], false);
+    expect(mapa.tipo).toBe('mapa');
+    if (mapa.tipo === 'mapa') {
+      expect(mapa.variante).toBe('tarjeta');
+      expect(mapa.direccion).toBe('Av. Principal 123');
+      expect(mapa.horario).toBe('Lunes a viernes');
+      expect(mapa.email).toBeUndefined();
+    }
+  });
+
   it('rechaza con un mensaje claro un plano sin paginas', () => {
     expect(() => new AiSiteBlueprintCompilerService().compile(
       { ...blueprint, pages: undefined } as unknown as AiSiteBlueprint,

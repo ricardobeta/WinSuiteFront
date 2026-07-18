@@ -7,6 +7,7 @@ import {
   ElementoColumna,
   ElementoLienzo,
   EstilosBloque,
+  EstilosTexto,
   FuenteId,
   PaginaDoc,
   TemaSitio,
@@ -16,7 +17,7 @@ import {
 import { nuevoIdBloque } from '../config/bloques-catalogo';
 import { LIENZO_PLANTILLAS, LienzoSlotDef, esPlantillaLienzo } from '../config/lienzo-plantillas';
 import { mockupFoto, mockupTinte, semillaSeccion } from './ai-site-mockups';
-import { AiSiteBlueprint, AiSiteBlueprintSection } from './ai-site-generator.service';
+import { AiSiteBlueprint, AiSiteBlueprintSection, AiSiteBlueprintTextStyle } from './ai-site-generator.service';
 
 /** Misma blocklist que el backend: defensa en profundidad antes del iframe sandbox. */
 const HTML_BLOCKLIST: RegExp[] = [
@@ -59,18 +60,26 @@ export class AiSiteBlueprintCompilerService {
     const pages: Record<string, PaginaDoc> = {};
     sourcePages.forEach((page, index) => {
       const id = index === 0 ? 'home' : (slugify(page.slug || page.title) || `pagina-${index + 1}`);
-      const links = sourcePages.map((item, itemIndex) => ({
+      const pageLinks = sourcePages.map((item, itemIndex) => ({
         texto: item.title,
         paginaId: itemIndex === 0 ? 'home' : (slugify(item.slug || item.title) || `pagina-${itemIndex + 1}`),
       }));
-      const body = page.sections.slice(0, 12)
-        .map((section, sectionIndex) => this.block(section, sourceImages, theme, ecommerce,
-          { pageId: id, index: sectionIndex, mockups, formularios }))
-        .filter((block): block is Bloque => !!block);
+      const body = this.conAnclas(page.sections.slice(0, 12)
+        .map((section, sectionIndex) => {
+          const block = this.block(section, sourceImages, theme, ecommerce,
+            { pageId: id, index: sectionIndex, mockups, formularios });
+          return block ? this.aplicarDisenoSeccion(block, section) : null;
+        })
+        .filter((block): block is Bloque => !!block));
+      const links = sourcePages.length === 1
+        ? body.filter(block => !['espaciador', 'html'].includes(block.tipo)).slice(0, 8).map(block => ({
+            texto: this.etiquetaMenu(block), paginaId: id, ancla: block.ancla,
+          }))
+        : pageLinks;
       const blocks: Bloque[] = [
-        { id: nuevoIdBloque(), visible: true, tipo: 'header', mostrarLogo: true, enlaces: links, mostrarCarrito: ecommerce, estilos: { paddingY: 'compacto' } },
+        { id: nuevoIdBloque(), ancla: 'inicio', visible: true, tipo: 'header', mostrarLogo: true, enlaces: links, mostrarCarrito: ecommerce, estilos: { paddingY: 'compacto' } },
         ...body,
-        { id: nuevoIdBloque(), visible: true, tipo: 'footer', variante: 'columnas', texto: typeof blueprint?.concept === 'string' ? blueprint.concept.trim() : 'Conoce mas sobre nuestra propuesta.', redes: [], estilos: { paddingY: 'normal', fondo: theme.colorTexto }, estilosTexto: { texto: { color: theme.colorFondo } } },
+        { id: nuevoIdBloque(), ancla: 'pie', visible: true, tipo: 'footer', variante: 'columnas', texto: typeof blueprint?.concept === 'string' ? blueprint.concept.trim() : 'Conoce mas sobre nuestra propuesta.', redes: [], estilos: { paddingY: 'normal', fondo: theme.colorTexto }, estilosTexto: { texto: { color: theme.colorFondo } } },
       ];
       pages[id] = { schemaVersion: 2, id, slug: index === 0 ? '' : id, titulo: page.title, bloques: blocks, actualizadoEn: Date.now() };
     });
@@ -116,7 +125,7 @@ export class AiSiteBlueprintCompilerService {
     switch (section.type) {
       case 'hero': return { ...base, tipo: 'hero', variante: section.variant === 'card' ? 'tarjeta' : image ? 'partido' : 'centrado', titulo: title, subtitulo: text, imagenUrl: image, imagenLado: 'derecha', alineacion: image ? 'izquierda' : 'centro', cta: { texto: section.ctaText || 'Conocer mas', enlace: this.link(section.ctaLink), variante: 'primario' }, estilos: { ...base.estilos, fondoGradiente: image ? undefined : { desde: theme.colorPrimario, hasta: theme.colorAcento, angulo: 135 } }, estilosTexto: image ? undefined : { titulo: { color: '#ffffff' }, subtitulo: { color: '#ffffff' } } };
       case 'features': return { ...base, tipo: 'caracteristicas', titulo: title, columnas: 3, items: (items.length ? items : [{ title: 'Calidad', text }, { title: 'Confianza', text }, { title: 'Cercania', text }]).map((x, i) => ({ icono: (typeof x.icon === 'string' && x.icon.trim() ? x.icon.trim().slice(0, 8) : ['✨', '✓', '★', '⚡'][i % 4]), titulo: x.title || `Beneficio ${i + 1}`, texto: x.text })) };
-      case 'products': return { ...base, tipo: 'productos', titulo: title, origen: { modo: 'seleccion', productoIds: [] }, columnas: 3, mostrarPrecio: true, ordenar: 'nombre', variante: section.variant === 'list' ? 'lista' : 'tarjetas' };
+      case 'products': return { ...base, tipo: 'productos', titulo: title, origen: { modo: 'seleccion', productoIds: [] }, columnas: 3, mostrarPrecio: true, mostrarDescripcion: true, textoBoton: 'Agregar al carrito', ordenar: 'nombre', variante: section.variant === 'list' ? 'lista' : 'tarjetas' };
       case 'testimonials': return { ...base, tipo: 'testimonios', titulo: title, variante: 'tarjetas', items: (items.length ? items : [{ title: 'Cliente', text: 'Agrega aqui una experiencia real de un cliente.' }]).map(x => ({ nombre: x.title || 'Cliente', texto: x.text || text, avatarUrl: this.imageAt(images, x.imageIndex), estrellas: 5 })) };
       case 'gallery': {
         const urls = this.pickImages(images, section.imageIndexes, 8);
@@ -140,7 +149,7 @@ export class AiSiteBlueprintCompilerService {
         }
         return { ...base, tipo: 'formulario', variante: 'tarjeta', formularioId: 'contacto-ia', titulo: title, campos: [{ id: 'nombre', tipo: 'texto', etiqueta: 'Nombre', requerido: true }, { id: 'email', tipo: 'email', etiqueta: 'Correo', requerido: true }, { id: 'mensaje', tipo: 'textarea', etiqueta: '¿Como podemos ayudarte?', requerido: true }], textoBoton: section.ctaText || 'Enviar', mensajeExito: 'Gracias. Recibimos tu informacion.' };
       }
-      case 'map': return { ...base, tipo: 'mapa', lat: -0.1807, lng: -78.4678, zoom: 13, direccion: text.slice(0, 200) };
+      case 'map': return { ...base, tipo: 'mapa', variante: 'tarjeta', mapaLado: 'izquierda', lat: -0.1807, lng: -78.4678, zoom: 13, titulo: title, descripcion: text, direccion: (section.address || text).slice(0, 200), telefono: section.phone?.slice(0, 200), horario: section.hours?.slice(0, 1000), email: this.email(section.email), textoBoton: section.ctaText || 'Contactanos', enlaceBoton: this.link(section.ctaLink) };
       case 'logos': {
         const urls = this.pickImages(images, section.imageIndexes, 6);
         const finales = urls.length ? urls
@@ -322,6 +331,103 @@ export class AiSiteBlueprintCompilerService {
     return Math.min(max, Math.max(min, parsed));
   }
 
+  /** Overrides exactos pedidos a la IA: viven en el bloque, nunca en el tema global. */
+  private aplicarDisenoSeccion(bloque: Bloque, section: AiSiteBlueprintSection): Bloque {
+    const style = section.style;
+    let result = { ...bloque } as Bloque;
+    if (section.anchor) result = { ...result, ancla: section.anchor } as Bloque;
+    if (style?.background) {
+      result = {
+        ...result,
+        estilos: { ...(result.estilos ?? {}), fondo: style.background, fondoGradiente: undefined, fondoImagenUrl: undefined },
+      } as Bloque;
+    }
+
+    const title = this.estiloTextoIa(style?.title);
+    const text = this.estiloTextoIa(style?.text);
+    const button = this.estiloTextoIa(style?.button);
+    const estilosTexto = { ...(result.estilosTexto ?? {}) };
+    if (title) estilosTexto['titulo'] = title;
+    if (text) {
+      const key = result.tipo === 'hero' ? 'subtitulo'
+        : result.tipo === 'mapa' ? 'descripcion'
+        : result.tipo === 'metodos-pago' ? 'nota'
+        : result.tipo === 'countdown' ? 'mensajeFin'
+        : 'texto';
+      estilosTexto[key] = text;
+    }
+    if (button) estilosTexto['boton'] = button;
+    if (Object.keys(estilosTexto).length) result = { ...result, estilosTexto } as Bloque;
+
+    if (result.tipo === 'texto' && text) result = { ...result, estiloTexto: text };
+    if (style?.button) {
+      const fondo = style.button.background;
+      const color = style.button.color;
+      if (result.tipo === 'hero' && result.cta) {
+        result = { ...result, cta: { ...result.cta, colorFondo: fondo, colorTexto: color, estiloTexto: button } };
+      } else if (result.tipo === 'metodos-pago' && result.cta) {
+        result = { ...result, cta: { ...result.cta, colorFondo: fondo, colorTexto: color, estiloTexto: button } };
+      } else if (['productos', 'formulario', 'boton', 'pago', 'cta'].includes(result.tipo)) {
+        result = { ...result, colorBotonFondo: fondo, colorBotonTexto: color } as Bloque;
+      }
+    }
+    return result;
+  }
+
+  private estiloTextoIa(raw?: AiSiteBlueprintTextStyle): EstilosTexto | undefined {
+    if (!raw) return undefined;
+    const align = raw.align === 'left' ? 'izquierda' : raw.align === 'right' ? 'derecha'
+      : raw.align === 'center' ? 'centro' : undefined;
+    const style: EstilosTexto = {
+      color: raw.color,
+      fuente: raw.font,
+      tamanoPx: raw.sizePx,
+      negrita: raw.bold || undefined,
+      cursiva: raw.italic || undefined,
+      alineacion: align,
+    };
+    return Object.values(style).some(value => value !== undefined) ? style : undefined;
+  }
+
+  private conAnclas(bloques: Bloque[]): Bloque[] {
+    const bases: Partial<Record<Bloque['tipo'], string>> = {
+      hero: 'hero', productos: 'productos', planes: 'planes', formulario: 'contacto',
+      mapa: 'ubicacion', testimonios: 'testimonios', faq: 'preguntas',
+      caracteristicas: 'beneficios', equipo: 'equipo', cta: 'accion', texto: 'contenido',
+      galeria: 'galeria', video: 'video', carrusel: 'carrusel', logos: 'marcas',
+      estadisticas: 'resultados', countdown: 'cuenta-regresiva', pago: 'pago',
+      'metodos-pago': 'metodos-pago', boton: 'boton', imagen: 'imagen', lienzo: 'seccion',
+      columnas: 'columnas', html: 'contenido-html', espaciador: 'separador',
+    };
+    const usadas = new Set<string>();
+    return bloques.map((bloque) => {
+      const base = bloque.ancla || bases[bloque.tipo] || bloque.tipo;
+      let ancla = base;
+      let indice = 2;
+      while (usadas.has(ancla)) ancla = `${base}-${indice++}`;
+      usadas.add(ancla);
+      return { ...bloque, ancla } as Bloque;
+    });
+  }
+
+  private etiquetaMenu(bloque: Bloque): string {
+    switch (bloque.tipo) {
+      case 'hero': return bloque.titulo || 'Inicio';
+      case 'productos': return bloque.titulo || 'Productos';
+      case 'planes': return bloque.titulo || 'Planes';
+      case 'formulario': return bloque.titulo || 'Contacto';
+      case 'mapa': return bloque.titulo || 'Ubicacion';
+      case 'testimonios': return bloque.titulo || 'Testimonios';
+      case 'faq': return bloque.titulo || 'Preguntas';
+      case 'caracteristicas': return bloque.titulo || 'Beneficios';
+      case 'equipo': return bloque.titulo || 'Equipo';
+      case 'cta': return bloque.titulo || 'Contacto';
+      case 'logos': return bloque.titulo || 'Marcas';
+      case 'countdown': return bloque.titulo || 'Oferta';
+      default: return bloque.tipo.charAt(0).toUpperCase() + bloque.tipo.slice(1);
+    }
+  }
+
   private theme(raw: AiSiteBlueprint['theme']): TemaSitio {
     const color = (value: string, fallback: string) => /^#[0-9a-f]{6}$/i.test(value ?? '') ? value : fallback;
     const fonts: FuenteId[] = ['system', 'inter', 'poppins', 'montserrat', 'playfair', 'roboto'];
@@ -370,5 +476,10 @@ export class AiSiteBlueprintCompilerService {
   }
   private link(value?: string): string {
     return typeof value === 'string' && (value.startsWith('/') || value.startsWith('#')) ? value : '#contacto';
+  }
+
+  private email(value?: string): string | undefined {
+    const email = typeof value === 'string' ? value.trim().slice(0, 200) : '';
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : undefined;
   }
 }

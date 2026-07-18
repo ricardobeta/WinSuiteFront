@@ -65,6 +65,23 @@ export interface AiSiteBlueprintForm {
   successMessage?: string;
 }
 
+export interface AiSiteBlueprintTextStyle {
+  color?: string;
+  font?: 'system' | 'inter' | 'poppins' | 'montserrat' | 'playfair' | 'roboto';
+  sizePx?: number;
+  bold?: boolean;
+  italic?: boolean;
+  align?: 'left' | 'center' | 'right';
+}
+
+export interface AiSiteBlueprintSectionStyle {
+  /** Color exacto por seccion; no modifica el tema global. */
+  background?: string;
+  title?: AiSiteBlueprintTextStyle;
+  text?: AiSiteBlueprintTextStyle;
+  button?: AiSiteBlueprintTextStyle & { background?: string };
+}
+
 export interface AiSiteBlueprintSection {
   type: 'hero' | 'features' | 'products' | 'testimonials' | 'gallery' | 'text' | 'cta' |
     'faq' | 'statistics' | 'team' | 'plans' | 'payment' | 'contact' | 'map' | 'logos' |
@@ -75,6 +92,8 @@ export interface AiSiteBlueprintSection {
   ctaText?: string;
   ctaLink?: string;
   variant?: string;
+  anchor?: string;
+  style?: AiSiteBlueprintSectionStyle;
   divider?: 'none' | 'wave' | 'diagonal' | 'curve';
   /** Fondo de la seccion: tintes/degradados claros que alternan el ritmo visual. */
   background?: 'none' | 'suave' | 'suave-acento' | 'degradado' | 'degradado-acento';
@@ -86,6 +105,10 @@ export interface AiSiteBlueprintSection {
   html?: string;
   heightPx?: number;
   countdownDate?: string;
+  address?: string;
+  phone?: string;
+  hours?: string;
+  email?: string;
   canvas?: AiSiteBlueprintCanvas;
   columns?: AiSiteBlueprintColumn[];
   form?: AiSiteBlueprintForm;

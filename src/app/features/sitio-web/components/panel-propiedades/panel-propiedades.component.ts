@@ -16,6 +16,7 @@ import { MatExpansionModule } from '@angular/material/expansion';
 import {
   Bloque,
   CATALOGO_PRODUCTOS,
+  EstilosTexto,
   FondoGradiente,
   OverridesResponsive,
   PaginaDoc,
@@ -36,6 +37,15 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
   template: `
     <div class="panel">
       <h3>Propiedades · {{ bloque().tipo }}</h3>
+
+      <label class="campo-ancla">
+        Etiqueta de seccion
+        <div class="ancla-input">
+          <span>#</span>
+          <input [ngModel]="b.ancla ?? ''" [placeholder]="anclaSugerida()" (ngModelChange)="cambiarAncla($event)" />
+        </div>
+        <small>Usala en el menu o en botones para desplazarse hasta este bloque.</small>
+      </label>
 
       <mat-accordion multi displayMode="flat">
       <mat-expansion-panel expanded>
@@ -576,6 +586,15 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
                 (ngModelChange)="patch({ colorBotonTexto: $event })" />
             </label>
           </div>
+          <label class="check">
+            <input type="checkbox" [ngModel]="b.mostrarDescripcion ?? false"
+              (ngModelChange)="patch({ mostrarDescripcion: $event })" />
+            Mostrar descripcion corta
+          </label>
+          <label>Texto del boton
+            <input [ngModel]="b.textoBoton ?? 'Agregar al carrito'"
+              (ngModelChange)="patchOpcional('textoBoton', $event)" />
+          </label>
           @if (b.colorBotonFondo || b.colorBotonTexto) {
             <button type="button" class="agregar"
               (click)="patch({ colorBotonFondo: undefined, colorBotonTexto: undefined })">
@@ -829,6 +848,25 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
           </p>
         }
         @case ('mapa') {
+          <label>Titulo<input [ngModel]="b.titulo" (ngModelChange)="patchOpcional('titulo', $event)" /></label>
+          <label>Descripcion<textarea rows="2" [ngModel]="b.descripcion"
+            (ngModelChange)="patchOpcional('descripcion', $event)"></textarea></label>
+          <div class="fila">
+            <label>Presentacion
+              <select [ngModel]="b.variante ?? 'lateral'" (ngModelChange)="patch({ variante: $event })">
+                <option value="lateral">Lateral limpia</option>
+                <option value="tarjeta">Tarjeta elevada</option>
+              </select>
+            </label>
+            <label>Lado del mapa
+              <select [ngModel]="b.mapaLado ?? 'izquierda'" (ngModelChange)="patch({ mapaLado: $event })">
+                <option value="izquierda">Izquierda</option>
+                <option value="derecha">Derecha</option>
+              </select>
+            </label>
+          </div>
+          <label class="check"><input type="checkbox" [ngModel]="b.mostrarMapa !== false"
+            (ngModelChange)="patch({ mostrarMapa: $event })" /> Mostrar mapa</label>
           <div class="fila">
             <label
               >Latitud<input
@@ -845,19 +883,30 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
                 (ngModelChange)="patch({ lng: numero($event) })"
             /></label>
           </div>
+          <label>Zoom
+            <input type="range" min="2" max="19" [ngModel]="b.zoom"
+              (ngModelChange)="patch({ zoom: numero($event) })" />
+          </label>
           <label
-            >Direccion<input [ngModel]="b.direccion" (ngModelChange)="patch({ direccion: $event })"
+            >Direccion<input [ngModel]="b.direccion" (ngModelChange)="patchOpcional('direccion', $event)"
           /></label>
           <label
-            >Telefono<input [ngModel]="b.telefono" (ngModelChange)="patch({ telefono: $event })"
+            >Telefono<input [ngModel]="b.telefono" (ngModelChange)="patchOpcional('telefono', $event)"
           /></label>
+          <label>Correo<input type="email" [ngModel]="b.email"
+            (ngModelChange)="patchOpcional('email', $event)" /></label>
           <label
             >Horario<textarea
               rows="2"
               [ngModel]="b.horario"
-              (ngModelChange)="patch({ horario: $event })"
+              (ngModelChange)="patchOpcional('horario', $event)"
             ></textarea>
           </label>
+          <h4>Boton opcional</h4>
+          <label>Texto<input [ngModel]="b.textoBoton"
+            (ngModelChange)="patchOpcional('textoBoton', $event)" /></label>
+          <label>Enlace<input placeholder="https://... o #contacto" [ngModel]="b.enlaceBoton"
+            (ngModelChange)="patchOpcional('enlaceBoton', $event)" /></label>
         }
         @case ('galeria') {
           <label>
@@ -1207,10 +1256,17 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
               />
               <select
                 [ngModel]="enlace.paginaId"
-                (ngModelChange)="patchItem('enlaces', i, { paginaId: $event })"
+                (ngModelChange)="cambiarPaginaEnlace(i, $event)"
               >
                 @for (pagina of paginasMenu(); track pagina.id) {
                   <option [value]="pagina.id">{{ pagina.titulo }}</option>
+                }
+              </select>
+              <select [ngModel]="enlace.ancla ?? ''"
+                (ngModelChange)="patchItem('enlaces', i, { ancla: $event || undefined })">
+                <option value="">Inicio de la pagina</option>
+                @for (seccion of anclasPagina(enlace.paginaId); track seccion.ancla) {
+                  <option [value]="seccion.ancla">#{{ seccion.ancla }} · {{ seccion.nombre }}</option>
                 }
               </select>
               <button type="button" class="quitar" (click)="quitarItem('enlaces', i)">
@@ -1267,6 +1323,62 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       }
 
       </mat-expansion-panel>
+
+      @if (camposFormato().length) {
+        <mat-expansion-panel>
+          <mat-expansion-panel-header>
+            <mat-panel-title><mat-icon>format_size</mat-icon> Tipografia individual</mat-panel-title>
+          </mat-expansion-panel-header>
+          <p class="ayuda">El formato se aplica solo al texto seleccionado, no al tema completo.</p>
+          <label>Elemento
+            <select [ngModel]="campoFormatoActivo()" (ngModelChange)="campoFormatoActivo.set($event)">
+              @for (campo of camposFormato(); track campo.id) {
+                <option [value]="campo.id">{{ campo.nombre }}</option>
+              }
+            </select>
+          </label>
+          <div class="fila">
+            <label>Tamano (px)
+              <input type="number" min="10" max="120" [ngModel]="estiloCampoActivo().tamanoPx"
+                (ngModelChange)="patchEstiloCampo({ tamanoPx: $event ? numero($event) : undefined, tamano: undefined })" />
+            </label>
+            <label>Color
+              <input type="color" [ngModel]="estiloCampoActivo().color ?? '#1f2937'"
+                (ngModelChange)="patchEstiloCampo({ color: $event })" />
+            </label>
+          </div>
+          <label>Fuente
+            <select [ngModel]="estiloCampoActivo().fuente ?? ''" (ngModelChange)="patchEstiloCampo({ fuente: $event || undefined })">
+              <option value="">Automatica</option><option value="titulos">Fuente de titulos</option>
+              <option value="cuerpo">Fuente de cuerpo</option><option value="inter">Inter</option>
+              <option value="poppins">Poppins</option><option value="montserrat">Montserrat</option>
+              <option value="playfair">Playfair Display</option><option value="roboto">Roboto</option>
+              <option value="system">Sistema</option>
+            </select>
+          </label>
+          <div class="fila">
+            <label class="check"><input type="checkbox" [ngModel]="estiloCampoActivo().negrita ?? false"
+              (ngModelChange)="patchEstiloCampo({ negrita: $event || undefined })" /> <b>Negrita</b></label>
+            <label class="check"><input type="checkbox" [ngModel]="estiloCampoActivo().cursiva ?? false"
+              (ngModelChange)="patchEstiloCampo({ cursiva: $event || undefined })" /> <i>Cursiva</i></label>
+            <label class="check"><input type="checkbox" [ngModel]="estiloCampoActivo().subrayado ?? false"
+              (ngModelChange)="patchEstiloCampo({ subrayado: $event || undefined })" /> <u>Subrayado</u></label>
+          </div>
+          <div class="fila">
+            <label>Alineacion
+              <select [ngModel]="estiloCampoActivo().alineacion ?? ''" (ngModelChange)="patchEstiloCampo({ alineacion: $event || undefined })">
+                <option value="">Automatica</option><option value="izquierda">Izquierda</option>
+                <option value="centro">Centro</option><option value="derecha">Derecha</option>
+              </select>
+            </label>
+            <label>Interlineado
+              <input type="number" min="1" max="2.5" step="0.1" [ngModel]="estiloCampoActivo().interlineado"
+                (ngModelChange)="patchEstiloCampo({ interlineado: $event ? numero($event) : undefined })" />
+            </label>
+          </div>
+          <button type="button" class="agregar" (click)="limpiarEstiloCampo()">Usar formato automatico</button>
+        </mat-expansion-panel>
+      }
 
       <mat-expansion-panel>
         <mat-expansion-panel-header>
@@ -1559,6 +1671,11 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       gap: 4px;
       font-weight: 600;
     }
+    .campo-ancla { display:grid;gap:5px;margin:0 12px 12px;padding:10px;border:1px solid var(--tc-ghost-border);border-radius:10px;background:var(--tc-surface-container-low);font-weight:650; }
+    .campo-ancla small { font-weight:400;opacity:.68;line-height:1.35; }
+    .ancla-input { display:flex;align-items:center;border:1px solid var(--tc-ghost-border);border-radius:8px;background:var(--tc-surface-container-lowest);overflow:hidden; }
+    .ancla-input span { padding:0 0 0 10px;color:var(--primary);font-weight:800; }
+    .ancla-input input { border:0;background:transparent;min-width:0; }
     .item-lista {
       position: relative;
       display: flex;
@@ -1772,6 +1889,42 @@ export class PanelPropiedadesComponent {
     this.paginas().filter((pagina) => !pagina.slug.startsWith('__')),
   );
 
+  readonly campoFormatoActivo = signal('titulo');
+  readonly camposFormato = computed<{ id: string; nombre: string }[]>(() => {
+    const comunes: Record<string, { id: string; nombre: string }[]> = {
+      hero: [{ id: 'titulo', nombre: 'Titulo' }, { id: 'subtitulo', nombre: 'Subtitulo' }],
+      carrusel: [{ id: 'slide-0-titulo', nombre: 'Titulo del primer slide' }],
+      productos: [
+        { id: 'titulo', nombre: 'Titulo de la vitrina' },
+        { id: 'producto-nombre', nombre: 'Nombre de productos' },
+        { id: 'producto-descripcion', nombre: 'Descripcion de productos' },
+        { id: 'producto-precio', nombre: 'Precio' },
+        { id: 'badge', nombre: 'Etiqueta promocional' },
+        { id: 'boton', nombre: 'Boton de compra' },
+      ],
+      testimonios: [{ id: 'titulo', nombre: 'Titulo' }],
+      'metodos-pago': [{ id: 'titulo', nombre: 'Titulo' }, { id: 'nota', nombre: 'Nota' }],
+      formulario: [{ id: 'titulo', nombre: 'Titulo' }, { id: 'boton', nombre: 'Boton' }],
+      mapa: [
+        { id: 'titulo', nombre: 'Titulo' }, { id: 'descripcion', nombre: 'Descripcion' },
+        { id: 'direccion', nombre: 'Direccion' }, { id: 'horario', nombre: 'Horario' },
+        { id: 'telefono', nombre: 'Telefono' }, { id: 'email', nombre: 'Correo' },
+        { id: 'boton', nombre: 'Boton' },
+      ],
+      header: [{ id: 'marca', nombre: 'Nombre del negocio' }, { id: 'enlaces', nombre: 'Enlaces del menu' }],
+      footer: [{ id: 'texto', nombre: 'Texto legal' }],
+      pago: [{ id: 'titulo', nombre: 'Titulo' }, { id: 'texto', nombre: 'Descripcion' }, { id: 'boton', nombre: 'Boton' }],
+      planes: [{ id: 'titulo', nombre: 'Titulo' }],
+      faq: [{ id: 'titulo', nombre: 'Titulo' }],
+      cta: [{ id: 'titulo', nombre: 'Titulo' }, { id: 'texto', nombre: 'Descripcion' }, { id: 'boton', nombre: 'Boton' }],
+      caracteristicas: [{ id: 'titulo', nombre: 'Titulo' }],
+      logos: [{ id: 'titulo', nombre: 'Titulo' }],
+      equipo: [{ id: 'titulo', nombre: 'Titulo' }],
+      countdown: [{ id: 'titulo', nombre: 'Titulo' }, { id: 'mensajeFin', nombre: 'Mensaje final' }],
+    };
+    return comunes[this.bloque().tipo] ?? [];
+  });
+
   readonly formularioSeleccionadoExiste = computed(() => {
     const bloque = this.bloque();
     if (bloque.tipo !== 'formulario') return true;
@@ -1820,6 +1973,10 @@ export class PanelPropiedadesComponent {
       { id: 'tarjetas', nombre: 'Tarjetas', icono: 'grid_view' },
       { id: 'lista', nombre: 'Lista', icono: 'view_list' },
     ],
+    mapa: [
+      { id: 'lateral', nombre: 'Lateral', icono: 'map' },
+      { id: 'tarjeta', nombre: 'Tarjeta', icono: 'location_on' },
+    ],
   };
 
   variantesDelBloque(): { id: string; nombre: string; icono: string }[] {
@@ -1842,6 +1999,7 @@ export class PanelPropiedadesComponent {
       if (id !== this.ultimoBloqueId) {
         this.ultimoBloqueId = id;
         this.tipoFondoManual.set(null);
+        this.campoFormatoActivo.set(this.camposFormato()[0]?.id ?? 'titulo');
       }
     });
   }
@@ -2050,6 +2208,73 @@ export class PanelPropiedadesComponent {
     this.bloqueChange.emit({ ...this.bloque(), ...cambios } as Bloque);
   }
 
+  patchOpcional(campo: string, valor: unknown): void {
+    const actual = { ...(this.bloque() as unknown as Record<string, unknown>) };
+    if (typeof valor === 'string' ? !valor.trim() : valor === undefined || valor === null) {
+      delete actual[campo];
+    } else {
+      actual[campo] = valor;
+    }
+    this.bloqueChange.emit(actual as unknown as Bloque);
+  }
+
+  anclaSugerida(): string {
+    const nombres: Record<string, string> = {
+      header: 'inicio', hero: 'hero', productos: 'productos', planes: 'planes',
+      formulario: 'contacto', mapa: 'ubicacion', testimonios: 'testimonios',
+      faq: 'preguntas', caracteristicas: 'beneficios', equipo: 'equipo', footer: 'pie',
+      pago: 'pago', 'metodos-pago': 'metodos-pago', cta: 'accion',
+    };
+    return nombres[this.bloque().tipo] ?? this.bloque().id.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  }
+
+  cambiarAncla(valor: string): void {
+    const ancla = String(valor ?? '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64);
+    const actual = { ...this.bloque() } as Bloque & { ancla?: string };
+    if (ancla) actual.ancla = ancla;
+    else delete actual.ancla;
+    this.bloqueChange.emit(actual);
+  }
+
+  anclasPagina(paginaId: string): { ancla: string; nombre: string }[] {
+    const pagina = this.paginas().find((item) => item.id === paginaId);
+    if (!pagina) return [];
+    return pagina.bloques
+      .filter((bloque) => bloque.tipo !== 'header' && bloque.tipo !== 'footer')
+      .map((bloque) => ({
+        ancla: bloque.ancla || bloque.id,
+        nombre: bloque.tipo === 'hero' ? bloque.titulo : bloque.tipo,
+      }));
+  }
+
+  cambiarPaginaEnlace(indice: number, paginaId: string): void {
+    this.patchItem('enlaces', indice, { paginaId, ancla: undefined });
+  }
+
+  estiloCampoActivo(): EstilosTexto {
+    return this.bloque().estilosTexto?.[this.campoFormatoActivo()] ?? {};
+  }
+
+  patchEstiloCampo(cambios: Partial<EstilosTexto>): void {
+    const campo = this.campoFormatoActivo();
+    const estilo = { ...this.estiloCampoActivo(), ...cambios } as Record<string, unknown>;
+    for (const clave of Object.keys(estilo)) {
+      if (estilo[clave] === undefined || estilo[clave] === false || estilo[clave] === '') delete estilo[clave];
+    }
+    const estilosTexto = { ...(this.bloque().estilosTexto ?? {}) };
+    if (Object.keys(estilo).length) estilosTexto[campo] = estilo as EstilosTexto;
+    else delete estilosTexto[campo];
+    this.patch({ estilosTexto: Object.keys(estilosTexto).length ? estilosTexto : undefined });
+  }
+
+  limpiarEstiloCampo(): void {
+    const campo = this.campoFormatoActivo();
+    const estilosTexto = { ...(this.bloque().estilosTexto ?? {}) };
+    delete estilosTexto[campo];
+    this.patch({ estilosTexto: Object.keys(estilosTexto).length ? estilosTexto : undefined });
+  }
+
   patchEstilos(cambios: object): void {
     const estilos = { ...(this.b.estilos ?? {}), ...cambios };
     for (const clave of Object.keys(estilos)) {
@@ -2075,7 +2300,11 @@ export class PanelPropiedadesComponent {
 
   patchItem(campo: string, indice: number, cambios: object): void {
     const lista = [...(this.b[campo] as object[])];
-    lista[indice] = { ...lista[indice], ...cambios };
+    const nuevo = { ...lista[indice], ...cambios } as Record<string, unknown>;
+    for (const clave of Object.keys(nuevo)) {
+      if (nuevo[clave] === undefined) delete nuevo[clave];
+    }
+    lista[indice] = nuevo;
     this.patch({ [campo]: lista });
   }
 

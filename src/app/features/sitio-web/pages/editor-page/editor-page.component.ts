@@ -583,7 +583,48 @@ export class EditorPageComponent {
       };
       cambio = true;
     }
+    // Todo bloque navegable recibe una etiqueta semantica y unica. Los sitios
+    // existentes se actualizan al abrirlos sin alterar contenido ni estilos.
+    for (const [paginaId, pagina] of Object.entries(paginas)) {
+      const usadas = new Set<string>();
+      let paginaCambio = false;
+      const bloques = pagina.bloques.map((bloque) => {
+        const deseada = bloque.ancla || this.anclaBase(bloque.tipo);
+        const ancla = this.anclaDisponible(deseada, usadas);
+        usadas.add(ancla);
+        if (bloque.ancla === ancla) return bloque;
+        paginaCambio = true;
+        return { ...bloque, ancla };
+      });
+      if (paginaCambio) {
+        paginas[paginaId] = { ...pagina, bloques, actualizadoEn: Date.now() };
+        cambio = true;
+      }
+    }
     return cambio ? { ...contenido, paginas } : contenido;
+  }
+
+  private anclaBase(tipo: Bloque['tipo']): string {
+    const etiquetas: Partial<Record<Bloque['tipo'], string>> = {
+      header: 'inicio', hero: 'hero', productos: 'productos', planes: 'planes',
+      formulario: 'contacto', mapa: 'ubicacion', testimonios: 'testimonios',
+      faq: 'preguntas', caracteristicas: 'beneficios', equipo: 'equipo', footer: 'pie',
+      pago: 'pago', 'metodos-pago': 'metodos-pago', cta: 'accion', texto: 'contenido',
+      galeria: 'galeria', video: 'video', carrusel: 'carrusel', logos: 'marcas',
+      estadisticas: 'resultados', countdown: 'cuenta-regresiva', boton: 'boton',
+      imagen: 'imagen', lienzo: 'seccion-libre', columnas: 'columnas', html: 'contenido-html',
+      espaciador: 'separador', 'sistema-producto': 'detalle-producto', 'sistema-pago': 'checkout',
+    };
+    return etiquetas[tipo] ?? tipo;
+  }
+
+  private anclaDisponible(base: string, usadas: Set<string>): string {
+    const limpia = base.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 56) || 'seccion';
+    if (!usadas.has(limpia)) return limpia;
+    let indice = 2;
+    while (usadas.has(`${limpia}-${indice}`)) indice++;
+    return `${limpia}-${indice}`;
   }
 
   /**
@@ -697,7 +738,11 @@ export class EditorPageComponent {
   }
 
   insertarBloque(definicion: DefinicionBloque, indice: number): void {
-    const bloque = definicion.crearPorDefecto(nuevoIdBloque());
+    const usadas = new Set(this.bloquesActuales().map((item) => item.ancla).filter((item): item is string => !!item));
+    const bloque = {
+      ...definicion.crearPorDefecto(nuevoIdBloque()),
+      ancla: this.anclaDisponible(this.anclaBase(definicion.tipo), usadas),
+    } as Bloque;
     this.mutarBloques((bloques) => {
       const copia = [...bloques];
       copia.splice(Math.min(indice, copia.length), 0, bloque);
@@ -721,7 +766,12 @@ export class EditorPageComponent {
     this.mutarBloques((bloques) => {
       const indice = bloques.findIndex((bloque) => bloque.id === bloqueId);
       if (indice < 0) return bloques;
-      const duplicado = { ...structuredClone(bloques[indice]), id: nuevoIdBloque() };
+      const usadas = new Set(bloques.map((item) => item.ancla).filter((item): item is string => !!item));
+      const duplicado = {
+        ...structuredClone(bloques[indice]),
+        id: nuevoIdBloque(),
+        ancla: this.anclaDisponible(bloques[indice].ancla || this.anclaBase(bloques[indice].tipo), usadas),
+      };
       const copia = [...bloques];
       copia.splice(indice + 1, 0, duplicado);
       return copia;
