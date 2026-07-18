@@ -285,6 +285,14 @@ export const WORKSPACE_NAV_ITEMS: NavItem[] = [
         requiredAction: 'read'
       },
       {
+        id: 'accounting-banks',
+        label: 'Bancos',
+        icon: 'account_balance_wallet',
+        route: '/workspace/contabilidad/bancos',
+        requiredModule: 'contabilidad',
+        requiredAction: 'read'
+      },
+      {
         id: 'accounting-reports',
         label: 'Reportes',
         icon: 'insert_chart',

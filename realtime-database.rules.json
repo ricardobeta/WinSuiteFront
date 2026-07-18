@@ -452,6 +452,42 @@
               ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
             }
           }
+        },
+        "bancos": {
+          "cuentasBancarias": {
+            "$cuentaBancariaId": {
+              ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            }
+          },
+          "plantillasBanco": {
+            ".indexOn": [
+              "bancoCodigo"
+            ]
+          },
+          "extractos": {
+            ".indexOn": [
+              "cuentaBancariaId",
+              "periodo"
+            ]
+          },
+          "movimientos": {
+            "$cuentaBancariaId": {
+              ".indexOn": [
+                "claveOrden",
+                "fecha",
+                "periodo",
+                "estadoConciliacion"
+              ]
+            }
+          },
+          "matches": {
+            "$cuentaBancariaId": {
+              ".indexOn": [
+                "periodo",
+                "estado"
+              ]
+            }
+          }
         }
       }
     },

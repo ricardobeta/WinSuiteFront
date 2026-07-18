@@ -48,7 +48,9 @@ export class AuthorizationService {
     const permission = this.permissionsMap()[moduleKey]
       ?? (['empresa_colaboradores', 'empresa_roles'].includes(moduleKey)
         ? this.permissionsMap()['colaboradores']
-        : undefined);
+        : undefined)
+      // Bancos hereda el permiso de contabilidad mientras el rol no defina el recurso específico.
+      ?? (moduleKey === 'contabilidad_bancos' ? this.permissionsMap()['contabilidad'] : undefined);
     if (!permission) {
       return false;
     }
