@@ -9,8 +9,9 @@ import { AiSiteBlueprint } from './ai-site-generator.service';
 /** Estado del Copiloto IA de un sitio: permite seguir iterando el diseño desde el editor. */
 export interface EstadoIaSitio {
   type: TipoSitio;
-  blueprint: AiSiteBlueprint;
+  blueprint?: AiSiteBlueprint;
   imageUrls: string[];
+  formBindings: Record<string, string>;
   updatedAt: number;
 }
 
@@ -54,7 +55,14 @@ export class SitioBorradorService {
     const snapshot = await get(ref(this.database, this.iaPath(sitioId)));
     if (!snapshot.exists()) return null;
     const valor = snapshot.val() as EstadoIaSitio;
-    return valor?.blueprint ? { ...valor, imageUrls: Array.isArray(valor.imageUrls) ? valor.imageUrls : [] } : null;
+    if (!valor?.type) return null;
+    return {
+      ...valor,
+      imageUrls: Array.isArray(valor.imageUrls) ? valor.imageUrls : [],
+      formBindings: valor.formBindings && typeof valor.formBindings === 'object'
+        ? valor.formBindings
+        : {},
+    };
   }
 
   async guardarIa(sitioId: string, estado: Omit<EstadoIaSitio, 'updatedAt'>): Promise<void> {

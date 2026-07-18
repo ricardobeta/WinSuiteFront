@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
-import { TipoSitio } from '@winsuite/bloques';
+import { Bloque, ContenidoSitio, TemaSitio, TipoSitio } from '@winsuite/bloques';
 import { environment } from '../../../../environments/environment';
 import { LienzoPlantillaId } from '../config/lienzo-plantillas';
 
@@ -118,14 +118,24 @@ export interface AiSiteChatRequest {
   imageUrls: string[];
   /** null = fase conversacion; con blueprint el ultimo mensaje user es la instruccion de refinamiento. */
   blueprint: AiSiteBlueprint | null;
+  /** Documento real del editor. Si existe, el backend devuelve operaciones acotadas. */
+  currentContent: ContenidoSitio | null;
 }
 
+export type AiSiteEditOperation =
+  | { op: 'patch-theme'; patch: Partial<TemaSitio> & Record<string, unknown> }
+  | { op: 'patch-block'; pageId: string; blockId: string; patch: Record<string, unknown> }
+  | { op: 'insert-block'; pageId: string; afterBlockId?: string | null; block: Bloque }
+  | { op: 'move-block'; pageId: string; blockId: string; afterBlockId?: string | null }
+  | { op: 'delete-block'; pageId: string; blockId: string };
+
 export interface AiSiteChatResponse {
-  mode: 'ask' | 'generate';
+  mode: 'ask' | 'generate' | 'edit';
   message: string;
   suggestions: string[];
   requestImages: boolean;
   blueprint: AiSiteBlueprint | null;
+  operations: AiSiteEditOperation[];
   /** Tipo resuelto por la IA: nunca null cuando mode='generate'. */
   siteType: TipoSitio | null;
   inputTokens: number;
@@ -146,13 +156,17 @@ export class AiSiteGeneratorService {
   chat(request: AiSiteChatRequest): Observable<AiSiteChatResponse> {
     return this.http.post<AiSiteChatResponse>(`${this.baseEndpoint}/chat`, request).pipe(
       map(response => ({
-        mode: response.mode === 'generate' ? 'generate' as const : 'ask' as const,
+        mode: response.mode === 'generate' ? 'generate' as const
+          : response.mode === 'edit' ? 'edit' as const : 'ask' as const,
         message: typeof response.message === 'string' ? response.message : '',
         suggestions: Array.isArray(response.suggestions) ? response.suggestions : [],
         requestImages: response.requestImages === true,
         blueprint: response.mode === 'generate' && response.blueprint
           ? this.readBlueprint(response.blueprint)
           : null,
+        operations: response.mode === 'edit' && Array.isArray(response.operations)
+          ? response.operations
+          : [],
         siteType: response.siteType === 'ecommerce' ? 'ecommerce' as const
           : response.siteType === 'landing' ? 'landing' as const : null,
         inputTokens: response.inputTokens ?? 0,

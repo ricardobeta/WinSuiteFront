@@ -601,6 +601,8 @@ export class EditorPageComponent {
           type: this.config()?.tipo ?? null,
           blueprint: this.estadoIa?.blueprint ?? null,
           imageUrls: this.estadoIa?.imageUrls ?? [],
+          currentContent: this.contenido(),
+          formBindings: this.estadoIa?.formBindings ?? {},
         },
         maxWidth: '96vw', maxHeight: '94vh', autoFocus: false, disableClose: true,
         panelClass: 'ai-site-chat-panel',
@@ -608,15 +610,19 @@ export class EditorPageComponent {
     );
     const resultado = await firstValueFrom(ref.afterClosed());
     if (!resultado) return;
-    this.mutar((actual) => {
-      const paginasSistema = Object.fromEntries(
-        Object.entries(actual.paginas).filter(([id]) => id.startsWith('__')),
-      );
-      return {
-        tema: resultado.contenido.tema,
-        paginas: { ...resultado.contenido.paginas, ...paginasSistema },
-      };
-    });
+    if (resultado.source === 'edit') {
+      this.mutar(() => resultado.contenido);
+    } else {
+      this.mutar((actual) => {
+        const paginasSistema = Object.fromEntries(
+          Object.entries(actual.paginas).filter(([id]) => id.startsWith('__')),
+        );
+        return {
+          tema: resultado.contenido.tema,
+          paginas: { ...resultado.contenido.paginas, ...paginasSistema },
+        };
+      });
+    }
     const primeraPagina = Object.keys(this.contenido()?.paginas ?? {})[0];
     if (!this.contenido()?.paginas[this.paginaActualId()] && primeraPagina) {
       this.paginaActualId.set(primeraPagina);
@@ -624,8 +630,11 @@ export class EditorPageComponent {
     this.seleccionId.set(null);
     this.estadoIa = {
       type: resultado.tipo,
-      blueprint: resultado.blueprint,
+      ...(resultado.source === 'generation' && resultado.blueprint
+        ? { blueprint: resultado.blueprint }
+        : {}),
       imageUrls: resultado.imageUrls,
+      formBindings: resultado.formBindings,
       updatedAt: Date.now(),
     };
     void this.borradorService.guardarIa(this.sitioId(), this.estadoIa).catch(() => undefined);

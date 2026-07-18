@@ -12,6 +12,7 @@ import {
 } from '../../../../shared/components/archivo-selector-dialog/archivo-selector-dialog.component';
 import { TEMA_PRESETS, TemaPreset } from '../../config/tema-presets';
 import { AiSiteBlueprintCompilerService } from '../../services/ai-site-blueprint-compiler.service';
+import { AiSiteEditApplierService } from '../../services/ai-site-edit-applier.service';
 import {
   AiSiteBlueprint,
   AiSiteBlueprintForm,
@@ -25,15 +26,21 @@ export interface AiSiteChatDialogData {
   /** Diseño IA existente: el chat abre en modo mejora sobre el sitio actual. */
   blueprint?: AiSiteBlueprint | null;
   imageUrls?: string[];
+  /** Documento real del editor: activa refinamiento no destructivo por operaciones. */
+  currentContent?: ContenidoSitio | null;
+  /** Vinculaciones persistentes para no volver a crear formularios IA. */
+  formBindings?: Record<string, string>;
 }
 
 /** Contrato de cierre: el chat tambien resuelve el tipo cuando entro sin el. */
 export interface AiSiteChatDialogResult {
   contenido: ContenidoSitio;
   tipo: TipoSitio;
+  source: 'generation' | 'edit';
   /** Estado IA para persistir y poder seguir iterando desde el editor. */
-  blueprint: AiSiteBlueprint;
+  blueprint: AiSiteBlueprint | null;
   imageUrls: string[];
+  formBindings: Record<string, string>;
 }
 
 interface ChatMsg {
@@ -110,7 +117,7 @@ const CATALOGO_SECCIONES = Object.entries(SECCIONES_INFO)
           <div class="bubble thinking"><mat-spinner diameter="18"></mat-spinner><span>{{ thinkingText() }}</span></div>
         }
 
-        @if (blueprint(); as bp) {
+        @if (visibleBlueprint(); as bp) {
           <section class="result">
             <div class="result-head"><mat-icon>auto_awesome</mat-icon><b>{{ bp.concept }}</b></div>
             <div class="swatches">
@@ -212,6 +219,26 @@ const CATALOGO_SECCIONES = Object.entries(SECCIONES_INFO)
           </section>
         }
 
+        @if (editingExisting && pendingEdits()) {
+          <section class="result edit-result">
+            <div class="result-head">
+              <mat-icon>difference</mat-icon>
+              <b>Cambios preparados sobre tu diseño actual</b>
+            </div>
+            <p>
+              {{ pendingOperationCount() }}
+              {{ pendingOperationCount() === 1 ? 'ajuste listo' : 'ajustes listos' }}.
+              Los bloques y estilos que no pediste cambiar se conservarán.
+            </p>
+            <div class="result-actions">
+              <button mat-flat-button color="primary" [disabled]="isSending()" (click)="applyDesign()">
+                <mat-icon>check_circle</mat-icon> Aplicar estos cambios
+              </button>
+              <span>Puedes seguir pidiendo ajustes antes de aplicarlos.</span>
+            </div>
+          </section>
+        }
+
         @if (lastSuggestions().length && !isSending()) {
           <div class="chips">
             @for (chip of lastSuggestions(); track chip) {
@@ -266,6 +293,7 @@ const CATALOGO_SECCIONES = Object.entries(SECCIONES_INFO)
     .chips button:hover,.mover button:hover:not(:disabled),.catalogo-chips button:hover:not(:disabled){background:var(--tc-primary-container);color:var(--primary)}
     .catalogo-chips button:hover:not(:disabled){border-color:var(--primary)}
     .result{border:1.5px solid color-mix(in srgb,var(--primary) 40%,transparent);border-radius:16px;padding:16px;display:grid;gap:12px;background:color-mix(in srgb,var(--primary) 5%,transparent)}
+    .edit-result p{margin:0;line-height:1.45}
     .result-head{display:flex;align-items:center;gap:9px}.result-head mat-icon{color:var(--primary)}
     .swatches{display:flex;align-items:center;gap:7px;flex-wrap:wrap}.swatches>span{width:26px;height:26px;border-radius:8px;border:1px solid var(--tc-ghost-border)}.swatches em{margin-left:6px;font-size:.8rem;opacity:.7;font-style:normal}
     .toggle-tema{margin-left:auto}.catalogo-toggle{margin-left:0;justify-self:start}
@@ -303,6 +331,7 @@ export class AiSiteChatDialogComponent implements OnDestroy {
   private readonly injector = inject(Injector);
   private readonly generator = inject(AiSiteGeneratorService);
   private readonly compiler = inject(AiSiteBlueprintCompilerService);
+  private readonly editApplier = inject(AiSiteEditApplierService);
   private readonly formularios = inject(FormulariosService);
   private readonly scroller = viewChild<ElementRef<HTMLElement>>('scroller');
 
@@ -312,6 +341,12 @@ export class AiSiteChatDialogComponent implements OnDestroy {
   readonly isApplying = signal(false);
   readonly imageUrls = signal<string[]>(this.data.imageUrls ?? []);
   readonly blueprint = signal<AiSiteBlueprint | null>(this.data.blueprint ?? null);
+  readonly editingExisting = !!this.data.currentContent;
+  readonly previewContent = signal<ContenidoSitio | null>(
+    this.data.currentContent ? structuredClone(this.data.currentContent) : null,
+  );
+  readonly pendingEdits = signal(false);
+  readonly pendingOperationCount = signal(0);
   readonly highlightAttach = signal(false);
   readonly editingTheme = signal(false);
   readonly thinkingText = signal(THINKING_MESSAGES[0]);
@@ -323,9 +358,11 @@ export class AiSiteChatDialogComponent implements OnDestroy {
   readonly catalogo = CATALOGO_SECCIONES;
   readonly openPages = signal<Set<number>>(new Set([0]));
   readonly showCatalog = signal(false);
+  readonly visibleBlueprint = computed(() => this.editingExisting ? null : this.blueprint());
 
   readonly headerTitle = computed(() => {
     const type = this.resolvedType();
+    if (this.editingExisting) return 'Mejoremos tu sitio actual';
     return type === 'ecommerce' ? 'Creemos tu tienda en línea'
       : type === 'landing' ? 'Creemos tu landing page'
       : 'Creemos tu sitio web';
@@ -335,10 +372,10 @@ export class AiSiteChatDialogComponent implements OnDestroy {
     const last = list[list.length - 1];
     return last?.role === 'assistant' && !last.error ? (last.suggestions ?? []) : [];
   });
-  readonly nearLimit = computed(() => !this.blueprint() && this.messages().length >= 22);
+  readonly nearLimit = computed(() => !this.editingExisting && !this.blueprint() && this.messages().length >= 22);
 
-  /** pageId:index -> formularioId ya creado (reutilizado si el usuario reintenta aplicar). */
-  private readonly createdForms = new Map<string, string>();
+  /** Clave semantica estable -> formularioId real, persistida entre aperturas del chat. */
+  private readonly createdForms = new Map<string, string>(Object.entries(this.data.formBindings ?? {}));
   /** En modo mejora, cerrar sin cambios no debe pedir confirmacion. */
   private readonly initialBlueprint = this.data.blueprint ?? null;
   private thinkingTimer: ReturnType<typeof setInterval> | null = null;
@@ -346,6 +383,13 @@ export class AiSiteChatDialogComponent implements OnDestroy {
   ngOnDestroy(): void { this.stopThinking(); }
 
   private welcomeMessage(): ChatMsg {
+    if (this.data.currentContent) {
+      return {
+        role: 'assistant',
+        content: 'Estoy trabajando sobre el diseño que tienes ahora, incluidos tus cambios manuales. Pídeme un ajuste concreto y conservaré todo lo que no menciones.',
+        suggestions: ['Alterna fondos anaranjados y blancos', 'Mejora solo los textos de la portada', 'Agrega una sección de equipo', 'Haz más visible el botón principal'],
+      };
+    }
     if (this.data.blueprint) {
       return {
         role: 'assistant',
@@ -398,10 +442,18 @@ export class AiSiteChatDialogComponent implements OnDestroy {
         type: this.resolvedType(),
         messages: this.payloadMessages(),
         imageUrls: this.imageUrls(),
-        blueprint: this.blueprint(),
+        blueprint: this.editingExisting ? null : this.blueprint(),
+        currentContent: this.editingExisting ? this.previewContent() : null,
       }));
       if (response.siteType) this.resolvedType.set(response.siteType);
       if (response.mode === 'generate' && response.blueprint) this.blueprint.set(response.blueprint);
+      if (response.mode === 'edit') {
+        const current = this.previewContent();
+        if (!current) throw new Error('No se encontró el contenido actual del sitio.');
+        this.previewContent.set(this.editApplier.apply(current, response.operations));
+        this.pendingOperationCount.update(count => count + response.operations.length);
+        this.pendingEdits.set(true);
+      }
       if (response.requestImages) this.highlightAttach.set(true);
       this.messages.update(list => [...list, {
         role: 'assistant',
@@ -422,13 +474,14 @@ export class AiSiteChatDialogComponent implements OnDestroy {
   }
 
   /**
-   * En refinamiento el backend solo usa la ultima instruccion; enviar solo ese
-   * mensaje evita chocar con el tope de 30 mensajes en chats largos.
+   * El refinamiento del documento conserva una ventana corta para entender frases
+   * como "ahora hazlo mas grande"; el contenido ya incorpora los cambios anteriores.
    */
   private payloadMessages(): AiSiteChatMessage[] {
     const clean = this.messages()
       .filter(msg => !msg.error)
       .map(({ role, content }) => ({ role, content }));
+    if (this.editingExisting) return clean.slice(-12);
     if (this.blueprint()) {
       const lastUser = [...clean].reverse().find(msg => msg.role === 'user');
       return lastUser ? [lastUser] : clean.slice(-1);
@@ -525,16 +578,37 @@ export class AiSiteChatDialogComponent implements OnDestroy {
   async applyDesign(): Promise<void> {
     const blueprint = this.blueprint();
     const tipo = this.resolvedType();
-    if (!blueprint || this.isApplying()) return;
+    if (this.isApplying()) return;
     if (!tipo) {
       this.pushError('No pude determinar si tu sitio es tienda o landing. Dímelo en el chat y vuelve a intentar.');
       return;
     }
+    if (this.editingExisting) {
+      const contenido = this.previewContent();
+      if (!contenido || !this.pendingEdits()) return;
+      this.dialogRef.close({
+        contenido,
+        tipo,
+        source: 'edit',
+        blueprint,
+        imageUrls: this.imageUrls(),
+        formBindings: Object.fromEntries(this.createdForms),
+      });
+      return;
+    }
+    if (!blueprint) return;
     this.isApplying.set(true);
     try {
       const formIds = await this.materializeForms(blueprint);
       const contenido = this.compiler.compile(blueprint, this.imageUrls(), tipo === 'ecommerce', formIds);
-      this.dialogRef.close({ contenido, tipo, blueprint, imageUrls: this.imageUrls() });
+      this.dialogRef.close({
+        contenido,
+        tipo,
+        source: 'generation',
+        blueprint,
+        imageUrls: this.imageUrls(),
+        formBindings: Object.fromEntries(this.createdForms),
+      });
     } catch (error: any) {
       this.pushError(error?.message || 'No pude aplicar el diseño. Pídeme que lo regenere.');
     } finally {
@@ -545,10 +619,13 @@ export class AiSiteChatDialogComponent implements OnDestroy {
   /**
    * "Tool" de la IA: crea de verdad los formularios que diseño la conversacion
    * (sitios_formularios/{tenant}) para que aparezcan en la pantalla Formularios.
-   * Solo al aplicar (los refinamientos regeneran el blueprint) e idempotente al reintentar.
+   * La vinculacion semantica se persiste con el estado IA. Reordenar secciones o
+   * volver a abrir el chat reutiliza y actualiza el mismo formulario.
    */
   private async materializeForms(blueprint: AiSiteBlueprint): Promise<Map<string, string>> {
     const pages = Array.isArray(blueprint.pages) ? blueprint.pages.slice(0, 5) : [];
+    const existing = await this.formularios.getFormulariosUnaVez();
+    const compilerBindings = new Map<string, string>();
     for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
       const page = pages[pageIndex];
       const pageId = pageIndex === 0 ? 'home' : (slugify(page.slug || page.title) || `pagina-${pageIndex + 1}`);
@@ -556,17 +633,23 @@ export class AiSiteChatDialogComponent implements OnDestroy {
       for (let index = 0; index < sections.length; index++) {
         const section = sections[index];
         if (section?.type !== 'contact' || !section.form?.fields?.length) continue;
-        const key = `${pageId}:${index}`;
-        if (this.createdForms.has(key)) continue;
-        const def = this.buildFormDef(section.form);
+        const key = this.formBindingKey(pageId, section.form);
+        const boundId = this.createdForms.get(key);
+        const previous = boundId ? existing[boundId] : undefined;
+        const def = this.buildFormDef(section.form, previous);
         await this.formularios.guardar(def);
         this.createdForms.set(key, def.formularioId);
+        compilerBindings.set(`${pageId}:${index}`, def.formularioId);
       }
     }
-    return new Map(this.createdForms);
+    return compilerBindings;
   }
 
-  private buildFormDef(form: AiSiteBlueprintForm): FormularioDef {
+  private formBindingKey(pageId: string, form: AiSiteBlueprintForm): string {
+    return `${pageId}:form:${slugify(form.name).slice(0, 50) || 'contacto'}`;
+  }
+
+  private buildFormDef(form: AiSiteBlueprintForm, previous?: FormularioDef): FormularioDef {
     const ahora = Date.now();
     const usados = new Set<string>();
     const campos: CampoFormulario[] = form.fields.slice(0, 20).map((field, index) => {
@@ -587,11 +670,11 @@ export class AiSiteChatDialogComponent implements OnDestroy {
       return { id, tipo, etiqueta, requerido };
     });
     return {
-      formularioId: `f-${ahora.toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
+      formularioId: previous?.formularioId ?? `f-${ahora.toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
       nombre: form.name.slice(0, 80) || 'Formulario del sitio',
       campos,
       mensajeExito: form.successMessage?.slice(0, 1000) || 'Gracias, te contactaremos pronto.',
-      creadoEn: ahora,
+      creadoEn: previous?.creadoEn ?? ahora,
       actualizadoEn: ahora,
     };
   }
@@ -602,7 +685,8 @@ export class AiSiteChatDialogComponent implements OnDestroy {
   }
 
   tryClose(): void {
-    const cambiado = this.blueprint() && this.blueprint() !== this.initialBlueprint;
+    const cambiado = this.pendingEdits()
+      || (this.blueprint() && this.blueprint() !== this.initialBlueprint);
     if (cambiado && !window.confirm('Perderás los cambios del diseño. ¿Cerrar de todos modos?')) return;
     this.dialogRef.close();
   }

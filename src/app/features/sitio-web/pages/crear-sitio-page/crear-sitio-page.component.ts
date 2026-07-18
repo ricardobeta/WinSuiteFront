@@ -427,11 +427,12 @@ export class CrearSitioPageComponent {
         contenidoInicial: this.contenidoGenerado() ?? plantilla.crearContenido(),
       });
       // Persistir el estado del Copiloto: permite seguir iterando el diseño desde el editor.
-      if (this.aiResultado) {
+      if (this.aiResultado?.blueprint) {
         await this.borradorService.guardarIa(sitioId, {
           type: this.aiResultado.tipo,
           blueprint: this.aiResultado.blueprint,
           imageUrls: this.aiResultado.imageUrls,
+          formBindings: this.aiResultado.formBindings,
         }).catch(() => undefined);
       }
       this.snackBar.open('Sitio creado. ¡A construir!', 'OK', { duration: 3000 });
