@@ -394,6 +394,7 @@
           }
         },
         "documentosPorPagar": {
+          ".indexOn": "fechaEmision",
           "$documentoId": {
             ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }

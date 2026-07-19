@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, get, onValue, push, ref, runTransaction, set, update } from '@angular/fire/database';
+import { Database, endAt, get, limitToLast, onValue, orderByChild, push, query, ref, runTransaction, set, startAt, update } from '@angular/fire/database';
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
@@ -43,6 +43,17 @@ export interface RegistrarPagoInput {
   referencia?: string;
   glosa: string;
   aplicaciones: { documentoId: string; documentoNumero: string; monto: number }[];
+}
+
+export interface DocumentosPorPagarPageCursor {
+  value: number;
+  key: string;
+}
+
+export interface DocumentosPorPagarPageResult {
+  items: DocumentoPorPagar[];
+  nextCursor: DocumentosPorPagarPageCursor | null;
+  hasMore: boolean;
 }
 
 /**
@@ -152,6 +163,58 @@ export class CuentasPorPagarService {
     }
     const raw = snapshot.val() as Record<string, DocumentoPorPagar>;
     return Object.entries(raw).map(([id, documento]) => ({ ...documento, id }));
+  }
+
+  /** Consulta una página de documentos por mes, sin dejar un listener sobre todo el auxiliar. */
+  async getDocumentosPorPagarPage(
+    periodo: string,
+    limit = 50,
+    cursor: DocumentosPorPagarPageCursor | null = null
+  ): Promise<DocumentosPorPagarPageResult> {
+    if (!/^\d{4}-\d{2}$/.test(periodo)) {
+      throw new Error('Selecciona un período contable válido.');
+    }
+
+    const [anio, mes] = periodo.split('-').map(Number);
+    const desde = new Date(anio, mes - 1, 1, 0, 0, 0, 0).getTime();
+    const hasta = new Date(anio, mes, 1, 0, 0, 0, 0).getTime() - 1;
+    const boundedLimit = Math.max(1, Math.min(limit, 100));
+    const constraints = [orderByChild('fechaEmision'), startAt(desde)];
+    constraints.push(cursor ? endAt(cursor.value, cursor.key) : endAt(hasta));
+    constraints.push(limitToLast(boundedLimit + (cursor ? 2 : 1)));
+
+    const snapshot = await get(query(this.getDocumentosRef(), ...constraints));
+    const items: DocumentoPorPagar[] = [];
+    snapshot.forEach((child) => {
+      if (child.key !== cursor?.key) {
+        items.push({ ...(child.val() as DocumentoPorPagar), id: child.key ?? undefined });
+      }
+      return false;
+    });
+
+    const hasMore = items.length > boundedLimit;
+    if (hasMore) {
+      items.shift();
+    }
+    items.reverse();
+    const last = items.at(-1);
+    return {
+      items,
+      nextCursor: hasMore && last?.id
+        ? { value: Number(last.fechaEmision), key: last.id }
+        : null,
+      hasMore
+    };
+  }
+
+  /** Lectura puntual usada al abrir el detalle de un proveedor; no mantiene suscripciones activas. */
+  async getDocumentosPendientesProveedor(proveedorClave: string): Promise<DocumentoPorPagar[]> {
+    const documentos = await this.getDocumentosOnce();
+    return documentos
+      .filter((documento) => this.claveProveedor(documento) === proveedorClave)
+      .filter((documento) => documento.estadoPago !== 'ANULADA' && documento.estadoPago !== 'PAGADA')
+      .filter((documento) => Number(documento.saldoPendiente ?? 0) > 0)
+      .sort((a, b) => (a.fechaVencimiento ?? 0) - (b.fechaVencimiento ?? 0));
   }
 
   async getDocumentoById(id: string): Promise<DocumentoPorPagar | null> {
@@ -406,10 +469,14 @@ export class CuentasPorPagarService {
     await this.validarPeriodo(input.fecha);
 
     // Validación previa de saldos (la transacción vuelve a validar por concurrencia).
+    const claveProveedor = input.proveedorId ?? `sin:${input.proveedorNombre}`;
     for (const aplicacion of aplicaciones) {
       const documento = await this.getDocumentoById(aplicacion.documentoId);
       if (!documento || documento.estadoPago === 'ANULADA') {
         throw new Error('Uno de los documentos ya no está disponible para pago.');
+      }
+      if (this.claveProveedor(documento) !== claveProveedor) {
+        throw new Error('Todos los documentos aplicados deben pertenecer al proveedor seleccionado.');
       }
       if (this.round2(aplicacion.monto) > this.round2(documento.saldoPendiente)) {
         throw new Error(`El abono a ${documento.numero ?? 'documento'} excede su saldo pendiente.`);
@@ -633,5 +700,9 @@ export class CuentasPorPagarService {
 
   private round2(value: number): number {
     return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+  }
+
+  private claveProveedor(documento: DocumentoPorPagar): string {
+    return documento.proveedorId ?? `sin:${documento.proveedorNombre}`;
   }
 }
