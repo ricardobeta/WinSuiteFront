@@ -4,6 +4,15 @@ import { Database, endAt, equalTo, get, limitToLast, orderByChild, query, ref } 
 import { AuthService } from '../../../core/services/auth.service';
 import { MatchConciliacion, MovimientoBancario, MovimientosPage } from '../models/bancos.models';
 
+export interface AgregadoBancario {
+  totalCreditos: number;
+  totalDebitos: number;
+  movimientos: number;
+  saldoFinal?: number;
+  saldoFinalFecha?: string;
+  actualizadoEn?: number;
+}
+
 /**
  * Lectura de movimientos bancarios y matches desde RTDB.
  * SIEMPRE lecturas puntuales get() paginadas por cursor claveOrden — nunca
@@ -64,6 +73,15 @@ export class BancosMovimientosService {
       nextCursor: hasMore && last ? last.claveOrden : null,
       hasMore
     };
+  }
+
+  /**
+   * Agregados precalculados por período (escritos por el backend al importar):
+   * el dashboard carga con UNA lectura por cuenta, sin tocar los movimientos.
+   */
+  async getAgregados(cuentaBancariaId: string): Promise<Record<string, AgregadoBancario>> {
+    const snapshot = await get(ref(this.database, `${this.getBancosPath()}/agregados/${cuentaBancariaId}`));
+    return (snapshot.val() ?? {}) as Record<string, AgregadoBancario>;
   }
 
   /** Matches del período (para chips de estado en el workspace). */

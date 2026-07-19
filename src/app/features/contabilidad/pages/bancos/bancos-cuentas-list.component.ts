@@ -51,6 +51,10 @@ import { CuentaBancariaDialogComponent } from './cuenta-bancaria-dialog.componen
             <mat-icon>savings</mat-icon>
             Tesorería
           </a>
+          <a mat-stroked-button color="primary" class="cta" routerLink="/workspace/contabilidad/bancos/dashboard">
+            <mat-icon>monitoring</mat-icon>
+            Dashboard
+          </a>
           <a mat-stroked-button color="primary" class="cta" routerLink="/workspace/contabilidad/bancos/configuracion/reglas">
             <mat-icon>rule</mat-icon>
             Reglas

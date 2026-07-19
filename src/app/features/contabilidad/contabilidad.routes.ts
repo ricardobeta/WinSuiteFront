@@ -23,6 +23,7 @@ import { BancosMovimientosListComponent } from './pages/bancos/bancos-movimiento
 import { ConciliacionWorkspaceComponent } from './pages/bancos/conciliacion-workspace.component';
 import { BancosReglasComponent } from './pages/bancos/bancos-reglas.component';
 import { TesoreriaListComponent } from './pages/bancos/tesoreria-list.component';
+import { BancosDashboardComponent } from './pages/bancos/bancos-dashboard.component';
 import { NominaShellComponent } from '../nomina/pages/nomina-shell/nomina-shell.component';
 import { NominaRolesComponent } from './pages/nomina-roles/nomina-roles.component';
 import { NominaRolDetalleComponent } from '../nomina/pages/rol-detalle/nomina-rol-detalle.component';
@@ -235,6 +236,14 @@ export const CONTABILIDAD_ROUTES: Routes = [
         data: {
           module: 'Contabilidad',
           page: 'Tesoreria'
+        }
+      },
+      {
+        path: 'bancos/dashboard',
+        component: BancosDashboardComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Dashboard de bancos'
         }
       },
       {
