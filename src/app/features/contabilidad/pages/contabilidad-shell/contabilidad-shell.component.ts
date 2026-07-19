@@ -27,6 +27,7 @@ export class ContabilidadShellComponent {
     { label: 'Asientos contables', icon: 'receipt_long', route: '/workspace/contabilidad/asientos' },
     { label: 'Compras', icon: 'shopping_cart', route: '/workspace/contabilidad/compras' },
     { label: 'Cuentas por pagar', icon: 'request_quote', route: '/workspace/contabilidad/cuentas-por-pagar' },
+    { label: 'Bancos', icon: 'account_balance_wallet', route: '/workspace/contabilidad/bancos' },
     { label: 'Reportes', icon: 'bar_chart', route: '/workspace/contabilidad/reportes' },
     { label: 'ATS', icon: 'summarize', route: '/workspace/contabilidad/ats' },
     { label: 'Nómina', icon: 'payments', route: '/workspace/contabilidad/nomina' },

@@ -143,7 +143,7 @@ export interface PermissionMatrixModel {
 })
 export class PermissionMatrixEditorComponent implements OnInit {
   @Input() permissions: PermissionMatrixModel = {};
-  @Input() modules: string[] = ['clientes', 'facturacion', 'inventario', 'contabilidad', 'ventas', 'servicios', 'archivos', 'empresa_calendario', 'empresa_colaboradores', 'empresa_roles'];
+  @Input() modules: string[] = ['clientes', 'facturacion', 'inventario', 'contabilidad', 'contabilidad_bancos', 'ventas', 'servicios', 'archivos', 'empresa_calendario', 'empresa_colaboradores', 'empresa_roles'];
 
   @Output() permissionsChanged = new EventEmitter<PermissionMatrixModel>();
 
@@ -181,6 +181,7 @@ export class PermissionMatrixEditorComponent implements OnInit {
   moduleLabel(moduleKey: string): string {
     return ({
       clientes: 'Clientes', facturacion: 'Facturacion', inventario: 'Inventario', contabilidad: 'Contabilidad',
+      contabilidad_bancos: 'Contabilidad · Bancos',
       ventas: 'Ventas', servicios: 'Servicios', archivos: 'Archivos', empresa_calendario: 'Calendario y eventos',
       empresa_colaboradores: 'Colaboradores', empresa_roles: 'Roles y permisos'
     } as Record<string, string>)[moduleKey] ?? moduleKey;

@@ -17,6 +17,13 @@ import { FacturasCompraListComponent } from './pages/facturas-compra-list/factur
 import { FacturaCompraFormComponent } from './pages/factura-compra-form/factura-compra-form.component';
 import { CargaMasivaComprasComponent } from './pages/carga-masiva-compras/carga-masiva-compras.component';
 import { AtsGenerarComponent } from './pages/ats-generar/ats-generar.component';
+import { BancosCuentasListComponent } from './pages/bancos/bancos-cuentas-list.component';
+import { ExtractoImportComponent } from './pages/bancos/extracto-import.component';
+import { BancosMovimientosListComponent } from './pages/bancos/bancos-movimientos-list.component';
+import { ConciliacionWorkspaceComponent } from './pages/bancos/conciliacion-workspace.component';
+import { BancosReglasComponent } from './pages/bancos/bancos-reglas.component';
+import { TesoreriaListComponent } from './pages/bancos/tesoreria-list.component';
+import { BancosDashboardComponent } from './pages/bancos/bancos-dashboard.component';
 import { NominaShellComponent } from '../nomina/pages/nomina-shell/nomina-shell.component';
 import { NominaRolesComponent } from './pages/nomina-roles/nomina-roles.component';
 import { NominaRolDetalleComponent } from '../nomina/pages/rol-detalle/nomina-rol-detalle.component';
@@ -181,6 +188,62 @@ export const CONTABILIDAD_ROUTES: Routes = [
         data: {
           module: 'Contabilidad',
           page: 'Generar ATS'
+        }
+      },
+      {
+        path: 'bancos',
+        component: BancosCuentasListComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Cuentas bancarias'
+        }
+      },
+      {
+        path: 'bancos/extractos/importar',
+        component: ExtractoImportComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Importar extracto bancario'
+        }
+      },
+      {
+        path: 'bancos/movimientos',
+        component: BancosMovimientosListComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Movimientos bancarios'
+        }
+      },
+      {
+        path: 'bancos/conciliacion',
+        component: ConciliacionWorkspaceComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Conciliacion bancaria'
+        }
+      },
+      {
+        path: 'bancos/configuracion/reglas',
+        component: BancosReglasComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Reglas de conciliacion'
+        }
+      },
+      {
+        path: 'bancos/tesoreria',
+        component: TesoreriaListComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Tesoreria'
+        }
+      },
+      {
+        path: 'bancos/dashboard',
+        component: BancosDashboardComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Dashboard de bancos'
         }
       },
       {
