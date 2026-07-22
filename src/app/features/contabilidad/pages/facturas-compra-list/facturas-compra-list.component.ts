@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
@@ -21,6 +21,7 @@ import { DataTableFrameComponent } from '../../../../shared/components/data-tabl
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { EstadoFacturaCompra, FacturaCompra, TIPOS_COMPROBANTE, TIPO_COMPROBANTE_NOTA_CREDITO } from '../../models/compras.models';
 import { FacturasCompraPageCursor, FacturasCompraService } from '../../services/facturas-compra.service';
+import { PeriodoContableService } from '../../services/periodo-contable.service';
 
 @Component({
   selector: 'app-facturas-compra-list',
@@ -286,8 +287,9 @@ import { FacturasCompraPageCursor, FacturasCompraService } from '../../services/
     }
   `]
 })
-export class FacturasCompraListComponent {
+export class FacturasCompraListComponent implements OnInit {
   private readonly facturasService = inject(FacturasCompraService);
+  private readonly periodoService = inject(PeriodoContableService);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
   private readonly dialog = inject(MatDialog);
@@ -298,7 +300,7 @@ export class FacturasCompraListComponent {
 
   protected readonly facturas = signal<FacturaCompra[]>([]);
   protected readonly busqueda = new FormControl('', { nonNullable: true });
-  protected readonly periodo = new FormControl('', { nonNullable: true });
+  protected readonly periodo = new FormControl(this.periodoService.getPeriodoInicial('compras'), { nonNullable: true });
   protected readonly tipo = new FormControl('', { nonNullable: true });
   protected readonly estado = new FormControl('', { nonNullable: true });
 
@@ -355,15 +357,22 @@ export class FacturasCompraListComponent {
   constructor() {
     this.busqueda.valueChanges.pipe(startWith(''), debounceTime(250), takeUntilDestroyed(this.destroyRef))
       .subscribe((value) => this.busquedaSignal.set(value ?? ''));
-    this.periodo.valueChanges.pipe(startWith(''), takeUntilDestroyed(this.destroyRef))
+    this.periodo.valueChanges.pipe(startWith(this.periodo.value), takeUntilDestroyed(this.destroyRef))
       .subscribe((value) => {
         this.periodoSignal.set(value ?? '');
+        this.periodoService.setPeriodo('compras', value ?? '');
         this.reiniciarConsulta();
       });
     this.tipo.valueChanges.pipe(startWith(''), takeUntilDestroyed(this.destroyRef))
       .subscribe((value) => this.tipoSignal.set(value ?? ''));
     this.estado.valueChanges.pipe(startWith(''), takeUntilDestroyed(this.destroyRef))
       .subscribe((value) => this.estadoSignal.set(value ?? ''));
+  }
+
+  ngOnInit(): void {
+    if (this.periodo.value) {
+      this.buscar();
+    }
   }
 
   protected buscar(): void {

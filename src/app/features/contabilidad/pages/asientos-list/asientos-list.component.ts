@@ -21,6 +21,7 @@ import { PendienteContabilizacionDialogComponent } from '../../components/pendie
 import { AsientoContable, EstadoAsiento, OrigenAsiento, PendienteContabilizacion } from '../../models/contabilidad.models';
 import { AsientosContablesService, AsientosPageCursor } from '../../services/asientos-contables.service';
 import { IntegracionContableService } from '../../services/integracion-contable.service';
+import { PeriodoContableService } from '../../services/periodo-contable.service';
 
 @Component({
   selector: 'app-asientos-list',
@@ -297,6 +298,7 @@ import { IntegracionContableService } from '../../services/integracion-contable.
 export class AsientosListComponent implements OnInit {
   private readonly service = inject(AsientosContablesService);
   private readonly integracionService = inject(IntegracionContableService);
+  private readonly periodoService = inject(PeriodoContableService);
   private readonly authorization = inject(AuthorizationService);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
@@ -308,7 +310,7 @@ export class AsientosListComponent implements OnInit {
   protected readonly pendientesAutomaticos = signal<PendienteContabilizacion[]>([]);
   protected readonly cargando = signal(false);
   protected readonly consultaRealizada = signal(false);
-  protected readonly periodo = signal('');
+  protected readonly periodo = signal(this.periodoService.getPeriodoInicial('asientos'));
   protected readonly busqueda = signal('');
   protected readonly estadoFiltro = signal<EstadoAsiento | 'TODOS'>('TODOS');
   protected readonly origenFiltro = signal<OrigenAsiento | 'TODOS'>('TODOS');
@@ -349,6 +351,9 @@ export class AsientosListComponent implements OnInit {
 
   ngOnInit(): void {
     void this.cargarPendientes();
+    if (this.periodo()) {
+      this.buscar();
+    }
   }
 
   private async cargarPendientes(): Promise<void> {
@@ -364,7 +369,9 @@ export class AsientosListComponent implements OnInit {
   }
 
   protected actualizarPeriodo(event: Event): void {
-    this.periodo.set((event.target as HTMLInputElement).value);
+    const valor = (event.target as HTMLInputElement).value;
+    this.periodo.set(valor);
+    this.periodoService.setPeriodo('asientos', valor);
     this.reiniciarConsulta();
   }
 
