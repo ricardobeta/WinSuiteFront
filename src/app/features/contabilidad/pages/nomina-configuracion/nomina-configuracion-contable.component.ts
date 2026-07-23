@@ -15,21 +15,9 @@ import { AuthorizationService } from '../../../../core/services/authorization.se
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { CuentaContableAutocompleteComponent } from '../../components/cuenta-contable-autocomplete/cuenta-contable-autocomplete.component';
 import { CuentaContable } from '../../models/contabilidad.models';
-import { ConfiguracionNominaContable } from '../../models/nomina.models';
+import { ConfiguracionNominaContable, CuentaNominaKey } from '../../models/nomina.models';
 import { NominaService } from '../../services/nomina.service';
 import { PlanCuentasService } from '../../services/plan-cuentas.service';
-
-type CuentaNominaKey =
-  | 'cuentaGastoSueldosId'
-  | 'cuentaGastoBeneficiosSocialesId'
-  | 'cuentaGastoAportePatronalId'
-  | 'cuentaSueldosPorPagarId'
-  | 'cuentaIessPorPagarId'
-  | 'cuentaAnticiposEmpleadosId'
-  | 'cuentaPrestamosEmpleadosId'
-  | 'cuentaDecimosPorPagarId'
-  | 'cuentaFondosReservaPorPagarId'
-  | 'cuentaVacacionesPorPagarId';
 
 @Component({
   selector: 'app-nomina-configuracion-contable',
@@ -81,8 +69,28 @@ type CuentaNominaKey =
           </mat-form-field>
 
           <mat-form-field appearance="outline">
-            <mat-label>Base decimo cuarto</mat-label>
+            <mat-label>Base decimo cuarto (SBU)</mat-label>
             <input matInput type="number" min="0" step="0.01" [(ngModel)]="form.salarioBasicoUnificado" name="sbu" [disabled]="!canUpdate()" />
+          </mat-form-field>
+        </div>
+
+        <div class="grid-4">
+          <mat-form-field appearance="outline">
+            <mat-label>Region</mat-label>
+            <mat-select [(ngModel)]="form.region" name="region" [disabled]="!canUpdate()">
+              <mat-option value="SIERRA">Sierra y Amazonia (ago - jul)</mat-option>
+              <mat-option value="COSTA">Costa y Galapagos (mar - feb)</mat-option>
+            </mat-select>
+            <mat-hint>Define el periodo de calculo del decimo cuarto</mat-hint>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Pago de decimos por defecto</mat-label>
+            <mat-select [(ngModel)]="form.modoDecimos" name="modoDecimos" [disabled]="!canUpdate()">
+              <mat-option value="ACUMULADO">Acumulado (se paga en su rol anual)</mat-option>
+              <mat-option value="MENSUALIZADO">Mensualizado (se paga en cada rol)</mat-option>
+            </mat-select>
+            <mat-hint>Solo el valor inicial: cada empleado define el suyo en su ficha</mat-hint>
           </mat-form-field>
         </div>
 
@@ -98,8 +106,18 @@ type CuentaNominaKey =
         <div class="section-head">
           <div>
             <h3>Cuentas contables de nomina</h3>
-            <p>Estas cuentas se usan al aprobar el rol y generar el asiento contable.</p>
+            <p>Estas cuentas se usan al aprobar el rol y generar el asiento contable. Puedes guardar avance parcial.</p>
           </div>
+          <button
+            mat-stroked-button
+            type="button"
+            (click)="sugerirCuentas()"
+            [disabled]="sugiriendo() || !canUpdate()"
+            matTooltip="Propone una cuenta del plan para cada casilla vacia, sin pisar las que ya elegiste"
+          >
+            <mat-icon>auto_fix_high</mat-icon>
+            Sugerir cuentas del plan
+          </button>
         </div>
 
         <div class="account-grid">
@@ -158,6 +176,7 @@ export class NominaConfiguracionContableComponent {
   protected readonly cuentas = signal<CuentaContable[]>([]);
   protected readonly cuentasMovimiento = computed(() => this.cuentas().filter((cuenta) => cuenta.estado === 'ACTIVA' && cuenta.permiteMovimiento));
   protected readonly guardando = signal(false);
+  protected readonly sugiriendo = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly canUpdate = computed(() => this.authorization.canAccess('contabilidad', 'update'));
   protected readonly form: ConfiguracionNominaContable = this.nominaService.getDefaultConfiguracion();
@@ -171,7 +190,8 @@ export class NominaConfiguracionContableComponent {
     { key: 'cuentaPrestamosEmpleadosId', label: 'Prestamos empleados' },
     { key: 'cuentaDecimosPorPagarId', label: 'Decimos por pagar' },
     { key: 'cuentaFondosReservaPorPagarId', label: 'Fondos reserva por pagar' },
-    { key: 'cuentaVacacionesPorPagarId', label: 'Vacaciones por pagar' }
+    { key: 'cuentaVacacionesPorPagarId', label: 'Vacaciones por pagar' },
+    { key: 'cuentaUtilidadesPorPagarId', label: 'Utilidades por pagar' }
   ];
 
   constructor() {
@@ -188,6 +208,30 @@ export class NominaConfiguracionContableComponent {
 
   protected seleccionarCuenta(campo: CuentaNominaKey, cuenta: CuentaContable | null): void {
     this.form[campo] = cuenta?.id ?? '';
+  }
+
+  /** Rellena solo las casillas vacias con la cuenta del plan que mejor coincide; el contador confirma al guardar. */
+  protected async sugerirCuentas(): Promise<void> {
+    if (!this.canUpdate()) {
+      return;
+    }
+
+    this.error.set(null);
+    this.sugiriendo.set(true);
+    try {
+      const { configuracion, asignadas } = await this.nominaService.sugerirCuentas({ ...this.form });
+      Object.assign(this.form, configuracion);
+      this.toast(
+        asignadas > 0
+          ? `${asignadas} cuenta(s) sugeridas. Revisalas y guarda la configuracion.`
+          : 'No se encontraron cuentas equivalentes en el plan. Selecciona las cuentas a mano.',
+        'auto_fix_high'
+      );
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : 'No se pudieron sugerir cuentas.');
+    } finally {
+      this.sugiriendo.set(false);
+    }
   }
 
   protected async guardar(): Promise<void> {

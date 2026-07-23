@@ -11,17 +11,27 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { firstValueFrom } from 'rxjs';
 
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import {
+  RevisarAsientoData,
+  RevisarAsientoDialogComponent
+} from '../../../contabilidad/components/revisar-asiento-dialog/revisar-asiento-dialog.component';
+import { AsientoContableLinea } from '../../../contabilidad/models/contabilidad.models';
+import {
+  ConceptoProvision,
   ConfiguracionNominaContable,
   RolPago,
   RolPagoDetalle,
   RolPagoLinea,
   RubroNomina
 } from '../../../contabilidad/models/nomina.models';
+import { IntegracionContableService } from '../../../contabilidad/services/integracion-contable.service';
+import { NominaPdfApiService } from '../../../contabilidad/services/nomina-pdf-api.service';
 import { NominaService } from '../../../contabilidad/services/nomina.service';
+import { PlanCuentasService } from '../../../contabilidad/services/plan-cuentas.service';
 
 interface EmpleadoEdit {
   id: string;
@@ -30,6 +40,15 @@ interface EmpleadoEdit {
   cargo: string;
   sueldoBase: number;
   lineas: RolPagoLinea[];
+  /**
+   * Reglas del empleado congeladas al generar el rol. Se conservan aparte porque `aDetalle`
+   * reconstruye el detalle desde las lineas editables y, sin esto, al guardar el borrador se
+   * perderian el modo de decimos y el derecho a fondos de reserva.
+   */
+  reglas: Pick<
+    RolPagoDetalle,
+    'modoDecimoTercero' | 'modoDecimoCuarto' | 'modoFondosReserva' | 'aplicaFondosReserva'
+  >;
   resumen: RolPagoDetalle;
 }
 
@@ -53,7 +72,7 @@ interface EmpleadoEdit {
     <section class="rol-page">
       <header class="surface-card page-header">
         <div>
-          <p class="eyebrow">Nomina - Rol de pago</p>
+          <p class="eyebrow">Nomina - {{ etiquetaTipo() }}</p>
           <h2>{{ rol()?.numero || rol()?.periodo || 'Rol de pago' }}</h2>
           <p>Periodo {{ rol()?.periodo }} · Pago {{ rol()?.fechaPago }}</p>
         </div>
@@ -61,6 +80,10 @@ interface EmpleadoEdit {
           <span class="pill" [class.ok]="rol()?.estado === 'APROBADO'" [class.off]="rol()?.estado === 'ANULADO'">
             {{ rol()?.estado }}
           </span>
+          <button mat-stroked-button type="button" (click)="descargarComprobantes()" [disabled]="descargando()">
+            <mat-icon>picture_as_pdf</mat-icon>
+            Comprobantes
+          </button>
           <a mat-button routerLink="/workspace/contabilidad/nomina/roles">
             <mat-icon>arrow_back</mat-icon>
             Volver
@@ -164,9 +187,52 @@ interface EmpleadoEdit {
                 <div><dt>Total ingresos</dt><dd>{{ item.resumen.totalIngresos | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
                 <div><dt>Aporte personal IESS</dt><dd>- {{ item.resumen.aportePersonalIess | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
                 <div><dt>Otros descuentos</dt><dd>- {{ item.resumen.otrosDescuentos | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
-                <div><dt>Provisiones (patronal)</dt><dd>{{ item.resumen.totalBeneficios | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
+                <div class="provisiones-row">
+                  <dt>Provisiones (patronal)</dt>
+                  <dd>
+                    {{ item.resumen.totalBeneficios | currency:'USD':'symbol-narrow':'1.2-2' }}
+                    <button mat-icon-button type="button" (click)="alternarProvisiones(item.id)"
+                      [attr.aria-label]="'Ver desglose de provisiones de ' + item.empleadoNombre">
+                      <mat-icon>{{ provisionesAbiertas() === item.id ? 'expand_less' : 'expand_more' }}</mat-icon>
+                    </button>
+                  </dd>
+                </div>
                 <div class="neto"><dt>Neto a pagar</dt><dd>{{ item.resumen.netoPagar | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
               </dl>
+
+              @if (provisionesAbiertas() === item.id) {
+                <div class="provisiones-detalle">
+                  <header>
+                    <strong>Desglose de lo provisionado este periodo</strong>
+                    <a mat-button routerLink="/workspace/contabilidad/nomina/provisiones">
+                      <mat-icon>savings</mat-icon>
+                      Ver acumulado del anio
+                    </a>
+                  </header>
+                  <table>
+                    <tbody>
+                      @for (fila of desgloseProvisiones(item); track fila.concepto) {
+                        <tr [class.cero]="fila.monto === 0 && !fila.nota">
+                          <td>{{ fila.etiqueta }}</td>
+                          <td class="base">
+                            {{ fila.base }}
+                            @if (fila.nota) { <em>· {{ fila.nota }}</em> }
+                          </td>
+                          <td class="num">{{ fila.monto | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
+                        </tr>
+                      }
+                      <tr class="total">
+                        <td colspan="2">Total provisionado</td>
+                        <td class="num">{{ item.resumen.totalBeneficios | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                  <p class="nota">
+                    Las provisiones no se descuentan al empleado: son costo patronal que se acumula
+                    hasta pagarse en su rol de decimos o en la liquidacion.
+                  </p>
+                </div>
+              }
             </div>
           </mat-expansion-panel>
         }
@@ -180,7 +246,7 @@ interface EmpleadoEdit {
           </button>
           <button mat-raised-button type="button" class="approve" (click)="aprobar()" [disabled]="procesando()">
             <mat-icon>task_alt</mat-icon>
-            Aprobar y generar asiento
+            Revisar asiento y aprobar
           </button>
           <button mat-button color="warn" type="button" (click)="anular()" [disabled]="procesando()">
             <mat-icon>block</mat-icon>
@@ -189,7 +255,14 @@ interface EmpleadoEdit {
         } @else {
           <p class="muted">Este rol esta {{ rol()?.estado }} y no puede editarse.
             @if (rol()?.asientoId) { El asiento contable ya fue generado. }
+            @if (rol()?.reversadoEn) { Fue reversado contablemente. }
           </p>
+          @if (rol()?.estado === 'APROBADO') {
+            <button mat-stroked-button color="warn" type="button" (click)="reversar()" [disabled]="procesando()">
+              <mat-icon>undo</mat-icon>
+              Reversar rol
+            </button>
+          }
         }
       </footer>
     </section>
@@ -222,6 +295,17 @@ interface EmpleadoEdit {
     .resumen div { display: flex; justify-content: space-between; }
     .resumen dt, .resumen dd { margin: 0; }
     .resumen .neto { border-top: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent); padding-top: .35rem; font-weight: 700; font-size: 1.05rem; }
+    .provisiones-row dd { display: flex; align-items: center; gap: .25rem; }
+    .provisiones-row button { width: 32px; height: 32px; line-height: 32px; }
+    .provisiones-detalle { margin-top: -.4rem; padding: .85rem 1rem; border-radius: .6rem; background: color-mix(in srgb, var(--primary) 7%, transparent); display: grid; gap: .5rem; }
+    .provisiones-detalle header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .provisiones-detalle table { width: 100%; border-collapse: collapse; }
+    .provisiones-detalle td { padding: .3rem 0; border-bottom: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent); }
+    .provisiones-detalle tr.cero { opacity: .5; }
+    .provisiones-detalle tr.total td { font-weight: 700; border-bottom: none; }
+    .provisiones-detalle .base { color: var(--muted-foreground); font-size: .82rem; }
+    .provisiones-detalle .num { text-align: right; }
+    .provisiones-detalle .nota { margin: 0; font-size: .82rem; color: var(--muted-foreground); }
     .actions-bar { padding: 1rem 1.25rem; display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
     .approve { background: var(--primary); color: var(--tc-on-primary, #fff); }
     .error-box { padding: .8rem 1rem; border-radius: .5rem; background: color-mix(in srgb, #b3261e 12%, transparent); color: #b3261e; }
@@ -233,6 +317,9 @@ interface EmpleadoEdit {
 })
 export class NominaRolDetalleComponent implements OnInit {
   private readonly nominaService = inject(NominaService);
+  private readonly planCuentasService = inject(PlanCuentasService);
+  private readonly pdfApi = inject(NominaPdfApiService);
+  private readonly integracionContable = inject(IntegracionContableService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly dialog = inject(MatDialog);
@@ -245,6 +332,12 @@ export class NominaRolDetalleComponent implements OnInit {
   protected readonly procesando = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly editable = computed(() => this.rol()?.estado === 'BORRADOR');
+  protected readonly etiquetaTipo = computed(
+    () => this.nominaService.etiquetasTipoRol[this.rol()?.tipo ?? 'MENSUAL']
+  );
+  /** Id del empleado cuyo desglose de provisiones esta abierto, o null si no hay ninguno. */
+  protected readonly provisionesAbiertas = signal<string | null>(null);
+  protected readonly descargando = signal(false);
 
   private config: ConfiguracionNominaContable = this.nominaService.getDefaultConfiguracion();
   private rolId = '';
@@ -276,6 +369,70 @@ export class NominaRolDetalleComponent implements OnInit {
           void this.cargar(id);
         }
       });
+  }
+
+  /** Descarga el juego de comprobantes del rol: una pagina por empleado, para firmar como recibo. */
+  protected async descargarComprobantes(): Promise<void> {
+    this.error.set(null);
+    this.descargando.set(true);
+    try {
+      const blob = await this.pdfApi.descargarComprobantes(this.rolId);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `comprobantes-${this.rol()?.numero || this.rol()?.periodo || this.rolId}.pdf`;
+      anchor.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : 'No se pudieron descargar los comprobantes.');
+    } finally {
+      this.descargando.set(false);
+    }
+  }
+
+  protected alternarProvisiones(empleadoDetalleId: string): void {
+    this.provisionesAbiertas.update((actual) => actual === empleadoDetalleId ? null : empleadoDetalleId);
+  }
+
+  /**
+   * Provisiones del periodo con su base de calculo y su destino: lo mensualizado se paga en este
+   * rol y lo acumulado queda provisionado. Asi la cifra deja de ser opaca y se ve por que un
+   * empleado provisiona y otro no.
+   */
+  protected desgloseProvisiones(item: EmpleadoEdit): Array<{
+    concepto: ConceptoProvision; etiqueta: string; base: string; monto: number; nota: string;
+  }> {
+    const resumen = item.resumen;
+    const provisionado: Record<ConceptoProvision, number> = {
+      DECIMO_TERCERO: resumen.decimoTerceroProvision,
+      DECIMO_CUARTO: resumen.decimoCuartoProvision,
+      FONDOS_RESERVA: resumen.fondosReservaProvision,
+      VACACIONES: resumen.vacacionesProvision
+    };
+    const mensualizado: Record<ConceptoProvision, number> = {
+      DECIMO_TERCERO: resumen.decimoTerceroMensualizado ?? 0,
+      DECIMO_CUARTO: resumen.decimoCuartoMensualizado ?? 0,
+      FONDOS_RESERVA: resumen.fondosReservaMensualizado ?? 0,
+      VACACIONES: 0
+    };
+
+    return this.nominaService.conceptosProvision.map((concepto) => ({
+      concepto,
+      etiqueta: this.nominaService.etiquetasConcepto[concepto],
+      base: this.nominaService.basesCalculoProvision[concepto],
+      monto: provisionado[concepto],
+      nota: this.notaProvision(concepto, resumen, mensualizado[concepto])
+    }));
+  }
+
+  private notaProvision(concepto: ConceptoProvision, resumen: RolPagoDetalle, mensualizado: number): string {
+    if (mensualizado > 0) {
+      return `Mensualizado: se paga ${mensualizado.toFixed(2)} en este rol`;
+    }
+    if (concepto === 'FONDOS_RESERVA' && resumen.aplicaFondosReserva === false) {
+      return 'Aun no cumple un año de trabajo';
+    }
+    return '';
   }
 
   protected cambiarRubro(item: EmpleadoEdit, index: number, rubroId: string): void {
@@ -343,13 +500,92 @@ export class NominaRolDetalleComponent implements OnInit {
     }
   }
 
-  protected aprobar(): void {
+  /**
+   * Aprobacion en dos pasos, igual que compras y cuentas por pagar: primero se guarda el borrador,
+   * luego se muestra el asiento propuesto en el dialogo de revision para que el contador vea y
+   * ajuste como queda contabilizado antes de confirmar. Si la contabilidad esta desactivada no hay
+   * asiento que revisar y se cae al dialogo de confirmacion simple.
+   */
+  protected async aprobar(): Promise<void> {
+    this.error.set(null);
+    this.procesando.set(true);
+    try {
+      await this.nominaService.actualizarDetallesRol(this.rolId, this.empleados().map((item) => this.aDetalle(item)));
+
+      if (!(await this.integracionContable.contabilidadActiva())) {
+        this.procesando.set(false);
+        this.confirmarSinAsiento();
+        return;
+      }
+
+      const [propuesta, cuentas] = await Promise.all([
+        this.nominaService.construirLineasRolPago(this.rolId),
+        this.planCuentasService.getCuentasOnce()
+      ]);
+      const rol = this.rol();
+      const data: RevisarAsientoData = {
+        titulo: 'Revisar asiento del rol de pago',
+        subtitulo: `${rol?.numero || rol?.periodo} · ${this.empleados().length} empleados · Neto ${this.totales().netoPagar.toFixed(2)}`,
+        lineas: propuesta,
+        cuentas
+      };
+      this.procesando.set(false);
+
+      const lineas = await firstValueFrom(
+        this.dialog.open<RevisarAsientoDialogComponent, RevisarAsientoData, AsientoContableLinea[] | undefined>(
+          RevisarAsientoDialogComponent,
+          { maxWidth: '96vw', data }
+        ).afterClosed()
+      );
+      if (!lineas) {
+        return;
+      }
+
+      this.procesando.set(true);
+      await this.nominaService.aprobarRolPago(this.rolId, lineas);
+      this.toast('Rol aprobado y asiento generado.', 'task_alt');
+      await this.cargar(this.rolId);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : 'No se pudo aprobar el rol.');
+    } finally {
+      this.procesando.set(false);
+    }
+  }
+
+  private confirmarSinAsiento(): void {
     const dialogRef = this.dialog.open(ConfirmDialogComponent, {
       width: '440px',
       data: {
         title: 'Aprobar rol de pago',
-        message: 'Se guardaran los cambios y se generara el asiento contable. Despues de aprobar el rol no podra editarse. Continuar?',
+        message: 'La contabilidad automatica esta desactivada: el rol se aprobara sin generar asiento. Despues de aprobar no podra editarse. Continuar?',
         confirmText: 'Aprobar'
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(async (confirmado) => {
+      if (!confirmado) {
+        return;
+      }
+      this.procesando.set(true);
+      try {
+        await this.nominaService.aprobarRolPago(this.rolId);
+        this.toast('Rol aprobado.', 'task_alt');
+        await this.cargar(this.rolId);
+      } catch (error) {
+        this.error.set(error instanceof Error ? error.message : 'No se pudo aprobar el rol.');
+      } finally {
+        this.procesando.set(false);
+      }
+    });
+  }
+
+  protected reversar(): void {
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '460px',
+      data: {
+        title: 'Reversar rol de pago',
+        message: 'Se generara el asiento inverso, el asiento original quedara marcado como reversado y el rol pasara a anulado. Los aportes de este rol se retiran del acumulado anual de los empleados. Continuar?',
+        confirmText: 'Reversar'
       }
     });
 
@@ -360,12 +596,11 @@ export class NominaRolDetalleComponent implements OnInit {
       this.error.set(null);
       this.procesando.set(true);
       try {
-        await this.nominaService.actualizarDetallesRol(this.rolId, this.empleados().map((item) => this.aDetalle(item)));
-        await this.nominaService.aprobarRolPago(this.rolId);
-        this.toast('Rol aprobado y asiento generado.', 'task_alt');
+        await this.nominaService.reversarRolPago(this.rolId);
+        this.toast('Rol reversado y asiento inverso generado.', 'undo');
         await this.cargar(this.rolId);
       } catch (error) {
-        this.error.set(error instanceof Error ? error.message : 'No se pudo aprobar el rol.');
+        this.error.set(error instanceof Error ? error.message : 'No se pudo reversar el rol.');
       } finally {
         this.procesando.set(false);
       }
@@ -419,6 +654,12 @@ export class NominaRolDetalleComponent implements OnInit {
       cargo: detalle.cargo,
       sueldoBase: sueldoLinea?.monto ?? detalle.sueldoBase,
       lineas: (detalle.lineas ?? []).filter((linea) => linea.origen === 'RUBRO').map((linea) => ({ ...linea })),
+      reglas: {
+        modoDecimoTercero: detalle.modoDecimoTercero,
+        modoDecimoCuarto: detalle.modoDecimoCuarto,
+        modoFondosReserva: detalle.modoFondosReserva,
+        aplicaFondosReserva: detalle.aplicaFondosReserva
+      },
       resumen: detalle
     };
     item.resumen = this.calcularResumen(item);
@@ -449,6 +690,7 @@ export class NominaRolDetalleComponent implements OnInit {
       empleadoNombre: item.empleadoNombre,
       cargo: item.cargo,
       sueldoBase: Number(item.sueldoBase) || 0,
+      ...item.reglas,
       lineas,
       ingresosAdicionales: 0,
       aportePersonalIess: 0,

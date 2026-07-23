@@ -104,6 +104,9 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
                 <th mat-header-cell *matHeaderCellDef class="num">Acciones</th>
                 <td mat-cell *matCellDef="let row" class="num">
                   <button mat-button type="button" (click)="editar(row)">Editar</button>
+                  @if (row.estado === 'ACTIVO') {
+                    <button mat-button type="button" (click)="liquidar(row)">Liquidar</button>
+                  }
                   <button mat-button type="button" (click)="cambiarEstado(row)">
                     {{ row.estado === 'ACTIVO' ? 'Inactivar' : 'Activar' }}
                   </button>
@@ -184,6 +187,12 @@ export class NominaEmpleadosListComponent {
   protected editar(empleado: EmpleadoNomina): void {
     if (empleado.id) {
       void this.router.navigate(['/workspace/contabilidad/nomina/empleados', empleado.id, 'editar']);
+    }
+  }
+
+  protected liquidar(empleado: EmpleadoNomina): void {
+    if (empleado.id) {
+      void this.router.navigate(['/workspace/contabilidad/nomina/empleados', empleado.id, 'liquidar']);
     }
   }
 

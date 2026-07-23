@@ -27,6 +27,9 @@ import { BancosDashboardComponent } from './pages/bancos/bancos-dashboard.compon
 import { NominaShellComponent } from '../nomina/pages/nomina-shell/nomina-shell.component';
 import { NominaRolesComponent } from './pages/nomina-roles/nomina-roles.component';
 import { NominaRolDetalleComponent } from '../nomina/pages/rol-detalle/nomina-rol-detalle.component';
+import { NominaLiquidacionComponent } from '../nomina/pages/liquidacion/nomina-liquidacion.component';
+import { NominaProvisionesComponent } from '../nomina/pages/provisiones/nomina-provisiones.component';
+import { NominaUtilidadesComponent } from '../nomina/pages/utilidades/nomina-utilidades.component';
 import { NominaRubrosComponent } from '../nomina/pages/rubros/nomina-rubros.component';
 import { NominaEmpleadosListComponent } from '../nomina/pages/empleados-list/nomina-empleados-list.component';
 import { NominaEmpleadoFormComponent } from '../nomina/pages/empleado-form/nomina-empleado-form.component';
@@ -297,6 +300,30 @@ export const CONTABILIDAD_ROUTES: Routes = [
             data: {
               module: 'Contabilidad',
               page: 'Editar empleado de nomina'
+            }
+          },
+          {
+            path: 'empleados/:id/liquidar',
+            component: NominaLiquidacionComponent,
+            data: {
+              module: 'Contabilidad',
+              page: 'Liquidacion de empleado'
+            }
+          },
+          {
+            path: 'utilidades',
+            component: NominaUtilidadesComponent,
+            data: {
+              module: 'Contabilidad',
+              page: 'Utilidades'
+            }
+          },
+          {
+            path: 'provisiones',
+            component: NominaProvisionesComponent,
+            data: {
+              module: 'Contabilidad',
+              page: 'Provisiones de nomina'
             }
           },
           {

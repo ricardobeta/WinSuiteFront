@@ -15,7 +15,7 @@ import { CamposCustomFormComponent } from '../../../../shared/components/campos-
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { CampoPersonalizado } from '../../../../shared/models/clientes.models';
 import { dateAIso, isoADate } from '../../../../shared/utils/fecha-input.util';
-import { EmpleadoNomina } from '../../../contabilidad/models/nomina.models';
+import { EmpleadoNomina, ModoDecimos } from '../../../contabilidad/models/nomina.models';
 import { NominaService } from '../../../contabilidad/services/nomina.service';
 
 @Component({
@@ -109,6 +109,48 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
         </section>
 
         <section class="form-section">
+          <h3>Beneficios de ley</h3>
+          <p class="section-hint">
+            Cada empleado decide ante el IESS si recibe sus decimos y fondos de reserva mensualizados
+            junto al sueldo, o acumulados para cobrarlos en su fecha. No es una politica de la empresa.
+          </p>
+          <div class="grid-4">
+            <mat-form-field appearance="outline">
+              <mat-label>Decimo tercero</mat-label>
+              <mat-select formControlName="modoDecimoTercero">
+                <mat-option value="ACUMULADO">Acumulado (se paga en diciembre)</mat-option>
+                <mat-option value="MENSUALIZADO">Mensualizado (con cada rol)</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Decimo cuarto</mat-label>
+              <mat-select formControlName="modoDecimoCuarto">
+                <mat-option value="ACUMULADO">Acumulado (se paga en su fecha)</mat-option>
+                <mat-option value="MENSUALIZADO">Mensualizado (con cada rol)</mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Fondos de reserva</mat-label>
+              <mat-select formControlName="modoFondosReserva">
+                <mat-option value="ACUMULADO">Acumulados en el IESS</mat-option>
+                <mat-option value="MENSUALIZADO">Mensualizados (con cada rol)</mat-option>
+              </mat-select>
+              @if (avisoFondosReserva()) {
+                <mat-hint>{{ avisoFondosReserva() }}</mat-hint>
+              }
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Cargas familiares</mat-label>
+              <input matInput type="number" min="0" step="1" formControlName="cargasFamiliares" />
+              <mat-hint>Conyuge e hijos: dan derecho al 5% de utilidades</mat-hint>
+            </mat-form-field>
+          </div>
+        </section>
+
+        <section class="form-section">
           <h3>Contacto</h3>
           <div class="grid-2">
             <mat-form-field appearance="outline">
@@ -152,6 +194,7 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
     .page-header p { margin-top: .35rem; color: var(--muted-foreground); }
     .form-card { display: grid; gap: 1rem; }
     .form-section { display: grid; gap: .75rem; }
+    .section-hint { color: var(--muted-foreground); font-size: .88rem; max-width: 78ch; }
     .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
     .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
     .custom-section { border-top: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent); padding-top: 1rem; }
@@ -188,8 +231,25 @@ export class NominaEmpleadoFormComponent implements OnInit {
     fechaIngreso: [new Date() as Date | null, [Validators.required]],
     sueldoBase: [0, [Validators.required, Validators.min(0.01)]],
     estado: ['ACTIVO' as EmpleadoNomina['estado'], [Validators.required]],
+    modoDecimoTercero: ['ACUMULADO' as ModoDecimos, [Validators.required]],
+    modoDecimoCuarto: ['ACUMULADO' as ModoDecimos, [Validators.required]],
+    modoFondosReserva: ['ACUMULADO' as ModoDecimos, [Validators.required]],
+    cargasFamiliares: [0],
     camposPersonalizados: this.formBuilder.control<Record<string, any>>({})
   });
+
+  /** Aviso de antiguedad: los fondos de reserva recien se devengan desde el mes 13 de trabajo. */
+  protected avisoFondosReserva(): string {
+    const fecha = this.form.controls.fechaIngreso.value;
+    if (!fecha) {
+      return '';
+    }
+    const primerMesConDerecho = new Date(fecha.getFullYear() + 1, fecha.getMonth() + 1, 1);
+    if (primerMesConDerecho <= new Date()) {
+      return '';
+    }
+    return `Aun no genera fondos de reserva: se devengan desde ${primerMesConDerecho.toLocaleDateString('es-EC', { month: 'long', year: 'numeric' })}.`;
+  }
 
   ngOnInit(): void {
     this.nominaService
@@ -231,6 +291,10 @@ export class NominaEmpleadoFormComponent implements OnInit {
         fechaIngreso: dateAIso(raw.fechaIngreso),
         sueldoBase: Number(raw.sueldoBase ?? 0),
         estado: raw.estado ?? 'ACTIVO',
+        modoDecimoTercero: raw.modoDecimoTercero ?? 'ACUMULADO',
+        modoDecimoCuarto: raw.modoDecimoCuarto ?? 'ACUMULADO',
+        modoFondosReserva: raw.modoFondosReserva ?? 'ACUMULADO',
+        cargasFamiliares: Number(raw.cargasFamiliares ?? 0),
         camposPersonalizados: raw.camposPersonalizados ?? {}
       });
       this.toast('Empleado guardado.', 'save');
@@ -261,6 +325,10 @@ export class NominaEmpleadoFormComponent implements OnInit {
       fechaIngreso: isoADate(empleado.fechaIngreso),
       sueldoBase: empleado.sueldoBase,
       estado: empleado.estado,
+      modoDecimoTercero: empleado.modoDecimoTercero ?? 'ACUMULADO',
+      modoDecimoCuarto: empleado.modoDecimoCuarto ?? 'ACUMULADO',
+      modoFondosReserva: empleado.modoFondosReserva ?? 'ACUMULADO',
+      cargasFamiliares: empleado.cargasFamiliares ?? 0,
       camposPersonalizados: empleado.camposPersonalizados ?? {}
     });
   }

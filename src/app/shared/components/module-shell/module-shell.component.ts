@@ -29,6 +29,8 @@ export interface ModuleNavItem {
   icon: string;
   route: string;
   exact?: boolean;
+  /** Parametros para enlazar a una seccion concreta de otro modulo (ej. un tab o panel). */
+  queryParams?: Record<string, string>;
 }
 
 export function calculateVisibleNavIndices(
@@ -100,6 +102,7 @@ export function calculateVisibleNavIndices(
                 class="module-nav__link"
                 [class.active]="isActive(entry.item)"
                 [routerLink]="entry.item.route"
+                [queryParams]="entry.item.queryParams ?? null"
                 [attr.aria-current]="isActive(entry.item) ? 'page' : null"
               >
                 <mat-icon>{{ entry.item.icon }}</mat-icon>
@@ -124,6 +127,7 @@ export function calculateVisibleNavIndices(
                 <a
                   mat-menu-item
                   [routerLink]="entry.item.route"
+                  [queryParams]="entry.item.queryParams ?? null"
                   [class.module-nav-menu__active]="isActive(entry.item)"
                   [attr.aria-current]="isActive(entry.item) ? 'page' : null"
                 >

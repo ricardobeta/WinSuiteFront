@@ -27,10 +27,23 @@ export class NominaShellComponent {
     ? '/workspace/contabilidad/nomina'
     : '/workspace/nomina';
 
+  /**
+   * La configuración contable de nómina (cuentas, IESS, provisiones) vive en la página de
+   * Configuración de Contabilidad, no aquí: este ítem enlaza directo a ese panel. El ítem local
+   * cubre solo los campos personalizados del empleado, y se nombra como tal para no confundirlos.
+   */
   protected readonly navigationItems: readonly ModuleNavItem[] = [
     { label: 'Roles de pago', icon: 'receipt_long', route: `${this.baseRoute}/roles` },
     { label: 'Empleados', icon: 'badge', route: `${this.baseRoute}/empleados` },
+    { label: 'Provisiones', icon: 'savings', route: `${this.baseRoute}/provisiones` },
+    { label: 'Utilidades', icon: 'groups', route: `${this.baseRoute}/utilidades` },
     { label: 'Rubros', icon: 'category', route: `${this.baseRoute}/rubros` },
-    { label: 'Configuración', icon: 'tune', route: `${this.baseRoute}/configuracion` },
+    { label: 'Campos de empleado', icon: 'list_alt', route: `${this.baseRoute}/configuracion` },
+    {
+      label: 'Configuración contable',
+      icon: 'tune',
+      route: '/workspace/contabilidad/configuracion',
+      queryParams: { tab: 'integraciones', panel: 'nomina' },
+    },
   ];
 }

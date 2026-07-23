@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatChipsModule } from '@angular/material/chips';
@@ -114,7 +115,7 @@ type CuentaIntegracionCampo = {
       }
 
       <section class="surface-card tabs-card">
-        <mat-tab-group>
+        <mat-tab-group [selectedIndex]="tabInicial()">
           <mat-tab label="Empresa">
             <form class="empresa-form" (ngSubmit)="guardarEmpresa()">
               <div class="grid-3">
@@ -602,7 +603,7 @@ type CuentaIntegracionCampo = {
                 </mat-expansion-panel>
 
                 <!-- Nómina (migrado): edición desde aquí, datos en su propia ruta -->
-                <mat-expansion-panel>
+                <mat-expansion-panel [expanded]="panelNominaAbierto()">
                   <mat-expansion-panel-header>
                     <mat-panel-title><mat-icon>badge</mat-icon> Nómina</mat-panel-title>
                     <mat-panel-description>Cuentas contables de roles de pago</mat-panel-description>
@@ -744,6 +745,7 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
   private readonly authorization = inject(AuthorizationService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly route = inject(ActivatedRoute);
 
   protected readonly columnasPeriodos = ['nombre', 'fechaInicio', 'fechaFin', 'estado', 'cierre', 'acciones'];
   protected readonly columnasMapeos = ['categoria', 'ingresoProductos', 'ingresoServicios', 'inventario', 'costoVenta', 'compraGasto', 'acciones'];
@@ -767,6 +769,15 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
   protected readonly empresaConfigurada = signal(false);
   protected readonly fechaInicioDate = signal<Date | null>(new Date(new Date().getFullYear(), 0, 1));
   protected readonly canUpdate = computed(() => this.authorization.canAccess('contabilidad', 'update'));
+
+  /**
+   * Deep-link desde otros submodulos: ?tab=empresa|periodos|integraciones y ?panel=nomina abren
+   * directamente la seccion pedida, para que un submodulo pueda enviar al contador a la casilla
+   * exacta que le falta configurar en lugar de dejarlo buscando dentro del acordeon.
+   */
+  private readonly tabsPorClave: Record<string, number> = { empresa: 0, periodos: 1, integraciones: 2 };
+  protected readonly tabInicial = signal(0);
+  protected readonly panelNominaAbierto = signal(false);
   private periodosSubscription?: Subscription;
   protected readonly ayudaConfig = {
     submodulo: 'Configura la identidad fiscal de la empresa, periodos contables e integraciones que generan asientos automaticos.',
@@ -879,6 +890,16 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
   ];
 
   ngOnInit(): void {
+    this.route.queryParamMap
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((params) => {
+        const tab = (params.get('tab') ?? '').toLowerCase();
+        if (this.tabsPorClave[tab] !== undefined) {
+          this.tabInicial.set(this.tabsPorClave[tab]);
+        }
+        this.panelNominaAbierto.set((params.get('panel') ?? '').toLowerCase() === 'nomina');
+      });
+
     this.service
       .getEmpresa()
       .pipe(takeUntilDestroyed(this.destroyRef))
