@@ -197,11 +197,42 @@ textarea {
 	}
 }
 
-/* Diálogo "Dividir cuenta": el contenido define su propia superficie/padding. */
-.dividir-cuenta-panel .mat-mdc-dialog-surface {
-	padding: 0;
-	border-radius: 12px;
-	overflow: hidden;
+@media (max-width: 600px) {
+	app-ventas-pos {
+		.pos-grid { gap: .65rem; }
+		.panel { padding: .75rem; gap: .75rem; min-width: 0; }
+		.panel-title p { font-size: .85rem; overflow-wrap: anywhere; }
+		.productos-grid { grid-template-columns: 1fr; gap: .6rem; }
+		.producto-card { width: 100%; min-width: 0; padding: .75rem; }
+		.producto-header-row { flex-wrap: wrap; }
+		.producto-nombre, .producto-meta { overflow-wrap: anywhere; }
+		.producto-footer-row { align-items: center; }
+		.catalog-type-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+		.catalog-type-switch button { width: 100%; }
+		.client-row { grid-template-columns: 1fr; }
+		.client-search { grid-column: 1; }
+		.client-row > button { width: 100%; }
+		.cart-row {
+			grid-template-columns: minmax(0, 1fr) auto;
+			gap: .45rem .6rem;
+			min-width: 0;
+		}
+		.cart-row > div:first-child { grid-column: 1; grid-row: 1; min-width: 0; }
+		.cart-row > button:last-child { grid-column: 2; grid-row: 1; }
+		.cart-actions { grid-column: 1; grid-row: 2; }
+		.desc-field { grid-column: 1 / -1; grid-row: 3; }
+		.row-total { grid-column: 2; grid-row: 2; text-align: right; }
+		.cart-name, .cart-meta { overflow-wrap: anywhere; }
+		.totals > mat-form-field { width: 100%; }
+		.cobro-rapido { display: grid; grid-template-columns: 1fr; }
+		.recibido-field { width: 100%; }
+		.cobro-rapido button { width: 100%; }
+		.actions { display: grid; grid-template-columns: 1fr; }
+		.actions button { width: 100%; }
+		.pos-tabs-actions { display: grid; grid-template-columns: 1fr; width: 100%; }
+		.pos-tabs-actions button { width: 100%; }
+		.pos-tab { min-width: min(86vw, 320px); }
+	}
 }
 
 html.theme-dark {

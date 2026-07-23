@@ -19,6 +19,7 @@ import {
   VentaPago
 } from '../models/ventas.models';
 import { VentasConfigService } from './ventas-config.service';
+import { calcularResumenVenta } from './ventas-calculos.util';
 
 @Injectable({
   providedIn: 'root'
@@ -196,35 +197,15 @@ export class VentasService {
     }
 
     const totalPagos = this.roundToTwo(input.pagos.reduce((acum, pago) => acum + this.roundToTwo(this.safeNumber(pago.monto)), 0));
-    const subtotalBruto = input.items.reduce((acum, item) => acum + (item.precioUnitario * item.cantidad), 0);
-    const descuentoItems = input.items.reduce((acum, item) => {
-      const base = this.roundToTwo(item.precioUnitario * item.cantidad);
-      const descuentoItem = this.roundToTwo(Math.min(base, base * (item.descuentoItem / 100)));
-      return this.roundToTwo(acum + descuentoItem);
-    }, 0);
-
-    const subtotalNetoItems = input.items.reduce((acum, item) => {
-      const base = this.roundToTwo(item.precioUnitario * item.cantidad);
-      const descuentoItem = this.roundToTwo(Math.min(base, base * (item.descuentoItem / 100)));
-      return this.roundToTwo(acum + Math.max(0, base - descuentoItem));
-    }, 0);
-
-    const descuentoGlobal = this.roundToTwo(Math.max(0, subtotalNetoItems * (input.descuentoGlobal / 100)));
-    const descuentoTotal = this.roundToTwo(descuentoItems + descuentoGlobal);
-
-    const impuesto = input.items.reduce((acum, item) => {
-      const base = this.roundToTwo(item.precioUnitario * item.cantidad);
-      const descuentoItem = this.roundToTwo(Math.min(base, base * (item.descuentoItem / 100)));
-      const baseNeta = this.roundToTwo(Math.max(0, base - descuentoItem));
-      const proporcion = subtotalNetoItems > 0 ? baseNeta / subtotalNetoItems : 0;
-      const descuentoGlobalItem = this.roundToTwo(descuentoGlobal * proporcion);
-      const baseImponibleItem = this.roundToTwo(Math.max(0, baseNeta - descuentoGlobalItem));
-      const ivaPorcentaje = Number.isFinite(item.ivaPorcentaje) ? Math.max(0, item.ivaPorcentaje) : input.impuestoPorcentaje;
-
-      return this.roundToTwo(acum + this.roundToTwo(baseImponibleItem * (ivaPorcentaje / 100)));
-    }, 0);
-
-    const total = this.roundToTwo(Math.max(0, subtotalNetoItems - descuentoGlobal) + impuesto);
+    const {
+      subtotalBruto,
+      descuentoItems,
+      subtotalNetoItems,
+      descuentoGlobal,
+      descuentoTotal,
+      impuesto,
+      total
+    } = calcularResumenVenta(input.items, input.descuentoGlobal, input.impuestoPorcentaje);
 
     if (Math.abs(totalPagos - total) > 0.01) {
       throw new Error('La suma de los pagos no coincide con el total.');

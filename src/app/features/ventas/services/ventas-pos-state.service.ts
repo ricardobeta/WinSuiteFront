@@ -220,6 +220,31 @@ export class VentasPosStateService {
     }));
   }
 
+  /**
+   * Resta del carrito activo las cantidades de una venta ya confirmada.
+   * La operación completa se aplica en una sola actualización y nunca deja
+   * líneas con cantidad cero.
+   */
+  descontarItemsCobrados(
+    cobrados: Array<Pick<CarritoItem, 'productoId' | 'itemTipo' | 'cantidad'>>
+  ): void {
+    const cantidades = new Map<string, number>();
+    for (const item of cobrados) {
+      const key = getItemKey(item.productoId, item.itemTipo);
+      cantidades.set(key, (cantidades.get(key) ?? 0) + Math.max(0, item.cantidad));
+    }
+
+    this.updateActiveCarrito((state) => ({
+      ...state,
+      items: state.items
+        .map((item) => {
+          const cobrada = cantidades.get(getItemKey(item.productoId, item.itemTipo)) ?? 0;
+          return { ...item, cantidad: Math.max(0, item.cantidad - cobrada) };
+        })
+        .filter((item) => item.cantidad > 0)
+    }));
+  }
+
   setPagos(pagos: MetodoPagoState[]): void {
     this.updateActiveCarrito((state) => ({
       ...state,

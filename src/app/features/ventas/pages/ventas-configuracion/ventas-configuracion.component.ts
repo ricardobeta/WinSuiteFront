@@ -342,7 +342,7 @@ interface ColaboradorAlmacenesRow {
                   [disabled]="!perfil.permitirCuentasAbiertas"
                   (change)="actualizarPerfil({ permitirDividirCuenta: $event.checked })"
                 >
-                  Permitir dividir la cuenta al cobrar
+                  Permitir cobrar una cuenta por partes
                 </mat-slide-toggle>
 
                 <mat-slide-toggle

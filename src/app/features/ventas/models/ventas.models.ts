@@ -208,4 +208,8 @@ export interface CuentaAbierta {
   abiertaPorNombre: string;
   abiertaEn: number;
   actualizadoEn: number;
+  tomadaPorDispositivo?: string | null;
+  tomadaPorUsuarioId?: string | null;
+  tomadaPorNombre?: string | null;
+  tomadaEn?: number | null;
 }

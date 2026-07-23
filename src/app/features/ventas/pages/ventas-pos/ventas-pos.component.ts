@@ -39,13 +39,14 @@ import { VentasPosConfigService } from '../../services/ventas-pos-config.service
 import { CuentasAbiertasService } from '../../services/cuentas-abiertas.service';
 import { PosImmersiveService } from '../../services/pos-immersive.service';
 import {
-  DividirCuentaDialogComponent,
-  DividirCuentaResult
-} from '../dividir-cuenta-dialog/dividir-cuenta-dialog.component';
+  CobroPorPartesComponent,
+  CobroPorPartesRequest
+} from '../cobro-por-partes/cobro-por-partes.component';
 import { VentasService } from '../../services/ventas.service';
 import { VentasAlmacenSesionService } from '../../services/ventas-almacen-sesion.service';
 import { FacturaService, FacturaSriError } from '../../services/factura.service';
 import { FacturaSriErrorDialogComponent } from '../factura-sri-error-dialog/factura-sri-error-dialog.component';
+import { calcularResumenVenta } from '../../services/ventas-calculos.util';
 
 interface CatalogoPosItem {
   id: string;
@@ -77,7 +78,8 @@ interface CatalogoPosItem {
     MatProgressSpinnerModule,
     MatSelectModule,
     MatSnackBarModule,
-    TwoDecimalInputDirective
+    TwoDecimalInputDirective,
+    CobroPorPartesComponent
   ],
   template: `
     @if (sineAlmacenesPermitidos()) {
@@ -104,6 +106,22 @@ interface CatalogoPosItem {
         </div>
       }
 
+      @if (cobroPorPartesActivo()) {
+        <app-cobro-por-partes
+          [items]="state.carrito().items"
+          [clientes]="clientesCobroPorPartes()"
+          [metodosPago]="metodosPago()"
+          [etiquetaCuenta]="etiquetaCuenta()"
+          [impuestoPorDefecto]="config().impuestoPorDefecto"
+          [camposPersonalizados]="camposPersonalizadosClientes()"
+          [procesando]="cobrando()"
+          [comprasCompletadas]="comprasParcialesCompletadas()"
+          [resetToken]="resetCobroParcialToken()"
+          [mensajeResultado]="mensajeCobroParcial()"
+          (cobrar)="cobrarParte($event)"
+          (salir)="salirCobroPorPartes()"
+        />
+      } @else {
       <section class="pos-grid">
         <section class="pos-tabs" style="grid-column: 1 / -1;">
           <header class="pos-tabs-header">
@@ -180,11 +198,28 @@ interface CatalogoPosItem {
           <div class="cuentas-abiertas">
             <span class="cuentas-abiertas-label">{{ etiquetaCuenta() }}s retenidas:</span>
             @for (cuenta of cuentasAbiertas(); track cuenta.id) {
-              <div class="cuenta-chip" tabindex="0" (click)="resumirCuenta(cuenta)" (keydown.enter)="resumirCuenta(cuenta)">
-                <mat-icon>receipt</mat-icon>
+              <div
+                class="cuenta-chip"
+                [class.tomada-otro]="cuentaTomadaPorOtro(cuenta)"
+                [class.tomada-aqui]="cuentaTomadaAqui(cuenta)"
+                tabindex="0"
+                (click)="resumirCuenta(cuenta)"
+                (keydown.enter)="resumirCuenta(cuenta)"
+              >
+                <mat-icon>{{ cuentaTomadaPorOtro(cuenta) ? 'lock' : (cuentaTomadaAqui(cuenta) ? 'devices' : 'receipt') }}</mat-icon>
                 <span class="cuenta-nombre">{{ cuenta.etiqueta }}</span>
                 <span class="cuenta-count">{{ cuenta.carrito.items.length }}</span>
-                <button mat-icon-button type="button" (click)="eliminarCuentaAbierta(cuenta, $event)">
+                @if (cuentaTomadaPorOtro(cuenta)) {
+                  <span class="cuenta-estado">Tomada por {{ cuenta.tomadaPorNombre || 'otro dispositivo' }}</span>
+                } @else if (cuentaTomadaAqui(cuenta)) {
+                  <span class="cuenta-estado">En uso aquí</span>
+                }
+                <button
+                  mat-icon-button
+                  type="button"
+                  [disabled]="cuentaTomadaPorOtro(cuenta)"
+                  (click)="eliminarCuentaAbierta(cuenta, $event)"
+                >
                   <mat-icon>close</mat-icon>
                 </button>
               </div>
@@ -508,9 +543,9 @@ interface CatalogoPosItem {
         <section class="actions">
           <button mat-stroked-button type="button" (click)="limpiarCarrito()">Limpiar</button>
           @if (permiteDividir()) {
-            <button mat-stroked-button type="button" [disabled]="cobrando()" (click)="dividirYCobrar()">
+            <button mat-stroked-button type="button" [disabled]="cobrando()" (click)="abrirCobroPorPartes()">
               <mat-icon>call_split</mat-icon>
-              Dividir cuenta
+              Cobrar por partes
             </button>
           }
           <button mat-raised-button color="primary" type="button" [disabled]="cobrando()" (click)="cobrar()">
@@ -519,6 +554,7 @@ interface CatalogoPosItem {
         </section>
       </article>
     </section>
+      }
     }
   `,
   styles: [`
@@ -658,9 +694,19 @@ interface CatalogoPosItem {
     .cuentas-abiertas-label { font-size: .82rem; color: var(--muted-foreground); font-weight: 600; }
     .cuenta-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .2rem .3rem .2rem .55rem; border-radius: 999px; cursor: pointer; background: color-mix(in srgb, var(--primary) 10%, transparent); border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent); }
     .cuenta-chip:hover { background: color-mix(in srgb, var(--primary) 16%, transparent); }
+    .cuenta-chip.tomada-otro {
+      cursor: not-allowed;
+      border-color: color-mix(in srgb, #b45309 45%, transparent);
+      background: color-mix(in srgb, #f59e0b 12%, transparent);
+    }
+    .cuenta-chip.tomada-aqui {
+      border-color: color-mix(in srgb, #15803d 45%, transparent);
+      background: color-mix(in srgb, #22c55e 10%, transparent);
+    }
     .cuenta-chip mat-icon { font-size: 18px; width: 18px; height: 18px; color: var(--primary); }
     .cuenta-nombre { font-weight: 600; font-size: .85rem; }
     .cuenta-count { min-width: 20px; height: 20px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: .72rem; font-weight: 700; background: color-mix(in srgb, var(--primary) 22%, transparent); color: var(--primary); padding: 0 .3rem; }
+    .cuenta-estado { font-size: .75rem; font-weight: 700; color: var(--muted-foreground); white-space: nowrap; }
     .pos-tab {
       min-width: 210px;
       border: 1px solid color-mix(in srgb, var(--outline) 45%, transparent);
@@ -807,6 +853,10 @@ export class VentasPosComponent {
   protected readonly vistaProductos = signal<'cards' | 'table'>('cards');
   protected readonly filtroCatalogo = signal<'TODOS' | 'PRODUCTOS' | 'SERVICIOS'>('TODOS');
   protected readonly tabEditandoId = signal<string | null>(null);
+  protected readonly cobroPorPartesActivo = signal(false);
+  protected readonly comprasParcialesCompletadas = signal(0);
+  protected readonly resetCobroParcialToken = signal(0);
+  protected readonly mensajeCobroParcial = signal('');
 
   // Perfil de POS del almacén activo (modo RETAIL/RESTAURANTE + opciones de flujo)
   protected readonly perfil = signal<PerfilPos | null>(null);
@@ -826,7 +876,10 @@ export class VentasPosComponent {
     () => this.esRestaurante() && this.perfil()?.permitirDividirCuenta === true
   );
   protected readonly cuentasAbiertas = signal<CuentaAbierta[]>([]);
+  private readonly cuentaRetenidaActiva = signal<CuentaAbierta | null>(null);
   private cuentasSub?: Subscription;
+  private syncCuentaTimeout: ReturnType<typeof setTimeout> | null = null;
+  private cuentaHeartbeatId: ReturnType<typeof setInterval> | null = null;
   private readonly avisoSinAlmacenesMostrado = signal(false);
   protected readonly sineAlmacenesPermitidos = computed(
     () => this.cargandoAlmacenes() === false && !this.almacenSesionService.tieneAlmacenesPermitidos()
@@ -938,6 +991,15 @@ export class VentasPosComponent {
       cliente.identificacion.toLowerCase().includes(query)
     );
   });
+  protected readonly clientesCobroPorPartes = computed(() =>
+    this.clientes()
+      .filter((cliente): cliente is Cliente & { id: string } => !!cliente.id)
+      .map((cliente) => ({
+        id: cliente.id,
+        nombre: cliente.nombreCompleto,
+        identificacion: cliente.identificacion
+      }))
+  );
   protected readonly metodosPago = signal<string[]>([]);
 
   private readonly syncMontoPagoUnicoConTotal = effect(
@@ -999,7 +1061,28 @@ export class VentasPosComponent {
     }
   }, { allowSignalWrites: true });
 
+  private readonly syncCarritoCuentaRetenida = effect(() => {
+    const cuenta = this.cuentaRetenidaActiva();
+    const carrito = this.state.carrito();
+    if (!cuenta) {
+      return;
+    }
+    this.programarSincronizacionCuentaRetenida({ ...cuenta, carrito });
+  });
+
   constructor() {
+    this.cuentaHeartbeatId = setInterval(() => {
+      void this.sincronizarCuentaRetenidaAhora();
+    }, 30_000);
+    this.destroyRef.onDestroy(() => {
+      if (this.syncCuentaTimeout) {
+        clearTimeout(this.syncCuentaTimeout);
+      }
+      if (this.cuentaHeartbeatId) {
+        clearInterval(this.cuentaHeartbeatId);
+      }
+    });
+
     this.productosService
       .getProductos()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -1492,6 +1575,7 @@ export class VentasPosComponent {
   }
 
   protected limpiarCarrito(): void {
+    void this.finalizarCuentaRetenidaActiva();
     this.state.limpiar();
     this.busquedaClienteControl.setValue('');
     this.efectivoRecibido.set(null);
@@ -1524,68 +1608,8 @@ export class VentasPosComponent {
       return;
     }
 
-    const recetasConFaltantes: Array<{
-      nombre: string;
-      faltante: number;
-      permite: boolean;
-      detalle: string;
-    }> = [];
-
-    for (const item of this.state.carrito().items) {
-      if (item.itemTipo !== 'RECETA') {
-        continue;
-      }
-
-      const permite = item.permitirInventarioNegativo === true || this.config().permitirVentaSinStock;
-      const validacion = await this.recetasService.validarRecetaParaVenta(
-        item.productoId,
-        sesion.almacenId,
-        item.cantidad,
-        permite
-      );
-
-      if (validacion.faltantes.length === 0) {
-        continue;
-      }
-
-      const faltanteRecetas = Math.max(0, item.cantidad - validacion.disponible);
-      const detalle = validacion.faltantes
-        .map((faltante) => `${faltante.nombre}: falta ${this.roundToTwo(faltante.faltante)} unidad(es)`)
-        .join(' | ');
-
-      recetasConFaltantes.push({
-        nombre: item.nombre,
-        faltante: faltanteRecetas,
-        permite,
-        detalle
-      });
-    }
-
-    const recetaNoAutorizada = recetasConFaltantes.find((item) => !item.permite);
-    if (recetaNoAutorizada) {
-      this.snackBar.open(`Receta agotada: ${recetaNoAutorizada.nombre}. ${recetaNoAutorizada.detalle}`, 'Cerrar', { duration: 6000 });
+    if (!(await this.validarRecetasParaCobro(this.state.carrito().items, sesion.almacenId))) {
       return;
-    }
-
-    if (recetasConFaltantes.length > 0) {
-      const detalle = recetasConFaltantes
-        .map((item) => `${item.nombre} (faltante recetas: ${this.roundToTwo(item.faltante)}) -> ${item.detalle}`)
-        .join(', ');
-      const dialogRef = this.dialog.open(ConfirmDialogComponent, {
-        width: '620px',
-        maxWidth: '95vw',
-        data: {
-          title: 'Confirmar venta con faltantes',
-          message: `Estas recetas no tienen stock completo de insumos: ${detalle}. ¿Confirmas vender con inventario negativo?`,
-          confirmText: 'Confirmar venta',
-          cancelText: 'Cancelar'
-        }
-      });
-      const confirmado = await firstValueFrom(dialogRef.afterClosed());
-
-      if (!confirmado) {
-        return;
-      }
     }
 
     const user = this.auth.currentUser();
@@ -1611,6 +1635,7 @@ export class VentasPosComponent {
         notas: this.state.carrito().notas
       });
 
+      await this.finalizarCuentaRetenidaActiva();
       this.state.limpiar();
       this.busquedaClienteControl.setValue('');
       this.snackBar.openFromComponent(SuccessSnackbarComponent, {
@@ -1652,19 +1677,36 @@ export class VentasPosComponent {
     }
 
     const activeTab = this.state.activeTab();
+    const cuentaActiva = this.cuentaRetenidaActiva();
+    const ahora = Date.now();
     const cuenta: CuentaAbierta = {
-      id: activeTab?.id ?? `cuenta-${Date.now()}`,
+      id: cuentaActiva?.id ?? this.cuentasAbiertasService.crearCuentaId(),
       almacenId,
-      etiqueta: activeTab?.nombre?.trim() || `${this.etiquetaCuenta()} ${this.cuentasAbiertas().length + 1}`,
+      etiqueta: cuentaActiva?.etiqueta
+        ?? activeTab?.nombre?.trim()
+        ?? `${this.etiquetaCuenta()} ${this.cuentasAbiertas().length + 1}`,
       carrito,
-      abiertaPor: user.uid,
-      abiertaPorNombre: user.displayName ?? 'Sin nombre',
-      abiertaEn: Date.now(),
-      actualizadoEn: Date.now()
+      abiertaPor: cuentaActiva?.abiertaPor ?? user.uid,
+      abiertaPorNombre: cuentaActiva?.abiertaPorNombre ?? user.displayName ?? 'Sin nombre',
+      abiertaEn: cuentaActiva?.abiertaEn ?? ahora,
+      actualizadoEn: ahora,
+      tomadaPorDispositivo: cuentaActiva?.tomadaPorDispositivo ?? null,
+      tomadaPorUsuarioId: cuentaActiva?.tomadaPorUsuarioId ?? null,
+      tomadaPorNombre: cuentaActiva?.tomadaPorNombre ?? null,
+      tomadaEn: cuentaActiva?.tomadaEn ?? null
     };
 
     try {
-      await this.cuentasAbiertasService.guardarCuenta(cuenta);
+      if (cuentaActiva) {
+        const liberada = await this.cuentasAbiertasService.retenerCuentaReclamada(cuenta);
+        if (!liberada) {
+          this.snackBar.open('La cuenta ya no está asignada a este dispositivo.', 'Cerrar', { duration: 3200 });
+          return;
+        }
+      } else {
+        await this.cuentasAbiertasService.guardarCuenta(cuenta);
+      }
+      this.desvincularCuentaRetenidaLocal();
       this.state.limpiar();
       this.busquedaClienteControl.setValue('');
       this.snackBar.open(`${this.etiquetaCuenta()} retenida.`, 'Cerrar', { duration: 2200 });
@@ -1673,150 +1715,320 @@ export class VentasPosComponent {
     }
   }
 
-  /** Retoma una cuenta abierta en la pestaña activa y la reclama (la elimina del compartido). */
+  /** Reclama atómicamente una cuenta y la mantiene visible como tomada en otras terminales. */
   protected async resumirCuenta(cuenta: CuentaAbierta): Promise<void> {
     if (this.state.carrito().items.length > 0) {
       this.snackBar.open('Limpia o retén la cuenta actual antes de retomar otra.', 'Cerrar', { duration: 2600 });
       return;
     }
 
-    this.state.cargarCarrito(cuenta.carrito);
-    this.busquedaClienteControl.setValue(cuenta.carrito.clienteNombre ?? '');
     try {
-      await this.cuentasAbiertasService.eliminarCuenta(cuenta.almacenId, cuenta.id);
+      const user = this.auth.currentUser();
+      if (!user) {
+        return;
+      }
+      const resultado = await this.cuentasAbiertasService.reclamarCuenta(
+        cuenta.almacenId,
+        cuenta.id,
+        user.uid,
+        user.displayName ?? 'Sin nombre'
+      );
+      if (resultado.estado === 'OCUPADA') {
+        this.snackBar.open(
+          `Cuenta tomada por ${resultado.cuenta.tomadaPorNombre || 'otro dispositivo'}.`,
+          'Cerrar',
+          { duration: 3200 }
+        );
+        return;
+      }
+      if (resultado.estado === 'NO_EXISTE') {
+        this.snackBar.open('La cuenta ya no está disponible.', 'Cerrar', { duration: 2600 });
+        return;
+      }
+
+      this.cuentaRetenidaActiva.set(resultado.cuenta);
+      this.state.cargarCarrito(resultado.cuenta.carrito);
+      this.busquedaClienteControl.setValue(resultado.cuenta.carrito.clienteNombre ?? '');
     } catch {
-      // La cuenta ya está cargada localmente; ignorar error de limpieza.
+      this.snackBar.open('No se pudo tomar la cuenta.', 'Cerrar', { duration: 2600 });
     }
   }
 
   protected async eliminarCuentaAbierta(cuenta: CuentaAbierta, event: Event): Promise<void> {
     event.stopPropagation();
+    if (this.cuentaTomadaPorOtro(cuenta)) {
+      this.snackBar.open(
+        `No puedes eliminarla: está tomada por ${cuenta.tomadaPorNombre || 'otro dispositivo'}.`,
+        'Cerrar',
+        { duration: 3000 }
+      );
+      return;
+    }
     try {
-      await this.cuentasAbiertasService.eliminarCuenta(cuenta.almacenId, cuenta.id);
+      const eliminada = await this.cuentasAbiertasService.eliminarCuentaReclamada(cuenta.almacenId, cuenta.id);
+      if (!eliminada) {
+        this.snackBar.open('La cuenta fue tomada por otro dispositivo.', 'Cerrar', { duration: 2600 });
+      }
     } catch {
       this.snackBar.open('No se pudo eliminar la cuenta.', 'Cerrar', { duration: 2400 });
     }
   }
 
-  /** Abre el diálogo para dividir la cuenta y cobra cada sub-cuenta como venta/factura independiente. */
-  protected async dividirYCobrar(): Promise<void> {
-    const items = this.state.carrito().items;
-    if (items.length === 0) {
-      this.snackBar.open('Agrega productos antes de dividir.', 'Cerrar', { duration: 2200 });
+  protected cuentaTomadaPorOtro(cuenta: CuentaAbierta): boolean {
+    return this.cuentasAbiertasService.estaTomadaPorOtroDispositivo(cuenta);
+  }
+
+  protected cuentaTomadaAqui(cuenta: CuentaAbierta): boolean {
+    return this.cuentasAbiertasService.estaTomadaPorEsteDispositivo(cuenta);
+  }
+
+  private programarSincronizacionCuentaRetenida(cuenta: CuentaAbierta): void {
+    if (this.syncCuentaTimeout) {
+      clearTimeout(this.syncCuentaTimeout);
+    }
+    this.syncCuentaTimeout = setTimeout(() => {
+      this.syncCuentaTimeout = null;
+      void this.sincronizarCuentaRetenidaAhora(cuenta);
+    }, 600);
+  }
+
+  private async sincronizarCuentaRetenidaAhora(cuentaInput?: CuentaAbierta): Promise<void> {
+    if (this.syncCuentaTimeout) {
+      clearTimeout(this.syncCuentaTimeout);
+      this.syncCuentaTimeout = null;
+    }
+    const activa = this.cuentaRetenidaActiva();
+    if (!activa) {
+      return;
+    }
+    const cuenta = {
+      ...(cuentaInput ?? activa),
+      carrito: this.state.carrito()
+    };
+    try {
+      const actualizada = await this.cuentasAbiertasService.actualizarCuentaReclamada(cuenta);
+      if (!actualizada && this.cuentaRetenidaActiva()?.id === cuenta.id) {
+        this.desvincularCuentaRetenidaLocal();
+        this.snackBar.open('La cuenta dejó de estar asignada a este dispositivo.', 'Cerrar', { duration: 3200 });
+      }
+    } catch {
+      // El siguiente cambio o heartbeat reintentará la sincronización.
+    }
+  }
+
+  private desvincularCuentaRetenidaLocal(): void {
+    if (this.syncCuentaTimeout) {
+      clearTimeout(this.syncCuentaTimeout);
+      this.syncCuentaTimeout = null;
+    }
+    this.cuentaRetenidaActiva.set(null);
+  }
+
+  private async finalizarCuentaRetenidaActiva(): Promise<void> {
+    const cuenta = this.cuentaRetenidaActiva();
+    this.desvincularCuentaRetenidaLocal();
+    if (!cuenta) {
+      return;
+    }
+    try {
+      const eliminada = await this.cuentasAbiertasService.eliminarCuentaReclamada(cuenta.almacenId, cuenta.id);
+      if (!eliminada) {
+        this.snackBar.open('La venta se realizó, pero la cuenta compartida requiere revisión.', 'Cerrar', { duration: 3500 });
+      }
+    } catch {
+      this.snackBar.open('La venta se realizó, pero no se pudo cerrar la cuenta compartida.', 'Cerrar', { duration: 3500 });
+    }
+  }
+
+  protected abrirCobroPorPartes(): void {
+    if (this.state.carrito().items.length === 0) {
+      this.snackBar.open('Agrega productos antes de cobrar por partes.', 'Cerrar', { duration: 2200 });
+      return;
+    }
+    if (this.state.carrito().descuentoGlobal > 0) {
+      this.snackBar.open(
+        'Quita el descuento global antes de cobrar por partes. Los descuentos por artículo sí se conservarán.',
+        'Cerrar',
+        { duration: 4500 }
+      );
+      return;
+    }
+    if (!this.sesionActiva()?.id) {
+      this.snackBar.open('No hay una sesión de caja activa.', 'Cerrar', { duration: 2300 });
+      return;
+    }
+
+    this.comprasParcialesCompletadas.set(0);
+    this.mensajeCobroParcial.set('');
+    this.resetCobroParcialToken.update((token) => token + 1);
+    this.cobroPorPartesActivo.set(true);
+  }
+
+  protected salirCobroPorPartes(): void {
+    if (this.cobrando()) {
+      return;
+    }
+    this.cobroPorPartesActivo.set(false);
+    this.mensajeCobroParcial.set('');
+  }
+
+  protected async cobrarParte(request: CobroPorPartesRequest): Promise<void> {
+    if (this.cobrando() || request.items.length === 0) {
       return;
     }
 
     const sesion = this.sesionActiva();
     const user = this.auth.currentUser();
     if (!sesion?.id || !sesion.almacenId || !user) {
-      this.snackBar.open('No hay una sesion de caja activa.', 'Cerrar', { duration: 2300 });
+      this.snackBar.open('No hay una sesión de caja activa.', 'Cerrar', { duration: 2300 });
       return;
     }
 
-    const clientesOpciones = this.clientes()
-      .filter((cliente) => !!cliente.id)
-      .map((cliente) => ({
-        id: cliente.id ?? null,
-        nombre: cliente.nombreCompleto,
-        identificacion: cliente.identificacion
-      }));
-
-    const dialogRef = this.dialog.open(DividirCuentaDialogComponent, {
-      maxWidth: '95vw',
-      panelClass: 'dividir-cuenta-panel',
-      data: {
-        items,
-        metodosPago: this.metodosPago(),
-        etiquetaCuenta: this.etiquetaCuenta(),
-        clientes: clientesOpciones,
-        clienteActualId: this.state.carrito().clienteId,
-        clienteActualNombre: this.state.carrito().clienteNombre,
-        camposPersonalizados: this.camposPersonalizadosClientes() ?? []
-      }
+    const saldoActual = new Map(
+      this.state.carrito().items.map((item) => [`${item.itemTipo}:${item.productoId}`, item.cantidad])
+    );
+    const seleccionInvalida = request.items.some((item) => {
+      const disponible = saldoActual.get(`${item.itemTipo}:${item.productoId}`) ?? 0;
+      return item.cantidad <= 0 || item.cantidad > disponible;
     });
-
-    const result = (await firstValueFrom(dialogRef.afterClosed())) as DividirCuentaResult | null | undefined;
-    if (!result || result.subcuentas.length === 0) {
+    if (seleccionInvalida) {
+      this.snackBar.open('La cuenta cambió. Revisa las cantidades pendientes e intenta nuevamente.', 'Cerrar', { duration: 3200 });
+      this.resetCobroParcialToken.update((token) => token + 1);
       return;
     }
 
     this.cobrando.set(true);
-    const ventaIds: string[] = [];
+    this.mensajeCobroParcial.set('');
+
     try {
-      for (const sub of result.subcuentas) {
-        const total = this.calcularTotalVenta(sub.items, this.config().impuestoPorDefecto);
-        const ventaId = await this.ventasService.confirmarVenta({
-          sesionId: sesion.id,
-          almacenId: sesion.almacenId,
-          vendedorId: user.uid,
-          vendedorNombre: user.displayName ?? 'Sin nombre',
-          clienteId: sub.clienteId,
-          clienteNombre: sub.clienteNombre,
-          items: sub.items,
-          pagos: [{ metodo: sub.metodoPago, monto: total, referencia: '' }],
-          descuentoGlobal: 0,
-          impuestoPorcentaje: this.config().impuestoPorDefecto,
-          notas: this.state.carrito().notas
-        });
-        ventaIds.push(ventaId);
+      if (!(await this.validarRecetasParaCobro(request.items, sesion.almacenId))) {
+        return;
       }
 
-      // Facturación automática por sub-cuenta (si el perfil del almacén lo activa).
-      if (this.perfil()?.facturacionAutomatica && ventaIds.length > 0) {
-        let sinConfig = false;
-        for (let i = 0; i < ventaIds.length; i += 1) {
-          const resultado = await this.emitirFacturaAuto(
-            ventaIds[i],
-            sesion.almacenId,
-            `Cuenta ${i + 1} de ${ventaIds.length} · `
-          );
-          if (resultado === 'SIN_CONFIG') {
-            sinConfig = true;
-            break;
-          }
-        }
-        if (sinConfig) {
-          this.snackBar.open('Cuentas creadas. Sin firma configurada: factúralas luego desde el detalle.', 'Cerrar', { duration: 3500 });
-        }
-      }
-
-      this.state.limpiar();
-      this.busquedaClienteControl.setValue('');
-      this.efectivoRecibido.set(null);
-      this.snackBar.openFromComponent(SuccessSnackbarComponent, {
-        data: { message: `${ventaIds.length} cuenta(s) cobradas correctamente.`, icon: 'point_of_sale' },
-        duration: 2800,
-        horizontalPosition: 'end',
-        verticalPosition: 'top'
+      const total = calcularResumenVenta(request.items, 0, this.config().impuestoPorDefecto).total;
+      const ventaId = await this.ventasService.confirmarVenta({
+        sesionId: sesion.id,
+        almacenId: sesion.almacenId,
+        vendedorId: user.uid,
+        vendedorNombre: user.displayName ?? 'Sin nombre',
+        clienteId: request.clienteId,
+        clienteNombre: request.clienteNombre,
+        items: request.items,
+        pagos: [{
+          metodo: request.metodoPago,
+          monto: total,
+          referencia: request.referencia
+        }],
+        descuentoGlobal: 0,
+        impuestoPorcentaje: this.config().impuestoPorDefecto,
+        notas: this.state.carrito().notas
       });
 
-      await this.router.navigate(['/workspace/ventas/resumen', ventaIds[0]]);
+      // La venta ya existe: persistir primero el saldo evita repetirla si el SRI falla.
+      this.state.descontarItemsCobrados(request.items);
+      if (this.state.carrito().items.length === 0) {
+        await this.finalizarCuentaRetenidaActiva();
+      } else {
+        await this.sincronizarCuentaRetenidaAhora();
+      }
+      this.comprasParcialesCompletadas.update((cantidad) => cantidad + 1);
+      this.resetCobroParcialToken.update((token) => token + 1);
+
+      let mensaje = `Compra realizada por ${total.toFixed(2)}.`;
+      if (this.perfil()?.facturacionAutomatica) {
+        const resultadoFactura = await this.emitirFacturaAuto(ventaId, sesion.almacenId);
+        if (resultadoFactura === 'AUTORIZADA') {
+          mensaje = `Compra realizada por ${total.toFixed(2)} y factura autorizada.`;
+        } else if (resultadoFactura === 'SIN_CONFIG') {
+          mensaje = `Compra realizada por ${total.toFixed(2)}. La factura queda pendiente por falta de firma.`;
+        } else {
+          mensaje = `Compra realizada por ${total.toFixed(2)}. La factura electrónica requiere revisión.`;
+        }
+      }
+
+      this.mensajeCobroParcial.set(mensaje);
+      if (this.state.carrito().items.length === 0) {
+        this.cobroPorPartesActivo.set(false);
+        this.busquedaClienteControl.setValue('');
+        this.efectivoRecibido.set(null);
+        this.snackBar.openFromComponent(SuccessSnackbarComponent, {
+          data: {
+            message: `${this.comprasParcialesCompletadas()} compra(s) realizadas. Cuenta completada.`,
+            icon: 'task_alt'
+          },
+          duration: 3500,
+          horizontalPosition: 'end',
+          verticalPosition: 'top'
+        });
+      }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'No se pudo completar la division.';
-      const parcial = ventaIds.length > 0 ? ` Se cobraron ${ventaIds.length} cuenta(s) antes del error.` : '';
-      this.snackBar.open(message + parcial, 'Cerrar', { duration: 4000 });
+      const message = error instanceof Error ? error.message : 'No se pudo completar esta compra.';
+      this.snackBar.open(message, 'Cerrar', { duration: 3500 });
     } finally {
       this.cobrando.set(false);
     }
   }
 
-  /** Réplica exacta del cálculo de total de VentasService.confirmarVenta para fijar el pago de cada sub-cuenta. */
-  private calcularTotalVenta(items: CarritoItem[], impuestoDefault: number): number {
-    const subtotalNetoItems = items.reduce((acum, item) => {
-      const base = this.roundToTwo(item.precioUnitario * item.cantidad);
-      const descuentoItem = this.roundToTwo(Math.min(base, base * (item.descuentoItem / 100)));
-      return this.roundToTwo(acum + Math.max(0, base - descuentoItem));
-    }, 0);
+  private async validarRecetasParaCobro(items: CarritoItem[], almacenId: string): Promise<boolean> {
+    const recetasConFaltantes: Array<{
+      nombre: string;
+      faltante: number;
+      permite: boolean;
+      detalle: string;
+    }> = [];
 
-    const impuesto = items.reduce((acum, item) => {
-      const base = this.roundToTwo(item.precioUnitario * item.cantidad);
-      const descuentoItem = this.roundToTwo(Math.min(base, base * (item.descuentoItem / 100)));
-      const baseNeta = this.roundToTwo(Math.max(0, base - descuentoItem));
-      const ivaPorcentaje = Number.isFinite(item.ivaPorcentaje) ? Math.max(0, item.ivaPorcentaje) : impuestoDefault;
-      return this.roundToTwo(acum + this.roundToTwo(baseNeta * (ivaPorcentaje / 100)));
-    }, 0);
+    for (const item of items) {
+      if (item.itemTipo !== 'RECETA') {
+        continue;
+      }
 
-    return this.roundToTwo(subtotalNetoItems + impuesto);
+      const permite = item.permitirInventarioNegativo === true || this.config().permitirVentaSinStock;
+      const validacion = await this.recetasService.validarRecetaParaVenta(
+        item.productoId,
+        almacenId,
+        item.cantidad,
+        permite
+      );
+      if (validacion.faltantes.length === 0) {
+        continue;
+      }
+
+      const faltanteRecetas = Math.max(0, item.cantidad - validacion.disponible);
+      const detalle = validacion.faltantes
+        .map((faltante) => `${faltante.nombre}: falta ${this.roundToTwo(faltante.faltante)} unidad(es)`)
+        .join(' | ');
+      recetasConFaltantes.push({ nombre: item.nombre, faltante: faltanteRecetas, permite, detalle });
+    }
+
+    const recetaNoAutorizada = recetasConFaltantes.find((item) => !item.permite);
+    if (recetaNoAutorizada) {
+      this.snackBar.open(
+        `Receta agotada: ${recetaNoAutorizada.nombre}. ${recetaNoAutorizada.detalle}`,
+        'Cerrar',
+        { duration: 6000 }
+      );
+      return false;
+    }
+
+    if (recetasConFaltantes.length === 0) {
+      return true;
+    }
+
+    const detalle = recetasConFaltantes
+      .map((item) => `${item.nombre} (faltante recetas: ${this.roundToTwo(item.faltante)}) -> ${item.detalle}`)
+      .join(', ');
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '620px',
+      maxWidth: '95vw',
+      data: {
+        title: 'Confirmar venta con faltantes',
+        message: `Estas recetas no tienen stock completo de insumos: ${detalle}. ¿Confirmas vender con inventario negativo?`,
+        confirmText: 'Confirmar venta',
+        cancelText: 'Cancelar'
+      }
+    });
+
+    return (await firstValueFrom(dialogRef.afterClosed())) === true;
   }
 
   /**
