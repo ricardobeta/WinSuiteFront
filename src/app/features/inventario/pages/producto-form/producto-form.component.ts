@@ -55,10 +55,15 @@ import { UnidadesService } from '../../services/unidades.service';
 
       <section class="surface-card form-card">
         <form class="producto-form" [formGroup]="form" (ngSubmit)="guardar()">
-          <div class="grid-2">
+          <div class="grid-3">
             <mat-form-field appearance="outline">
               <mat-label>SKU</mat-label>
               <input matInput formControlName="sku" readonly />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>Codigo de barras</mat-label>
+              <input matInput formControlName="codigoBarras" placeholder="EAN / UPC (opcional)" />
             </mat-form-field>
 
             <mat-form-field appearance="outline">
@@ -328,6 +333,7 @@ export class ProductoFormComponent implements OnInit {
 
   protected readonly form = this.formBuilder.nonNullable.group({
     sku: ['', [Validators.required]],
+    codigoBarras: [''],
     nombre: ['', [Validators.required]],
     descripcion: [''],
     tipo: ['SIMPLE' as TipoProductoInventario, [Validators.required]],
@@ -443,6 +449,7 @@ export class ProductoFormComponent implements OnInit {
 
     this.form.patchValue({
       sku: producto.sku,
+      codigoBarras: producto.codigoBarras ?? '',
       nombre: producto.nombre,
       descripcion: producto.descripcion ?? '',
       tipo: producto.tipo ?? 'SIMPLE',
@@ -493,6 +500,7 @@ export class ProductoFormComponent implements OnInit {
 
       const payload: Omit<Producto, 'id'> = {
         sku: raw.sku || this.generarSku(),
+        codigoBarras: (raw.codigoBarras ?? '').trim(),
         nombre: raw.nombre,
         descripcion: raw.descripcion || '',
         tipo: raw.tipo,

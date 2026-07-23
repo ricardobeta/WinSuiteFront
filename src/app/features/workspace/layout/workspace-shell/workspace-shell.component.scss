@@ -15,6 +15,21 @@
   grid-template-columns: var(--sidebar-width-expanded) 1fr;
 }
 
+/* Modo inmersivo / pantalla completa del POS: sin sidebar ni topbar. */
+.workspace-shell.immersive {
+  grid-template-columns: 1fr;
+}
+
+.workspace-shell.immersive .sidebar,
+.workspace-shell.immersive .topbar,
+.workspace-shell.immersive .mobile-backdrop {
+  display: none;
+}
+
+.workspace-shell.immersive .workspace-content {
+  padding: 0;
+}
+
 .sidebar {
   background: var(--tc-surface-container);
   border-radius: 0;

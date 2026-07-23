@@ -5,19 +5,24 @@ import { Observable } from 'rxjs';
 import { AuthService } from '../../../core/services/auth.service';
 import { OrdenCompra, OrdenCompraItem, Producto, RecepcionOC } from '../../inventario/models/inventario.models';
 import { ProductosService } from '../../inventario/services/productos.service';
+import { ProveedoresService } from '../../inventario/services/proveedores.service';
 import { VentaDetalle, VentaItem } from '../../ventas/models/ventas.models';
 import { FacturaCompra, FacturaCompraItem } from '../models/compras.models';
 import {
   AsientoContable,
   AsientoContableLinea,
   ConfiguracionIntegracionContable,
+  CuentaPorPagarManualAsiento,
   MapeoCategoriaContable,
   MapeoProveedorContable,
+  ModoAsientoAutomatico,
   OrigenAsientoAutomatico,
   OrigenModuloContable,
   PendienteContabilizacion,
   TipoGastoCompra
 } from '../models/contabilidad.models';
+
+const DIA_MS = 24 * 60 * 60 * 1000;
 import { AsientosContablesService } from './asientos-contables.service';
 import { PlanCuentasService } from './plan-cuentas.service';
 import { TiposGastoCompraService } from './tipos-gasto-compra.service';
@@ -33,6 +38,7 @@ export class IntegracionContableService {
   private readonly asientosService = inject(AsientosContablesService);
   private readonly planCuentasService = inject(PlanCuentasService);
   private readonly productosService = inject(ProductosService);
+  private readonly proveedoresService = inject(ProveedoresService);
   private readonly tiposGastoService = inject(TiposGastoCompraService);
 
   private getTenantPath(): string {
@@ -86,6 +92,12 @@ export class IntegracionContableService {
   async getConfiguracionOnce(): Promise<ConfiguracionIntegracionContable> {
     const snapshot = await get(this.getIntegracionesRef());
     return snapshot.exists() ? this.normalizarConfiguracion(snapshot.val()) : this.getDefaultConfiguracion();
+  }
+
+  /** Modo con que se guardan los asientos automáticos: 'APROBADO' o 'BORRADOR'. */
+  async modoAsientoAutomatico(): Promise<ModoAsientoAutomatico> {
+    const config = await this.getConfiguracionOnce();
+    return config.modoAsientoAutomatico;
   }
 
   /**
@@ -585,6 +597,26 @@ export class IntegracionContableService {
     const esNotaCredito = factura.tipoComprobante === '04';
     const documento = `${factura.establecimiento}-${factura.puntoEmision}-${factura.secuencial}`;
     const etiqueta = esNotaCredito ? 'Nota de crédito compra' : 'Factura de compra';
+
+    // Adjuntar al asiento los datos de la Cuenta por Pagar para que, si el asiento queda en
+    // borrador, al aprobarlo se genere la CxP automáticamente (sin capturar nada a mano). No aplica
+    // a notas de crédito (reducen el pasivo) ni cuando no queda saldo por pagar.
+    const porPagar = Math.round((Number(factura.importeTotal ?? 0) - Number(factura.totalRetencion ?? 0)) * 100) / 100;
+    let cuentaPorPagarManual: CuentaPorPagarManualAsiento | null = null;
+    if (!esNotaCredito && porPagar > 0) {
+      const proveedor = factura.proveedorId ? await this.proveedoresService.getProveedorById(factura.proveedorId) : null;
+      const diasCredito = Number(proveedor?.diasCredito ?? 0);
+      const fechaEmisionTs = Number(factura.fechaEmision ?? factura.creadoEn ?? Date.now());
+      cuentaPorPagarManual = {
+        proveedorId: factura.proveedorId ?? '',
+        proveedorNombre: factura.razonSocialProv,
+        proveedorIdentificacion: factura.idProv,
+        fechaVencimiento: this.fechaDesdeTimestamp(fechaEmisionTs + diasCredito * DIA_MS),
+        referencia: documento,
+        montoOriginal: porPagar
+      };
+    }
+
     await this.guardarAsiento(config, {
       fecha: this.fechaDesdeTimestamp(factura.fechaEmision ?? factura.creadoEn),
       periodo: '',
@@ -600,7 +632,8 @@ export class IntegracionContableService {
       lineas,
       totalDebe: 0,
       totalHaber: 0,
-      diferencia: 0
+      diferencia: 0,
+      cuentaPorPagarManual
     });
   }
 

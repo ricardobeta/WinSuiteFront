@@ -18,6 +18,7 @@ import { CompanyNotification } from '../../../../core/models/notification.models
 import { CompanyNotificationService } from '../../../../core/services/company-notification.service';
 import { CompanyInvitation } from '../../../../core/models/company-invitation.models';
 import { CompanyInvitationService } from '../../../../core/services/company-invitation.service';
+import { PosImmersiveService } from '../../../ventas/services/pos-immersive.service';
 
 @Component({
   selector: 'app-workspace-shell',
@@ -34,6 +35,7 @@ export class WorkspaceShellComponent {
   protected readonly auth = inject(AuthService);
   protected readonly authorization = inject(AuthorizationService);
   protected readonly theme = inject(ThemeService);
+  protected readonly immersive = inject(PosImmersiveService).immersive;
   protected readonly notifications = inject(CompanyNotificationService);
   protected readonly invitations = inject(CompanyInvitationService);
   protected readonly invitationActionId = signal<string | null>(null);

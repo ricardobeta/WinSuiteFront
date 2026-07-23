@@ -160,3 +160,52 @@ export interface UsuarioAlmacenSesionConfig {
   almacenSeleccionadoId: string | null;
   seleccionadoEn: number;
 }
+
+// ─────────────────────────────────────────────────────────────
+// POS dinámico configurable por almacén/sucursal
+// ─────────────────────────────────────────────────────────────
+
+/** Modo de operación del POS para un almacén. */
+export type ModoPos = 'RETAIL' | 'RESTAURANTE';
+
+/** Vista por defecto del catálogo. */
+export type VistaCatalogoPos = 'TARJETAS' | 'LISTA';
+
+/**
+ * Perfil de POS por almacén: define el flujo y la UX del punto de venta.
+ * Un mismo tenant puede tener almacenes en modo RETAIL y otros en RESTAURANTE.
+ * Se persiste en `ventas/{tenantId}/configuracion/perfilesPos/{almacenId}`.
+ */
+export interface PerfilPos {
+  almacenId: string;
+  modo: ModoPos;
+  // Catálogo / UX
+  escaneoHabilitado: boolean; // barra de escaneo por lector físico
+  autoAgregarAlEscanear: boolean;
+  mostrarImagenes: boolean;
+  vistaCatalogoPorDefecto: VistaCatalogoPos;
+  categoriasDestacadas?: string[];
+  // Restaurante
+  permitirCuentasAbiertas: boolean;
+  permitirDividirCuenta: boolean;
+  etiquetaCuenta: string; // "Mesa" | "Cuenta" | "Orden"
+  // Cobro
+  metodosPagoHabilitados: MetodoPagoVenta[];
+  facturacionAutomatica: boolean; // emitir factura SRI automáticamente al cobrar
+  actualizadoEn?: number;
+}
+
+/**
+ * Cuenta abierta de restaurante compartida entre terminales de la sucursal.
+ * Se persiste en `ventas/{tenantId}/cuentasAbiertas/{almacenId}/{cuentaId}`.
+ */
+export interface CuentaAbierta {
+  id: string;
+  almacenId: string;
+  etiqueta: string; // "Mesa 4", nombre del comensal, etc.
+  carrito: CarritoState;
+  abiertaPor: string;
+  abiertaPorNombre: string;
+  abiertaEn: number;
+  actualizadoEn: number;
+}

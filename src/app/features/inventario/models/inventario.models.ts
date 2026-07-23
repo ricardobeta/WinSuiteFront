@@ -52,6 +52,7 @@ export interface RecetaAuditoria {
 export interface Producto {
   id?: string;
   sku: string;
+  codigoBarras?: string; // EAN/UPC para escaneo en el POS
   nombre: string;
   descripcion?: string;
   categoriaId: string;

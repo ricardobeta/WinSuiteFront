@@ -120,6 +120,10 @@ export interface FacturaCompra {
   archivoId?: string | null;
   xmlStoragePath?: string | null;
 
+  // Comprobante de retención vinculado (XML), si se cargó uno
+  retencionArchivoId?: string | null;
+  retencionXmlStoragePath?: string | null;
+
   // PDF/RIDE asociado (mismo claveAcceso en el módulo Archivos), para ver el comprobante.
   pdfArchivoId?: string | null;
   pdfDownloadUrl?: string | null;
@@ -170,6 +174,21 @@ export interface FacturaCompraParsed {
   numDocModificado?: string;
   fechaEmisionDocSustento?: string; // ISO yyyy-MM-dd
   items: FacturaCompraParsedItem[];
+}
+
+// ---- DTO de parseo de un comprobante de retención (POST /api/compras/parse-retencion-xml) ----
+
+export interface RetencionParsed {
+  establecimiento: string;
+  puntoEmision: string;
+  secuencial: string;
+  secuencialCompleto?: string;
+  claveAcceso?: string;
+  fechaEmision?: string; // ISO yyyy-MM-dd
+  // Número (estab-ptoEmi-secuencial) del comprobante sustentado; sirve para validar el vínculo.
+  numDocSustento?: string;
+  retencionesRenta: DetalleAirRetencion[];
+  retencionesIva: RetencionIvaCompra[];
 }
 
 // ---- Catálogos SRI mínimos para la UI ----

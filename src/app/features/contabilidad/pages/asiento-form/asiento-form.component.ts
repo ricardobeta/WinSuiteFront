@@ -639,7 +639,10 @@ export class AsientoFormComponent implements OnInit {
   }
 
   private datosCxPCompletos(): boolean {
-    return !!this.cxpProveedorId()
+    // Se acepta el proveedor por identificación (RUC/cédula) cuando no hay un proveedor vinculado:
+    // muchas facturas de compra traen identificación pero no un registro de proveedor.
+    const proveedorOk = !!this.cxpProveedorId() || !!this.cxpProveedorIdentificacion().trim();
+    return proveedorOk
       && !!this.cxpProveedorNombre().trim()
       && !!this.cxpFechaVencimiento()
       && !!this.cxpReferencia().trim();

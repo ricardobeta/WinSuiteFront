@@ -254,6 +254,22 @@ export class VentasPosStateService {
     this.updateActiveCarrito(() => crearCarritoInicial());
   }
 
+  /** Reemplaza el carrito de la pestaña activa (usado al retomar una cuenta abierta). */
+  cargarCarrito(carrito: CarritoState): void {
+    this.updateActiveCarrito(() => {
+      const base = crearCarritoInicial();
+      return {
+        ...base,
+        clienteId: carrito.clienteId ?? null,
+        clienteNombre: carrito.clienteNombre ?? null,
+        descuentoGlobal: Number.isFinite(carrito.descuentoGlobal) ? carrito.descuentoGlobal : 0,
+        notas: carrito.notas ?? '',
+        items: Array.isArray(carrito.items) ? [...carrito.items] : [],
+        pagos: carrito.pagos?.length ? carrito.pagos.map((pago) => ({ ...pago })) : base.pagos
+      };
+    });
+  }
+
   private updateActiveCarrito(updater: (state: CarritoState) => CarritoState): void {
     const activeId = this.activeTabId();
 

@@ -409,6 +409,9 @@ export class FacturasCompraService {
     if (factura.estado === 'ANULADA') {
       throw new Error('La factura está anulada.');
     }
+    if (factura.estado === 'REGISTRADA') {
+      throw new Error('La factura de compra ya está registrada.');
+    }
 
     const items = await this.getItems(facturaId);
     const userId = this.authService.currentUser()?.uid ?? 'sistema';
@@ -417,7 +420,12 @@ export class FacturasCompraService {
     //    cuenta sin configurar), lanza el error y no se altera inventario ni el estado.
     //    Solo se contabiliza si la contabilidad está activada; si no, la factura igual se registra.
     const facturaRegistrada: FacturaCompra = { ...factura, estado: 'REGISTRADA' };
-    if (await this.integracionContable.contabilidadActiva()) {
+    const contabilidadActiva = await this.integracionContable.contabilidadActiva();
+    // En modo asiento "borrador" el asiento se guarda sin aprobar y la CxP se difiere hasta que
+    // el usuario apruebe el asiento (que ya lleva los datos del proveedor/CxP para generarla).
+    const asientoEnBorrador = contabilidadActiva
+      && (await this.integracionContable.modoAsientoAutomatico()) === 'BORRADOR';
+    if (contabilidadActiva) {
       if (lineasAsiento && lineasAsiento.length > 0) {
         await this.integracionContable.guardarAsientoCompra(facturaRegistrada, lineasAsiento);
       } else {
@@ -461,11 +469,14 @@ export class FacturasCompraService {
     });
 
     // 4) Sincronizar el subledger de Cuentas por Pagar (documento-espejo, sin generar asiento).
-    //    Una falla aquí no debe revertir la factura ya registrada.
-    try {
-      await this.cuentasPorPagar.sincronizarDesdeFacturaCompra(facturaRegistrada);
-    } catch (error) {
-      console.error('No se pudo sincronizar la factura con Cuentas por Pagar.', error);
+    //    Una falla aquí no debe revertir la factura ya registrada. En modo asiento "borrador"
+    //    NO se crea aquí: la CxP se genera cuando se apruebe el asiento en borrador.
+    if (!asientoEnBorrador) {
+      try {
+        await this.cuentasPorPagar.sincronizarDesdeFacturaCompra(facturaRegistrada);
+      } catch (error) {
+        console.error('No se pudo sincronizar la factura con Cuentas por Pagar.', error);
+      }
     }
   }
 

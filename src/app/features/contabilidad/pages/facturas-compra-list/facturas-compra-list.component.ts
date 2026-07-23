@@ -19,7 +19,7 @@ import { debounceTime, firstValueFrom, startWith } from 'rxjs';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
-import { EstadoFacturaCompra, FacturaCompra, TIPOS_COMPROBANTE, TIPO_COMPROBANTE_NOTA_CREDITO } from '../../models/compras.models';
+import { CODIGOS_SUSTENTO, EstadoFacturaCompra, FacturaCompra, TIPOS_COMPROBANTE, TIPO_COMPROBANTE_NOTA_CREDITO } from '../../models/compras.models';
 import { FacturasCompraPageCursor, FacturasCompraService } from '../../services/facturas-compra.service';
 import { PeriodoContableService } from '../../services/periodo-contable.service';
 
@@ -100,6 +100,16 @@ import { PeriodoContableService } from '../../services/periodo-contable.service'
             <mat-option value="">Todos</mat-option>
             @for (t of tiposComprobante; track t.codigo) {
               <mat-option [value]="t.codigo">{{ t.descripcion }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>Sustento tributario</mat-label>
+          <mat-select [formControl]="sustento">
+            <mat-option value="">Todos</mat-option>
+            @for (s of codigosSustento; track s.codigo) {
+              <mat-option [value]="s.codigo">{{ s.codigo }} · {{ s.descripcion }}</mat-option>
             }
           </mat-select>
         </mat-form-field>
@@ -254,7 +264,7 @@ import { PeriodoContableService } from '../../services/periodo-contable.service'
     .metric-hero { color: var(--tc-on-primary, #fff); background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 72%, #0a1f1b)); box-shadow: 0 12px 30px color-mix(in srgb, var(--primary) 30%, transparent); }
     .metric-hero .kpi-label { color: color-mix(in srgb, #fff 82%, transparent); }
 
-    .filters-card { padding: 1rem 1.25rem; display: grid; grid-template-columns: minmax(260px, 2fr) 220px 1fr 1fr auto; gap: .75rem; align-items: start; }
+    .filters-card { padding: 1rem 1.25rem; display: grid; grid-template-columns: minmax(260px, 2fr) 220px 1fr 1fr 1fr auto; gap: .75rem; align-items: start; }
     .filters-card .search { grid-column: 1; }
     .search-button { min-height: 56px; }
     .compras-table td.num.neg { color: var(--destructive); }
@@ -297,16 +307,19 @@ export class FacturasCompraListComponent implements OnInit {
 
   protected readonly columnas = ['documento', 'proveedor', 'tipo', 'fecha', 'total', 'inventario', 'estado', 'acciones'];
   protected readonly tiposComprobante = TIPOS_COMPROBANTE;
+  protected readonly codigosSustento = CODIGOS_SUSTENTO;
 
   protected readonly facturas = signal<FacturaCompra[]>([]);
   protected readonly busqueda = new FormControl('', { nonNullable: true });
   protected readonly periodo = new FormControl(this.periodoService.getPeriodoInicial('compras'), { nonNullable: true });
   protected readonly tipo = new FormControl('', { nonNullable: true });
+  protected readonly sustento = new FormControl('', { nonNullable: true });
   protected readonly estado = new FormControl('', { nonNullable: true });
 
   private readonly busquedaSignal = signal('');
   private readonly periodoSignal = signal('');
   private readonly tipoSignal = signal('');
+  private readonly sustentoSignal = signal('');
   private readonly estadoSignal = signal('');
   protected readonly pageIndex = signal(0);
   protected readonly pageSize = signal(50);
@@ -320,11 +333,15 @@ export class FacturasCompraListComponent implements OnInit {
     const periodo = this.periodoSignal();
     const estado = this.estadoSignal();
     const tipo = this.tipoSignal();
+    const sustento = this.sustentoSignal();
     return this.facturas().filter((factura) => {
       if (periodo && this.periodoDe(factura) !== periodo) {
         return false;
       }
       if (tipo && (factura.tipoComprobante || '01') !== tipo) {
+        return false;
+      }
+      if (sustento && (factura.codSustento || '') !== sustento) {
         return false;
       }
       if (estado && factura.estado !== estado) {
@@ -365,6 +382,8 @@ export class FacturasCompraListComponent implements OnInit {
       });
     this.tipo.valueChanges.pipe(startWith(''), takeUntilDestroyed(this.destroyRef))
       .subscribe((value) => this.tipoSignal.set(value ?? ''));
+    this.sustento.valueChanges.pipe(startWith(''), takeUntilDestroyed(this.destroyRef))
+      .subscribe((value) => this.sustentoSignal.set(value ?? ''));
     this.estado.valueChanges.pipe(startWith(''), takeUntilDestroyed(this.destroyRef))
       .subscribe((value) => this.estadoSignal.set(value ?? ''));
   }

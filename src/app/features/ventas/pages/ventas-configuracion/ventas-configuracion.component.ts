@@ -25,7 +25,13 @@ import { AppUserProfile } from '../../../../core/models/auth.models';
 import { VentasColaboradoresService } from '../../services/ventas-colaboradores.service';
 import { VentasUsuariosAlmacenesService } from '../../services/ventas-usuarios-almacenes.service';
 import { VentasAlmacenSesionService } from '../../services/ventas-almacen-sesion.service';
-import { UsuariosAlmacenesConfig, UsuarioAlmacenAsignacion } from '../../models/ventas.models';
+import { VentasPosConfigService } from '../../services/ventas-pos-config.service';
+import {
+  ModoPos,
+  PerfilPos,
+  UsuariosAlmacenesConfig,
+  UsuarioAlmacenAsignacion
+} from '../../models/ventas.models';
 
 interface ColaboradorAlmacenesRow {
   colaborador: AppUserProfile;
@@ -234,6 +240,134 @@ interface ColaboradorAlmacenesRow {
               </div>
             }
           </div>
+        }
+      </article>
+
+      <!-- TAB 4: Perfil de POS por Almacén -->
+      <article class="surface-card panel">
+        <header class="panel-header">
+          <div>
+            <h2>Perfil de POS por Almacén</h2>
+            <p>Define el modo de operación y la experiencia del punto de venta para cada almacén</p>
+          </div>
+          @if (perfilEditable()) {
+            <button
+              mat-raised-button
+              color="primary"
+              [disabled]="guardandoPerfil()"
+              (click)="guardarPerfil()"
+            >
+              <mat-icon>save</mat-icon>
+              Guardar perfil
+            </button>
+          }
+        </header>
+
+        @if (almacenesActivos().length === 0) {
+          <div class="empty-state">
+            <mat-icon>warehouse</mat-icon>
+            <p>No hay almacenes disponibles. Crea almacenes primero.</p>
+          </div>
+        } @else {
+          <mat-form-field appearance="outline" class="almacen-select-field">
+            <mat-label>Almacén</mat-label>
+            <mat-select
+              [value]="perfilAlmacenId()"
+              (selectionChange)="seleccionarAlmacenPerfil($event.value)"
+            >
+              @for (almacen of almacenesActivos(); track almacen.id) {
+                <mat-option [value]="almacen.id ?? ''">{{ almacen.nombre }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          @if (cargandoPerfil()) {
+            <div class="loading-state">
+              <mat-spinner diameter="40"></mat-spinner>
+              <p>Cargando perfil...</p>
+            </div>
+          } @else if (perfilEditable(); as perfil) {
+            <div class="perfil-grid">
+              <mat-form-field appearance="outline">
+                <mat-label>Modo de operación</mat-label>
+                <mat-select [value]="perfil.modo" (selectionChange)="cambiarModo($event.value)">
+                  <mat-option value="RETAIL">Retail (mostrador / escaneo)</mat-option>
+                  <mat-option value="RESTAURANTE">Restaurante (cuentas divisibles)</mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Vista de catálogo por defecto</mat-label>
+                <mat-select
+                  [value]="perfil.vistaCatalogoPorDefecto"
+                  (selectionChange)="actualizarPerfil({ vistaCatalogoPorDefecto: $event.value })"
+                >
+                  <mat-option value="TARJETAS">Tarjetas</mat-option>
+                  <mat-option value="LISTA">Lista</mat-option>
+                </mat-select>
+              </mat-form-field>
+
+              <div class="toggles-col">
+                <mat-slide-toggle
+                  [checked]="perfil.escaneoHabilitado"
+                  (change)="actualizarPerfil({ escaneoHabilitado: $event.checked })"
+                >
+                  Habilitar barra de escaneo (lector físico)
+                </mat-slide-toggle>
+
+                <mat-slide-toggle
+                  [checked]="perfil.autoAgregarAlEscanear"
+                  [disabled]="!perfil.escaneoHabilitado"
+                  (change)="actualizarPerfil({ autoAgregarAlEscanear: $event.checked })"
+                >
+                  Agregar automáticamente al escanear
+                </mat-slide-toggle>
+
+                <mat-slide-toggle
+                  [checked]="perfil.mostrarImagenes"
+                  (change)="actualizarPerfil({ mostrarImagenes: $event.checked })"
+                >
+                  Mostrar imágenes en el catálogo
+                </mat-slide-toggle>
+
+                <mat-slide-toggle
+                  [checked]="perfil.permitirCuentasAbiertas"
+                  (change)="actualizarPerfil({ permitirCuentasAbiertas: $event.checked })"
+                >
+                  Permitir cuentas abiertas (restaurante)
+                </mat-slide-toggle>
+
+                <mat-slide-toggle
+                  [checked]="perfil.permitirDividirCuenta"
+                  [disabled]="!perfil.permitirCuentasAbiertas"
+                  (change)="actualizarPerfil({ permitirDividirCuenta: $event.checked })"
+                >
+                  Permitir dividir la cuenta al cobrar
+                </mat-slide-toggle>
+
+                <mat-slide-toggle
+                  [checked]="perfil.facturacionAutomatica"
+                  (change)="actualizarPerfil({ facturacionAutomatica: $event.checked })"
+                >
+                  Facturar automáticamente al cobrar (SRI)
+                </mat-slide-toggle>
+                <p class="toggle-hint">Requiere firma y punto de emisión configurados para el almacén.</p>
+              </div>
+
+              @if (perfil.permitirCuentasAbiertas) {
+                <mat-form-field appearance="outline">
+                  <mat-label>Etiqueta de cuenta</mat-label>
+                  <input
+                    matInput
+                    [value]="perfil.etiquetaCuenta"
+                    maxlength="20"
+                    (input)="actualizarPerfil({ etiquetaCuenta: asInput($event).value })"
+                    placeholder="Mesa, Cuenta, Orden..."
+                  />
+                </mat-form-field>
+              }
+            </div>
+          }
         }
       </article>
     </section>
@@ -477,6 +611,29 @@ interface ColaboradorAlmacenesRow {
       margin-left: .5rem;
     }
 
+    .perfil-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem 1.5rem;
+      align-items: start;
+      max-width: 760px;
+    }
+
+    .toggles-col {
+      grid-column: 1 / -1;
+      display: grid;
+      gap: .85rem;
+      padding: 1rem;
+      border: 1px solid color-mix(in srgb, var(--outline) 30%, transparent);
+      border-radius: .7rem;
+    }
+
+    .toggle-hint {
+      margin: -.4rem 0 0;
+      font-size: .8rem;
+      color: var(--muted-foreground);
+    }
+
     @media (max-width: 900px) {
       .panel-header {
         flex-direction: column;
@@ -502,6 +659,7 @@ export class VentasConfiguracionComponent {
   private readonly colaboradoresService = inject(VentasColaboradoresService);
   private readonly usuariosAlmacenesService = inject(VentasUsuariosAlmacenesService);
   private readonly almacenSesionService = inject(VentasAlmacenSesionService);
+  private readonly posConfigService = inject(VentasPosConfigService);
   private readonly snackBar = inject(MatSnackBar);
 
   // Estado: Métodos de Pago
@@ -530,6 +688,12 @@ export class VentasConfiguracionComponent {
   protected readonly usuarioActualNombre = computed(() => {
     return this.authService.currentUser()?.displayName ?? 'Usuario';
   });
+
+  // Estado: Perfil de POS por almacén
+  protected readonly perfilAlmacenId = signal<string>('');
+  protected readonly perfilEditable = signal<PerfilPos | null>(null);
+  protected readonly cargandoPerfil = signal(false);
+  protected readonly guardandoPerfil = signal(false);
 
   protected readonly hayEnCambios = computed(() => {
     const actual = JSON.stringify(this.asignacionesActuales());
@@ -720,6 +884,69 @@ export class VentasConfiguracionComponent {
 
     this.almacenSesionService.seleccionarAlmacen(almacenId);
     this.mostrarMensaje('Almacén seleccionado.', 'success');
+  }
+
+  /** Carga el perfil de POS del almacén seleccionado. */
+  protected async seleccionarAlmacenPerfil(almacenId: string): Promise<void> {
+    if (!almacenId) {
+      this.perfilAlmacenId.set('');
+      this.perfilEditable.set(null);
+      return;
+    }
+
+    this.perfilAlmacenId.set(almacenId);
+    this.cargandoPerfil.set(true);
+    try {
+      const perfil = await this.posConfigService.getPerfilOnce(almacenId);
+      this.perfilEditable.set(perfil);
+    } catch (error) {
+      console.error('Error al cargar el perfil de POS:', error);
+      this.mostrarMensaje('No se pudo cargar el perfil de POS.', 'error');
+      this.perfilEditable.set(null);
+    } finally {
+      this.cargandoPerfil.set(false);
+    }
+  }
+
+  /** Aplica un cambio parcial al perfil en edición. */
+  protected actualizarPerfil(patch: Partial<PerfilPos>): void {
+    const perfil = this.perfilEditable();
+    if (!perfil) {
+      return;
+    }
+    this.perfilEditable.set({ ...perfil, ...patch });
+  }
+
+  /** Cambiar el modo re-deriva defaults sensatos para ese modo, conservando el almacén. */
+  protected cambiarModo(modo: ModoPos): void {
+    const almacenId = this.perfilAlmacenId();
+    if (!almacenId) {
+      return;
+    }
+    this.perfilEditable.set(this.posConfigService.getDefaultPerfil(almacenId, modo));
+  }
+
+  protected async guardarPerfil(): Promise<void> {
+    const perfil = this.perfilEditable();
+    if (!perfil) {
+      return;
+    }
+
+    this.guardandoPerfil.set(true);
+    try {
+      await this.posConfigService.guardarPerfil(perfil);
+      this.mostrarMensaje('Perfil de POS guardado correctamente.', 'success');
+    } catch (error) {
+      console.error('Error al guardar el perfil de POS:', error);
+      this.mostrarMensaje('Error al guardar el perfil de POS.', 'error');
+    } finally {
+      this.guardandoPerfil.set(false);
+    }
+  }
+
+  /** Helper de plantilla para leer el value de un evento de input. */
+  protected asInput(event: Event): HTMLInputElement {
+    return event.target as HTMLInputElement;
   }
 
   /**

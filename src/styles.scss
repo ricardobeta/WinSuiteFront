@@ -197,6 +197,13 @@ textarea {
 	}
 }
 
+/* Diálogo "Dividir cuenta": el contenido define su propia superficie/padding. */
+.dividir-cuenta-panel .mat-mdc-dialog-surface {
+	padding: 0;
+	border-radius: 12px;
+	overflow: hidden;
+}
+
 html.theme-dark {
 	@include mat.all-component-colors($winsuite-theme-dark);
 	color-scheme: dark;

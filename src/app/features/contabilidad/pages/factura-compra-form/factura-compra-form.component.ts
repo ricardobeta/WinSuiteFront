@@ -29,6 +29,7 @@ import { AlmacenesService } from '../../../inventario/services/almacenes.service
 import { ProductosService } from '../../../inventario/services/productos.service';
 import {
   CODIGOS_SUSTENTO,
+  CatalogoItem,
   DocumentoModificado,
   FORMAS_PAGO,
   FacturaCompra,
@@ -37,11 +38,13 @@ import {
   MONTO_MINIMO_FORMA_PAGO,
   OrigenDocumentoCompra,
   PORCENTAJES_RET_IVA,
+  RetencionParsed,
   TIPOS_COMPROBANTE,
   TIPO_COMPROBANTE_NOTA_CREDITO,
   TipoIdProveedor
 } from '../../models/compras.models';
 import { CuentaContable, TipoGastoCompra } from '../../models/contabilidad.models';
+import { CatalogosSriService } from '../../services/catalogos-sri.service';
 import { ComprasXmlService } from '../../services/compras-xml.service';
 import { FacturasCompraService } from '../../services/facturas-compra.service';
 import { ConfiguracionContableService } from '../../services/configuracion-contable.service';
@@ -433,43 +436,149 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
               </mat-form-field>
             </div>
 
-            <div class="ret-block">
-              <div class="ret-head">
-                <h4>Retención en la fuente (renta)</h4>
-                <button mat-button type="button" (click)="agregarRetencionRenta()"><mat-icon>add</mat-icon> Agregar</button>
+            <div class="ret-section">
+              <div class="ret-section-head">
+                <div class="ret-section-title">
+                  <mat-icon>receipt_long</mat-icon>
+                  <div>
+                    <h4>Retenciones <span class="ret-optional">Opcional</span></h4>
+                    <span>Vincula el comprobante de retención (XML) o captúralas manualmente.</span>
+                  </div>
+                </div>
+                <div class="ret-head-actions">
+                  @if (retencionVinculada()) {
+                    <span class="ret-badge"><mat-icon>link</mat-icon> Vinculado</span>
+                  }
+                  @if (!retEditorVisible() && !soloLectura()) {
+                    <button mat-flat-button color="primary" type="button" (click)="abrirRetenciones()"><mat-icon>add</mat-icon> Agregar retención</button>
+                  } @else if (retEditorVisible() && !soloLectura() && !retencionVinculada() && !tieneRetenciones()) {
+                    <button mat-button type="button" (click)="ocultarRetenciones()"><mat-icon>expand_less</mat-icon> Ocultar</button>
+                  }
+                </div>
               </div>
-              <div formArrayName="retencionesRenta" class="ret-grid">
-                @for (ret of retencionesRenta.controls; track $index) {
-                  <div class="ret-row" [formGroupName]="$index">
-                    <mat-form-field appearance="outline"><mat-label>Cód. renta</mat-label><input matInput formControlName="codRetAir" /></mat-form-field>
-                    <mat-form-field appearance="outline"><mat-label>Base</mat-label><input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="baseImpAir" (input)="recalcularRetRenta($index)" /></mat-form-field>
-                    <mat-form-field appearance="outline"><mat-label>%</mat-label><input matInput type="number" min="0" formControlName="porcentajeAir" (input)="recalcularRetRenta($index)" /></mat-form-field>
-                    <mat-form-field appearance="outline"><mat-label>Valor</mat-label><input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="valRetAir" /></mat-form-field>
-                    <button mat-icon-button type="button" color="warn" (click)="retencionesRenta.removeAt($index)"><mat-icon>delete</mat-icon></button>
+
+              @if (retEditorVisible()) {
+              <!-- Zona de carga / estado vinculado -->
+              @if (retencionVinculada()) {
+                <div class="ret-linked">
+                  <mat-icon>task_alt</mat-icon>
+                  <div class="ret-linked-copy">
+                    <strong>Comprobante de retención {{ retencionDocumento() || 'vinculado' }}</strong>
+                    <span>Total retenido {{ totalRetencion() | currency: 'USD':'symbol-narrow' }} · Renta {{ totalRetencionRenta() | currency: 'USD':'symbol-narrow' }} · IVA {{ totalRetencionIva() | currency: 'USD':'symbol-narrow' }}</span>
+                  </div>
+                  @if (!soloLectura()) {
+                    <button mat-stroked-button type="button" color="warn" (click)="quitarRetencionVinculada()"><mat-icon>link_off</mat-icon> Quitar</button>
+                  }
+                </div>
+              } @else if (!soloLectura()) {
+                <div class="ret-dropzone">
+                  <app-archivo-uploader sourceModule="compras" [extensions]="['xml']" (uploaded)="onRetencionSubida($event)"></app-archivo-uploader>
+                  <div class="ret-dropzone-alt">
+                    <span class="or-sep">o</span>
+                    <button mat-stroked-button type="button" (click)="seleccionarRetencionExistente()"><mat-icon>folder_open</mat-icon> Seleccionar un XML ya cargado</button>
+                  </div>
+                </div>
+              }
+              @if (parseandoRetencion()) { <p class="ret-empty"><mat-icon>hourglass_empty</mat-icon> Analizando retención…</p> }
+              @if (retencionError()) { <p class="warn-inline"><mat-icon>error</mat-icon> {{ retencionError() }}</p> }
+
+              <!-- Datos del comprobante de retención emitido -->
+              <div class="ret-subcard">
+                <div class="ret-subhead">
+                  <div class="ret-subhead-title"><mat-icon>description</mat-icon><h5>Datos del comprobante de retención</h5></div>
+                </div>
+                <div class="grid-4">
+                  <mat-form-field appearance="outline"><mat-label>Estab.</mat-label><input matInput formControlName="retEstablecimiento" /></mat-form-field>
+                  <mat-form-field appearance="outline"><mat-label>Pto. emisión</mat-label><input matInput formControlName="retPuntoEmision" /></mat-form-field>
+                  <mat-form-field appearance="outline"><mat-label>Secuencial</mat-label><input matInput formControlName="retSecuencial" /></mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Fecha emisión</mat-label>
+                    <input matInput [matDatepicker]="pRet" formControlName="retFechaEmision" />
+                    <mat-datepicker-toggle matIconSuffix [for]="pRet"></mat-datepicker-toggle>
+                    <mat-datepicker #pRet></mat-datepicker>
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="full"><mat-label>Autorización / clave de acceso de la retención</mat-label><input matInput formControlName="retAutorizacion" /></mat-form-field>
+                </div>
+              </div>
+
+              <!-- Retención en la fuente (renta) -->
+              <div class="ret-subcard">
+                <div class="ret-subhead">
+                  <div class="ret-subhead-title">
+                    <mat-icon>account_balance</mat-icon><h5>Retención en la fuente (renta)</h5>
+                    @if (retencionesRenta.controls.length) { <span class="ret-count">{{ retencionesRenta.controls.length }}</span> }
+                  </div>
+                  <button mat-stroked-button type="button" (click)="agregarRetencionRenta()"><mat-icon>add</mat-icon> Agregar</button>
+                </div>
+                @if (retencionesRenta.controls.length === 0) {
+                  <p class="ret-empty"><mat-icon>info</mat-icon> Sin retenciones de renta. Vincula el XML o agrega una línea.</p>
+                } @else {
+                  <div class="ret-grid-header"><span>Código</span><span>Base imponible</span><span>%</span><span>Valor retenido</span><span></span></div>
+                  <div formArrayName="retencionesRenta" class="ret-grid">
+                    @for (ret of retencionesRenta.controls; track $index) {
+                      <div class="ret-row" [formGroupName]="$index">
+                        <mat-form-field appearance="outline">
+                          <mat-label>Cód. renta</mat-label>
+                          <mat-select formControlName="codRetAir">
+                            @for (c of codigosRetRenta(); track c.codigo) { <mat-option [value]="c.codigo">{{ c.codigo }} · {{ c.descripcion }}</mat-option> }
+                          </mat-select>
+                        </mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Base</mat-label><input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="baseImpAir" (input)="recalcularRetRenta($index)" /></mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>%</mat-label><input matInput type="number" min="0" formControlName="porcentajeAir" (input)="recalcularRetRenta($index)" /></mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Valor</mat-label><input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="valRetAir" /></mat-form-field>
+                        <button mat-icon-button type="button" color="warn" (click)="retencionesRenta.removeAt($index)" matTooltip="Eliminar"><mat-icon>delete</mat-icon></button>
+                      </div>
+                    }
                   </div>
                 }
               </div>
 
-              <div class="ret-head">
-                <h4>Retención de IVA</h4>
-                <button mat-button type="button" (click)="agregarRetencionIva()"><mat-icon>add</mat-icon> Agregar</button>
-              </div>
-              <div formArrayName="retencionesIva" class="ret-grid">
-                @for (ret of retencionesIva.controls; track $index) {
-                  <div class="ret-row" [formGroupName]="$index">
-                    <mat-form-field appearance="outline"><mat-label>Cód. IVA</mat-label><input matInput formControlName="codRetIva" /></mat-form-field>
-                    <mat-form-field appearance="outline"><mat-label>Base</mat-label><input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="baseImpIva" (input)="recalcularRetIva($index)" /></mat-form-field>
-                    <mat-form-field appearance="outline">
-                      <mat-label>%</mat-label>
-                      <mat-select formControlName="porcentajeIva" (selectionChange)="recalcularRetIva($index)">
-                        @for (p of porcentajesRetIva; track p) { <mat-option [value]="p">{{ p }}%</mat-option> }
-                      </mat-select>
-                    </mat-form-field>
-                    <mat-form-field appearance="outline"><mat-label>Valor</mat-label><input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="valRetIva" /></mat-form-field>
-                    <button mat-icon-button type="button" color="warn" (click)="retencionesIva.removeAt($index)"><mat-icon>delete</mat-icon></button>
+              <!-- Retención de IVA -->
+              <div class="ret-subcard">
+                <div class="ret-subhead">
+                  <div class="ret-subhead-title">
+                    <mat-icon>percent</mat-icon><h5>Retención de IVA</h5>
+                    @if (retencionesIva.controls.length) { <span class="ret-count">{{ retencionesIva.controls.length }}</span> }
+                  </div>
+                  <button mat-stroked-button type="button" (click)="agregarRetencionIva()"><mat-icon>add</mat-icon> Agregar</button>
+                </div>
+                @if (retencionesIva.controls.length === 0) {
+                  <p class="ret-empty"><mat-icon>info</mat-icon> Sin retenciones de IVA. Vincula el XML o agrega una línea.</p>
+                } @else {
+                  <div class="ret-grid-header"><span>Código</span><span>Base imponible</span><span>%</span><span>Valor retenido</span><span></span></div>
+                  <div formArrayName="retencionesIva" class="ret-grid">
+                    @for (ret of retencionesIva.controls; track $index) {
+                      <div class="ret-row" [formGroupName]="$index">
+                        <mat-form-field appearance="outline">
+                          <mat-label>Cód. IVA</mat-label>
+                          <mat-select formControlName="codRetIva" (selectionChange)="onCodRetIvaChange($index)">
+                            @for (c of codigosRetIva(); track c.codigo) { <mat-option [value]="c.codigo">{{ c.codigo }} · {{ c.descripcion }}</mat-option> }
+                          </mat-select>
+                        </mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Base</mat-label><input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="baseImpIva" (input)="recalcularRetIva($index)" /></mat-form-field>
+                        <mat-form-field appearance="outline">
+                          <mat-label>%</mat-label>
+                          <mat-select formControlName="porcentajeIva" (selectionChange)="recalcularRetIva($index)">
+                            @for (p of porcentajesRetIva; track p) { <mat-option [value]="p">{{ p }}%</mat-option> }
+                          </mat-select>
+                        </mat-form-field>
+                        <mat-form-field appearance="outline"><mat-label>Valor</mat-label><input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="valRetIva" /></mat-form-field>
+                        <button mat-icon-button type="button" color="warn" (click)="retencionesIva.removeAt($index)" matTooltip="Eliminar"><mat-icon>delete</mat-icon></button>
+                      </div>
+                    }
                   </div>
                 }
               </div>
+
+              <!-- Totales de retención -->
+              @if (tieneRetenciones()) {
+                <div class="ret-totals">
+                  <div class="ret-total-item"><span>Ret. renta</span><strong>{{ totalRetencionRenta() | currency: 'USD':'symbol-narrow' }}</strong></div>
+                  <div class="ret-total-item"><span>Ret. IVA</span><strong>{{ totalRetencionIva() | currency: 'USD':'symbol-narrow' }}</strong></div>
+                  <div class="ret-total-item grand"><span>Total retenido</span><strong>{{ totalRetencion() | currency: 'USD':'symbol-narrow' }}</strong></div>
+                </div>
+              }
+              }
             </div>
           </section>
 
@@ -500,11 +609,24 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
               <div class="grand"><span>Total</span><strong>{{ form.value.importeTotal | currency: 'USD':'symbol-narrow':'1.2-2' }}</strong></div>
             </div>
             <div class="totals-actions">
-              <a mat-button routerLink="/workspace/contabilidad/compras">Cancelar</a>
-              <button mat-stroked-button type="submit" [disabled]="guardando()">Guardar borrador</button>
-              <button mat-flat-button color="primary" type="button" (click)="guardarYRegistrar()" [disabled]="guardando()">
-                <mat-icon>task_alt</mat-icon> Guardar y registrar
-              </button>
+              <a mat-button routerLink="/workspace/contabilidad/compras">{{ estado() === 'BORRADOR' ? 'Cancelar' : 'Volver' }}</a>
+              @if (estado() === 'BORRADOR') {
+                <button mat-stroked-button type="submit" [disabled]="guardando()">Guardar borrador</button>
+                <button mat-flat-button color="primary" type="button" (click)="guardarYRegistrar()" [disabled]="guardando()">
+                  <mat-icon>task_alt</mat-icon> Guardar y registrar
+                </button>
+              } @else if (estado() === 'REGISTRADA') {
+                @if (!edicionLimitada()) {
+                  <button mat-flat-button color="primary" type="button" (click)="activarEdicionLimitada()">
+                    <mat-icon>edit</mat-icon> Editar
+                  </button>
+                } @else {
+                  <button mat-stroked-button type="button" (click)="cancelarEdicionLimitada()" [disabled]="guardando()">Cancelar</button>
+                  <button mat-flat-button color="primary" type="button" (click)="guardarCambiosRegistrada()" [disabled]="guardando()">
+                    <mat-icon>save</mat-icon> Guardar cambios
+                  </button>
+                }
+              }
             </div>
           </section>
         }
@@ -561,12 +683,41 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
     .item-total { font-weight: 600; }
     .item-row mat-form-field { margin-bottom: -1.1em; }
 
-    .ret-block { display: grid; gap: .5rem; }
-    .ret-head { display: flex; justify-content: space-between; align-items: center; margin-top: .5rem; }
-    .ret-head h4 { margin: 0; }
+    .ret-section { display: grid; gap: .85rem; border: 1px solid color-mix(in srgb, var(--primary) 16%, transparent); border-radius: .9rem; padding: 1rem 1.1rem; background: color-mix(in srgb, var(--primary) 3%, var(--card)); }
+    .ret-section-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; }
+    .ret-section-title { display: flex; gap: .6rem; align-items: flex-start; }
+    .ret-section-title > mat-icon { color: var(--primary); flex: none; }
+    .ret-section-title h4 { margin: 0; display: flex; align-items: center; gap: .5rem; }
+    .ret-section-title span { color: var(--muted-foreground); font-size: .82rem; }
+    .ret-optional { font-size: .68rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: var(--muted-foreground); border: 1px solid color-mix(in srgb, var(--muted-foreground) 30%, transparent); border-radius: 999px; padding: .05rem .5rem; }
+    .ret-head-actions { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; justify-content: flex-end; }
+    .ret-badge { display: inline-flex; align-items: center; gap: .3rem; padding: .25rem .7rem; border-radius: 999px; background: color-mix(in srgb, var(--success, #1a7f52) 16%, transparent); color: var(--success, #1a7f52); font-size: .76rem; font-weight: 600; white-space: nowrap; }
+
+    .ret-dropzone { display: grid; gap: .5rem; }
+    .ret-dropzone-alt { display: flex; align-items: center; gap: .6rem; }
+    .ret-linked { display: flex; align-items: center; gap: .75rem; padding: .75rem .9rem; border-radius: .75rem; background: color-mix(in srgb, var(--success, #1a7f52) 10%, var(--card)); border: 1px solid color-mix(in srgb, var(--success, #1a7f52) 30%, transparent); }
+    .ret-linked > mat-icon { color: var(--success, #1a7f52); flex: none; }
+    .ret-linked-copy { display: grid; flex: 1; min-width: 0; }
+    .ret-linked-copy strong { font-size: .95rem; }
+    .ret-linked-copy span { color: var(--muted-foreground); font-size: .82rem; }
+
+    .ret-subcard { display: grid; gap: .6rem; border: 1px solid color-mix(in srgb, var(--muted-foreground) 16%, transparent); border-radius: .75rem; padding: .8rem .9rem; background: var(--card); }
+    .ret-subhead { display: flex; justify-content: space-between; align-items: center; gap: .75rem; }
+    .ret-subhead-title { display: flex; align-items: center; gap: .45rem; }
+    .ret-subhead-title mat-icon { color: var(--primary); font-size: 1.2rem; width: 1.2rem; height: 1.2rem; }
+    .ret-subhead-title h5 { margin: 0; font-size: .92rem; }
+    .ret-count { display: inline-grid; place-items: center; min-width: 1.35rem; height: 1.35rem; padding: 0 .35rem; border-radius: 999px; background: color-mix(in srgb, var(--primary) 15%, transparent); color: var(--primary); font-size: .72rem; font-weight: 700; }
+    .ret-empty { display: flex; align-items: center; gap: .4rem; margin: 0; color: var(--muted-foreground); font-size: .85rem; }
+    .ret-badge mat-icon, .ret-empty mat-icon { font-size: 1.1rem; width: 1.1rem; height: 1.1rem; }
     .ret-grid { display: grid; gap: .5rem; }
+    .ret-grid-header { display: grid; grid-template-columns: 1fr 1fr .7fr 1fr auto; gap: .5rem; color: var(--muted-foreground); font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; padding: 0 .25rem; }
     .ret-row { display: grid; grid-template-columns: 1fr 1fr .7fr 1fr auto; gap: .5rem; align-items: center; }
     .ret-row mat-form-field { margin-bottom: -1.1em; }
+
+    .ret-totals { display: flex; gap: 1.75rem; justify-content: flex-end; flex-wrap: wrap; padding-top: .2rem; }
+    .ret-total-item span { display: block; font-size: .7rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted-foreground); }
+    .ret-total-item strong { font-size: 1.05rem; }
+    .ret-total-item.grand strong { color: var(--primary); font-size: 1.25rem; }
 
     .warn-inline { display: flex; align-items: center; gap: .4rem; color: #9c6412; margin: 0; }
     .warn-inline mat-icon { font-size: 1.1rem; width: 1.1rem; height: 1.1rem; }
@@ -591,6 +742,7 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
       .grid-3, .grid-4 { grid-template-columns: repeat(2, minmax(0,1fr)); }
       .items-grid-header { display: none; }
       .item-row, .items-grid.with-product .item-row { grid-template-columns: 1fr 1fr; }
+      .ret-grid-header { display: none; }
       .ret-row { grid-template-columns: 1fr 1fr; }
     }
   `]
@@ -612,6 +764,7 @@ export class FacturaCompraFormComponent implements OnInit {
   private readonly planCuentasService = inject(PlanCuentasService);
   private readonly configuracionContable = inject(ConfiguracionContableService);
   private readonly archivosService = inject(ArchivosService);
+  private readonly catalogosSri = inject(CatalogosSriService);
   private readonly cdr = inject(ChangeDetectorRef);
 
   protected readonly sustentos = CODIGOS_SUSTENTO;
@@ -619,6 +772,10 @@ export class FacturaCompraFormComponent implements OnInit {
   protected readonly tiposComprobante = TIPOS_COMPROBANTE;
   protected readonly porcentajesRetIva = PORCENTAJES_RET_IVA;
   protected readonly montoMinimoFormaPago = MONTO_MINIMO_FORMA_PAGO;
+
+  /** Catálogos SRI de códigos de retención (cargados del backend). */
+  protected readonly codigosRetRenta = signal<CatalogoItem[]>([]);
+  protected readonly codigosRetIva = signal<CatalogoItem[]>([]);
 
   protected readonly modo = signal<OrigenDocumentoCompra>('XML');
   protected readonly soporteAdjunto = signal(false);
@@ -636,6 +793,10 @@ export class FacturaCompraFormComponent implements OnInit {
   protected readonly facturaId = signal<string | null>(null);
   protected readonly estado = signal<'BORRADOR' | 'REGISTRADA' | 'ANULADA'>('BORRADOR');
   protected readonly soloLectura = computed(() => this.estado() !== 'BORRADOR');
+  /** Edición acotada de una compra ya REGISTRADA (solo proveedor, sustento tributario y forma de pago). */
+  protected readonly edicionLimitada = signal(false);
+  /** Únicos controles editables en una compra registrada. */
+  private readonly CONTROLES_EDICION_REGISTRADA = ['tpIdProv', 'idProv', 'razonSocialProv', 'parteRel', 'codSustento', 'formasDePago'] as const;
   protected readonly productos = signal<Producto[]>([]);
   protected readonly almacenes = signal<Almacen[]>([]);
   protected readonly tiposGasto = signal<TipoGastoCompra[]>([]);
@@ -646,6 +807,15 @@ export class FacturaCompraFormComponent implements OnInit {
   private xmlStoragePath: string | null = null;
   private pdfArchivoId: string | null = null;
   private ordenCompraId: string | null = null;
+
+  // Comprobante de retención vinculado (XML).
+  protected readonly parseandoRetencion = signal(false);
+  protected readonly retencionError = signal<string | null>(null);
+  protected readonly retencionVinculada = signal(false);
+  /** Muestra el editor de retenciones cuando el usuario lo abre manualmente (compacto por defecto). */
+  protected readonly mostrarRetenciones = signal(false);
+  private retencionArchivoId: string | null = null;
+  private retencionXmlStoragePath: string | null = null;
 
   /**
    * Valida la identificación del proveedor según el tipo (tabla SRI):
@@ -708,6 +878,12 @@ export class FacturaCompraFormComponent implements OnInit {
     docModSecuencial: [''],
     docModFecha: [null as Date | null],
     docModAutorizacion: [''],
+    // Comprobante de retención emitido (cabecera; se autocompleta al cargar el XML de retención)
+    retEstablecimiento: [''],
+    retPuntoEmision: [''],
+    retSecuencial: [''],
+    retAutorizacion: [''],
+    retFechaEmision: [null as Date | null],
     items: this.fb.array([]),
     retencionesRenta: this.fb.array([]),
     retencionesIva: this.fb.array([])
@@ -761,6 +937,10 @@ export class FacturaCompraFormComponent implements OnInit {
     this.tiposGastoService.listar().pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((tipos) => this.tiposGasto.set(tipos.filter((t) => t.activo)));
     this.planCuentasService.getCuentasOnce().then((cuentas) => (this.cuentas = cuentas));
+    this.catalogosSri.getRetencionRenta().pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((codigos) => this.codigosRetRenta.set(codigos));
+    this.catalogosSri.getRetencionIva().pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((codigos) => this.codigosRetIva.set(codigos));
 
     // Al cambiar el tipo de identificación, revalida el RUC/cédula con la regla correcta.
     this.form.controls.tpIdProv.valueChanges.pipe(takeUntilDestroyed(this.destroyRef))
@@ -816,9 +996,42 @@ export class FacturaCompraFormComponent implements OnInit {
   }
 
   protected totalRetencion(): number {
-    const renta = this.retencionesRenta.controls.reduce((t, g) => t + Number(g.get('valRetAir')?.value ?? 0), 0);
-    const iva = this.retencionesIva.controls.reduce((t, g) => t + Number(g.get('valRetIva')?.value ?? 0), 0);
-    return this.round2(renta + iva);
+    return this.round2(this.totalRetencionRenta() + this.totalRetencionIva());
+  }
+
+  protected totalRetencionRenta(): number {
+    return this.round2(this.retencionesRenta.controls.reduce((t, g) => t + Number(g.get('valRetAir')?.value ?? 0), 0));
+  }
+
+  protected totalRetencionIva(): number {
+    return this.round2(this.retencionesIva.controls.reduce((t, g) => t + Number(g.get('valRetIva')?.value ?? 0), 0));
+  }
+
+  /** Número (estab-pto-secuencial) del comprobante de retención capturado; vacío si no hay datos. */
+  protected retencionDocumento(): string {
+    const v = this.form.getRawValue();
+    const estab = (v.retEstablecimiento ?? '').trim();
+    const pto = (v.retPuntoEmision ?? '').trim();
+    const sec = (v.retSecuencial ?? '').trim();
+    return estab || pto || sec ? `${estab}-${pto}-${sec}` : '';
+  }
+
+  /** true cuando hay al menos una línea de retención (renta o IVA). */
+  protected tieneRetenciones(): boolean {
+    return this.retencionesRenta.controls.length > 0 || this.retencionesIva.controls.length > 0;
+  }
+
+  /** El editor de retenciones se muestra si el usuario lo abrió, hay un XML vinculado o ya hay líneas. */
+  protected retEditorVisible(): boolean {
+    return this.mostrarRetenciones() || this.retencionVinculada() || this.tieneRetenciones();
+  }
+
+  protected abrirRetenciones(): void {
+    this.mostrarRetenciones.set(true);
+  }
+
+  protected ocultarRetenciones(): void {
+    this.mostrarRetenciones.set(false);
   }
 
   protected seleccionarExistente(): void {
@@ -1099,11 +1312,23 @@ export class FacturaCompraFormComponent implements OnInit {
 
   protected agregarRetencionIva(): void {
     this.retencionesIva.push(this.fb.nonNullable.group({
-      codRetIva: ['9'],
+      codRetIva: ['725'],
       baseImpIva: [0],
       porcentajeIva: [30],
       valRetIva: [0]
     }));
+  }
+
+  /** Al elegir un código de retención de IVA, ajusta el porcentaje según el catálogo del SRI. */
+  protected onCodRetIvaChange(index: number): void {
+    const g = this.retencionesIva.at(index);
+    const codigo = String(g.get('codRetIva')?.value ?? '');
+    const item = this.codigosRetIva().find((c) => c.codigo === codigo);
+    const pct = CatalogosSriService.porcentajeDesdeDescripcion(item?.descripcion);
+    if (pct != null) {
+      g.patchValue({ porcentajeIva: pct }, { emitEvent: false });
+      this.recalcularRetIva(index);
+    }
   }
 
   protected recalcularRetRenta(index: number): void {
@@ -1118,6 +1343,101 @@ export class FacturaCompraFormComponent implements OnInit {
     const base = Number(g.get('baseImpIva')?.value ?? 0);
     const pct = Number(g.get('porcentajeIva')?.value ?? 0);
     g.patchValue({ valRetIva: this.round2(base * pct / 100) }, { emitEvent: false });
+  }
+
+  // ---- Comprobante de retención vinculado (XML) ----
+
+  /** Se dispara cuando el uploader de retención sube (o se selecciona) un XML de retención. */
+  protected onRetencionSubida(item: ArchivoItem): void {
+    this.retencionArchivoId = item.id;
+    this.retencionXmlStoragePath = item.storagePath;
+    if (!item.storagePath) {
+      return;
+    }
+    this.parseandoRetencion.set(true);
+    this.retencionError.set(null);
+    this.comprasXml.parseRetencionXml(item.storagePath).pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
+      next: (parsed) => {
+        this.parseandoRetencion.set(false);
+        this.aplicarRetencionParseada(parsed);
+      },
+      error: (error) => {
+        this.parseandoRetencion.set(false);
+        this.retencionError.set(error?.error?.message ?? error?.message ?? 'No se pudo analizar el XML de retención.');
+      }
+    });
+  }
+
+  /** Abre el selector de archivos para reutilizar un XML de retención ya cargado. */
+  protected seleccionarRetencionExistente(): void {
+    const dialogRef = this.dialog.open<ArchivoSelectorDialogComponent, ArchivoSelectorDialogData, ArchivoSelectorDialogResult | null>(
+      ArchivoSelectorDialogComponent,
+      {
+        maxWidth: '96vw',
+        data: {
+          title: 'Selecciona el XML del comprobante de retención',
+          subtitle: 'Reutiliza un comprobante de retención ya cargado o sube uno nuevo.',
+          sourceModule: 'compras',
+          allowUpload: true,
+          extensions: ['xml']
+        }
+      }
+    );
+    dialogRef.afterClosed().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((result) => {
+      if (result?.archivo) {
+        this.onRetencionSubida(result.archivo);
+      }
+    });
+  }
+
+  /** Llena la cabecera de retención y las líneas renta/IVA desde el XML de retención parseado. */
+  private aplicarRetencionParseada(parsed: RetencionParsed): void {
+    this.form.patchValue({
+      retEstablecimiento: parsed.establecimiento ?? '',
+      retPuntoEmision: parsed.puntoEmision ?? '',
+      retSecuencial: parsed.secuencial ?? '',
+      retAutorizacion: parsed.claveAcceso ?? '',
+      retFechaEmision: parsed.fechaEmision ? this.parseFechaLocal(parsed.fechaEmision) : null
+    });
+
+    this.retencionesRenta.clear();
+    (parsed.retencionesRenta ?? []).forEach((ret) => {
+      this.agregarRetencionRenta();
+      this.retencionesRenta.at(this.retencionesRenta.length - 1).patchValue(ret);
+    });
+    this.retencionesIva.clear();
+    (parsed.retencionesIva ?? []).forEach((ret) => {
+      this.agregarRetencionIva();
+      this.retencionesIva.at(this.retencionesIva.length - 1).patchValue(ret);
+    });
+
+    this.retencionVinculada.set(true);
+
+    // Aviso (no bloqueante) si el comprobante sustentado no coincide con la compra cargada.
+    const docActual = this.documento();
+    if (parsed.numDocSustento && docActual && parsed.numDocSustento !== docActual) {
+      this.toast(`La retención sustenta el documento ${parsed.numDocSustento}, distinto al comprobante actual (${docActual}).`, 'error');
+    }
+    this.cdr.markForCheck();
+  }
+
+  /** Desvincula el comprobante de retención y limpia sus datos. */
+  protected quitarRetencionVinculada(): void {
+    this.retencionArchivoId = null;
+    this.retencionXmlStoragePath = null;
+    this.retencionVinculada.set(false);
+    this.mostrarRetenciones.set(false);
+    this.retencionError.set(null);
+    this.retencionesRenta.clear();
+    this.retencionesIva.clear();
+    this.form.patchValue({
+      retEstablecimiento: '',
+      retPuntoEmision: '',
+      retSecuencial: '',
+      retAutorizacion: '',
+      retFechaEmision: null
+    });
+    this.cdr.markForCheck();
   }
 
   protected recalcularTotalesDesdeItems(): void {
@@ -1165,6 +1485,11 @@ export class FacturaCompraFormComponent implements OnInit {
   protected async guardar(esBorrador = true): Promise<string | null> {
     this.recalcularTotalesDesdeItems();
     if (this.guardando()) {
+      return null;
+    }
+    // Una factura registrada/anulada no se vuelve a guardar por esta vía (evita re-registro y
+    // reescrituras del documento completo). La edición limitada usa guardarCambiosRegistrada().
+    if (this.estado() !== 'BORRADOR') {
       return null;
     }
     // El soporte adjunto es la única condición dura del registro manual (también para borrador).
@@ -1308,6 +1633,79 @@ export class FacturaCompraFormComponent implements OnInit {
     }
   }
 
+  // ===== Edición limitada de una compra REGISTRADA =====
+  // Solo se permite editar proveedor, sustento tributario (codSustento) y forma de pago.
+  // Guardar NO re-registra, NO recontabiliza y NO recrea la cuenta por pagar.
+
+  /** Valores originales de los campos editables, para revertir si se cancela. */
+  private snapshotEdicionRegistrada: Record<string, unknown> = {};
+
+  protected activarEdicionLimitada(): void {
+    const v = this.form.getRawValue();
+    this.snapshotEdicionRegistrada = {
+      tpIdProv: v.tpIdProv,
+      idProv: v.idProv,
+      razonSocialProv: v.razonSocialProv,
+      parteRel: v.parteRel,
+      codSustento: v.codSustento,
+      formasDePago: v.formasDePago
+    };
+    this.edicionLimitada.set(true);
+    for (const nombre of this.CONTROLES_EDICION_REGISTRADA) {
+      this.form.get(nombre)?.enable({ emitEvent: false });
+    }
+    this.cdr.markForCheck();
+  }
+
+  protected cancelarEdicionLimitada(): void {
+    // Revierte los cambios no guardados y vuelve a bloquear los campos.
+    this.form.patchValue(this.snapshotEdicionRegistrada, { emitEvent: false });
+    for (const nombre of this.CONTROLES_EDICION_REGISTRADA) {
+      this.form.get(nombre)?.disable({ emitEvent: false });
+    }
+    this.edicionLimitada.set(false);
+    this.cdr.markForCheck();
+  }
+
+  protected async guardarCambiosRegistrada(): Promise<void> {
+    const id = this.facturaId();
+    if (!id || this.estado() !== 'REGISTRADA' || this.guardando()) {
+      return;
+    }
+    const invalidoProveedor = ['tpIdProv', 'idProv', 'razonSocialProv'].some((n) => this.form.get(n)?.invalid);
+    if (invalidoProveedor || !this.form.getRawValue().codSustento) {
+      this.form.get('idProv')?.markAsTouched();
+      this.form.get('razonSocialProv')?.markAsTouched();
+      this.cdr.markForCheck();
+      this.toast('Revisa los datos del proveedor y el sustento tributario.', 'error');
+      return;
+    }
+
+    this.guardando.set(true);
+    try {
+      const v = this.form.getRawValue();
+      // Persistencia pura del parcial: no toca asiento, inventario ni cuentas por pagar.
+      await this.facturasService.actualizarFacturaCompra(id, {
+        tpIdProv: v.tpIdProv,
+        idProv: v.idProv.trim(),
+        razonSocialProv: v.razonSocialProv.trim(),
+        parteRel: v.parteRel === 'SI' ? 'SI' : 'NO',
+        codSustento: v.codSustento,
+        formasDePago: v.formasDePago ?? []
+      });
+      this.toast('Cambios guardados.', 'save');
+      this.edicionLimitada.set(false);
+      for (const nombre of this.CONTROLES_EDICION_REGISTRADA) {
+        this.form.get(nombre)?.disable({ emitEvent: false });
+      }
+      this.cdr.markForCheck();
+    } catch (error) {
+      this.toast(error instanceof Error ? error.message : 'No se pudieron guardar los cambios.', 'error');
+    } finally {
+      this.guardando.set(false);
+    }
+  }
+
   protected reemplazarXml(): void {
     this.parseado.set(false);
     this.parseError.set(null);
@@ -1392,12 +1790,20 @@ export class FacturaCompraFormComponent implements OnInit {
         valRetIva: this.num(g.get('valRetIva')?.value)
       })),
       totalRetencion: this.totalRetencion(),
+      // Cabecera del comprobante de retención emitido (la lee el ATS para el bloque estabRetencion1…).
+      estabRetencion: (v.retEstablecimiento ?? '').trim(),
+      ptoEmiRetencion: (v.retPuntoEmision ?? '').trim(),
+      secRetencion: (v.retSecuencial ?? '').trim(),
+      autRetencion: (v.retAutorizacion ?? '').trim(),
+      fechaEmiRet: v.retFechaEmision ? this.toTs(v.retFechaEmision) : null,
       alimentaInventario: !!v.alimentaInventario,
       almacenId: v.alimentaInventario ? (v.almacenId || null) : null,
       tipoGastoId: v.alimentaInventario ? null : (this.tipoGastoId() || null),
       ordenCompraId: this.ordenCompraId,
       archivoId: this.archivoId,
       xmlStoragePath: this.xmlStoragePath,
+      retencionArchivoId: this.retencionArchivoId,
+      retencionXmlStoragePath: this.retencionXmlStoragePath,
       pdfArchivoId: this.pdfArchivoId,
       pdfDownloadUrl: this.pdfUrl(),
       creadoPor: this.authService.currentUser()?.uid ?? 'sistema'
@@ -1495,6 +1901,17 @@ export class FacturaCompraFormComponent implements OnInit {
       almacenId: factura.almacenId ?? ''
     });
 
+    // Comprobante de retención vinculado.
+    this.retencionArchivoId = factura.retencionArchivoId ?? null;
+    this.retencionXmlStoragePath = factura.retencionXmlStoragePath ?? null;
+    this.form.patchValue({
+      retEstablecimiento: factura.estabRetencion ?? '',
+      retPuntoEmision: factura.ptoEmiRetencion ?? '',
+      retSecuencial: factura.secRetencion ?? '',
+      retAutorizacion: factura.autRetencion ?? '',
+      retFechaEmision: factura.fechaEmiRet ? new Date(factura.fechaEmiRet) : null
+    });
+
     (factura.retencionesRenta ?? []).forEach((ret) => {
       this.agregarRetencionRenta();
       this.retencionesRenta.at(this.retencionesRenta.length - 1).patchValue(ret);
@@ -1503,6 +1920,9 @@ export class FacturaCompraFormComponent implements OnInit {
       this.agregarRetencionIva();
       this.retencionesIva.at(this.retencionesIva.length - 1).patchValue(ret);
     });
+    this.retencionVinculada.set(
+      !!(factura.secRetencion || factura.retencionArchivoId || (factura.retencionesRenta?.length ?? 0) > 0 || (factura.retencionesIva?.length ?? 0) > 0)
+    );
 
     // Si la factura no tiene PDF guardado, intentar localizarlo por clave de acceso (compat).
     if (!this.pdfUrl()) {

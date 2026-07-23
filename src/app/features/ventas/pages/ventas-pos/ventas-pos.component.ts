@@ -11,9 +11,10 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { firstValueFrom, startWith } from 'rxjs';
+import { Subscription, firstValueFrom, startWith } from 'rxjs';
 import { TwoDecimalInputDirective } from '../../../../shared/directives/two-decimal-input.directive';
 
 import { ClienteFormDialogComponent } from '../../../../shared/components/cliente-form-dialog/cliente-form-dialog.component';
@@ -30,17 +31,27 @@ import { AlmacenesService } from '../../../inventario/services/almacenes.service
 import { KardexService } from '../../../inventario/services/kardex.service';
 import { ProductosService } from '../../../inventario/services/productos.service';
 import { RecetasService } from '../../../inventario/services/recetas.service';
-import { MetodoPagoVenta, SesionCaja, VentaItemTipo } from '../../models/ventas.models';
+import { CarritoItem, CuentaAbierta, MetodoPagoVenta, ModoPos, PerfilPos, SesionCaja, VentaItemTipo } from '../../models/ventas.models';
 import { VentasConfigService } from '../../services/ventas-config.service';
 import { FacturacionConfigService } from '../../../../core/services/facturacion-config.service';
 import { VentasPosStateService } from '../../services/ventas-pos-state.service';
+import { VentasPosConfigService } from '../../services/ventas-pos-config.service';
+import { CuentasAbiertasService } from '../../services/cuentas-abiertas.service';
+import { PosImmersiveService } from '../../services/pos-immersive.service';
+import {
+  DividirCuentaDialogComponent,
+  DividirCuentaResult
+} from '../dividir-cuenta-dialog/dividir-cuenta-dialog.component';
 import { VentasService } from '../../services/ventas.service';
 import { VentasAlmacenSesionService } from '../../services/ventas-almacen-sesion.service';
+import { FacturaService, FacturaSriError } from '../../services/factura.service';
+import { FacturaSriErrorDialogComponent } from '../factura-sri-error-dialog/factura-sri-error-dialog.component';
 
 interface CatalogoPosItem {
   id: string;
   tipo: 'PRODUCTO' | 'SERVICIO' | 'RECETA';
   sku: string;
+  codigoBarras?: string;
   nombre: string;
   precio: number;
   impuestoPorcentaje: number;
@@ -63,6 +74,7 @@ interface CatalogoPosItem {
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
+    MatProgressSpinnerModule,
     MatSelectModule,
     MatSnackBarModule,
     TwoDecimalInputDirective
@@ -82,14 +94,42 @@ interface CatalogoPosItem {
         </div>
       </section>
     } @else {
+      @if (facturandoPaso()) {
+        <div class="facturando-overlay">
+          <div class="facturando-card">
+            <mat-spinner diameter="46"></mat-spinner>
+            <p class="facturando-titulo">Facturando</p>
+            <p class="facturando-paso">{{ facturandoPaso() }}</p>
+          </div>
+        </div>
+      }
+
       <section class="pos-grid">
         <section class="pos-tabs" style="grid-column: 1 / -1;">
           <header class="pos-tabs-header">
-            <h3>Pestanas POS</h3>
-            <button mat-stroked-button type="button" (click)="agregarPestanaPos()">
-              <mat-icon>add</mat-icon>
-              Nueva pestana
-            </button>
+            <h3>{{ tituloCuentas() }}</h3>
+            <div class="pos-tabs-actions">
+              <button mat-stroked-button type="button" (click)="agregarPestanaPos()">
+                <mat-icon>add</mat-icon>
+                {{ esRestaurante() ? 'Nueva ' + etiquetaCuenta().toLowerCase() : 'Nueva pestana' }}
+              </button>
+              @if (permiteCuentasAbiertas()) {
+                <button mat-stroked-button type="button" (click)="retenerCuenta()">
+                  <mat-icon>pause_circle</mat-icon>
+                  Retener
+                </button>
+              }
+              <button
+                mat-stroked-button
+                type="button"
+                class="fullscreen-btn"
+                [attr.aria-label]="immersive() ? 'Salir de pantalla completa' : 'Pantalla completa'"
+                (click)="togglePantallaCompleta()"
+              >
+                <mat-icon>{{ immersive() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon>
+                {{ immersive() ? 'Salir' : 'Pantalla completa' }}
+              </button>
+            </div>
           </header>
 
         <div class="pos-tabs-list">
@@ -135,6 +175,22 @@ interface CatalogoPosItem {
             </div>
           }
         </div>
+
+        @if (permiteCuentasAbiertas() && cuentasAbiertas().length > 0) {
+          <div class="cuentas-abiertas">
+            <span class="cuentas-abiertas-label">{{ etiquetaCuenta() }}s retenidas:</span>
+            @for (cuenta of cuentasAbiertas(); track cuenta.id) {
+              <div class="cuenta-chip" tabindex="0" (click)="resumirCuenta(cuenta)" (keydown.enter)="resumirCuenta(cuenta)">
+                <mat-icon>receipt</mat-icon>
+                <span class="cuenta-nombre">{{ cuenta.etiqueta }}</span>
+                <span class="cuenta-count">{{ cuenta.carrito.items.length }}</span>
+                <button mat-icon-button type="button" (click)="eliminarCuentaAbierta(cuenta, $event)">
+                  <mat-icon>close</mat-icon>
+                </button>
+              </div>
+            }
+          </div>
+        }
       </section>
 
       <article class="surface-card panel panel-left">
@@ -142,6 +198,22 @@ interface CatalogoPosItem {
           <h2>Catalogo de venta</h2>
           <p>Elige productos o servicios desde una sola vista y agregalos al carrito.</p>
         </header>
+
+        @if (perfil()?.escaneoHabilitado) {
+          <div class="scan-bar">
+            <mat-form-field appearance="outline" class="scan-field">
+              <mat-icon matPrefix>barcode_scanner</mat-icon>
+              <mat-label>Escanear codigo de barras</mat-label>
+              <input
+                matInput
+                [formControl]="scanControl"
+                (keydown.enter)="escanear()"
+                placeholder="Escanea o teclea el codigo y Enter · usa 3*codigo para cantidad"
+                autocomplete="off"
+              />
+            </mat-form-field>
+          </div>
+        }
 
         <div class="catalog-type-switch">
           <button
@@ -422,8 +494,25 @@ interface CatalogoPosItem {
           </p>
         </section>
 
+        <section class="cobro-rapido">
+          <mat-form-field appearance="outline" class="recibido-field">
+            <mat-label>Efectivo recibido</mat-label>
+            <input matInput type="number" step="0.01" min="0" [value]="efectivoRecibido() ?? ''" (input)="setEfectivoRecibido($event)" />
+          </mat-form-field>
+          <button mat-stroked-button type="button" (click)="efectivoExacto()">Exacto</button>
+          @if (cambio() !== null) {
+            <p class="cambio-line">Cambio <strong>{{ cambio() | number:'1.2-2' }}</strong></p>
+          }
+        </section>
+
         <section class="actions">
           <button mat-stroked-button type="button" (click)="limpiarCarrito()">Limpiar</button>
+          @if (permiteDividir()) {
+            <button mat-stroked-button type="button" [disabled]="cobrando()" (click)="dividirYCobrar()">
+              <mat-icon>call_split</mat-icon>
+              Dividir cuenta
+            </button>
+          }
           <button mat-raised-button color="primary" type="button" [disabled]="cobrando()" (click)="cobrar()">
             {{ cobrando() ? 'Cobrando...' : 'Cobrar' }}
           </button>
@@ -471,10 +560,27 @@ interface CatalogoPosItem {
       margin-top: .5rem;
     }
 
+    .facturando-overlay {
+      position: fixed; inset: 0; z-index: 1000;
+      display: grid; place-items: center;
+      background: color-mix(in srgb, #000 55%, transparent);
+      backdrop-filter: blur(2px);
+    }
+    .facturando-card {
+      display: grid; justify-items: center; gap: .6rem;
+      padding: 1.75rem 2.25rem; border-radius: 14px;
+      background: var(--mat-sys-surface, #fff); color: var(--mat-sys-on-surface, #1a1a1a);
+      box-shadow: 0 12px 40px rgba(0,0,0,.35); text-align: center;
+    }
+    .facturando-titulo { margin: .25rem 0 0; font-weight: 700; font-size: 1.05rem; }
+    .facturando-paso { margin: 0; color: var(--muted-foreground); font-size: .9rem; }
     .pos-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 1rem; }
     .panel { padding: 1rem; display: grid; gap: 1rem; align-content: start; }
     .panel-title h2 { margin: 0; }
     .panel-title p { margin: .35rem 0 0; color: var(--muted-foreground); }
+    .scan-bar { display: block; }
+    .scan-field { width: 100%; }
+    .scan-field mat-icon[matPrefix] { margin-right: .5rem; color: var(--primary); }
     .catalog-type-switch { display: inline-flex; flex-wrap: wrap; gap: .45rem; }
     .catalog-type-switch button.active { border-color: var(--primary); color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
     .products-view-switch { display: inline-flex; gap: .5rem; }
@@ -543,9 +649,18 @@ interface CatalogoPosItem {
     mat-chip.chip-receta { background: rgb(249 115 22 / 20%); }
     .sin-stock { color: #b3261e; }
     .pos-tabs { border: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); border-radius: .8rem; padding: .7rem; display: grid; gap: .55rem; grid-column: 1 / -1; }
-    .pos-tabs-header { display: flex; align-items: center; justify-content: space-between; gap: .6rem; }
+    .pos-tabs-header { display: flex; align-items: center; justify-content: space-between; gap: .6rem; flex-wrap: wrap; }
     .pos-tabs-header h3 { margin: 0; font-size: .95rem; }
+    .pos-tabs-actions { display: inline-flex; gap: .5rem; flex-wrap: wrap; }
+    .fullscreen-btn { color: var(--primary); }
     .pos-tabs-list { display: flex; gap: .5rem; overflow-x: auto; padding-bottom: .2rem; }
+    .cuentas-abiertas { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; padding-top: .3rem; border-top: 1px dashed color-mix(in srgb, var(--outline) 40%, transparent); }
+    .cuentas-abiertas-label { font-size: .82rem; color: var(--muted-foreground); font-weight: 600; }
+    .cuenta-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .2rem .3rem .2rem .55rem; border-radius: 999px; cursor: pointer; background: color-mix(in srgb, var(--primary) 10%, transparent); border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent); }
+    .cuenta-chip:hover { background: color-mix(in srgb, var(--primary) 16%, transparent); }
+    .cuenta-chip mat-icon { font-size: 18px; width: 18px; height: 18px; color: var(--primary); }
+    .cuenta-nombre { font-weight: 600; font-size: .85rem; }
+    .cuenta-count { min-width: 20px; height: 20px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; font-size: .72rem; font-weight: 700; background: color-mix(in srgb, var(--primary) 22%, transparent); color: var(--primary); padding: 0 .3rem; }
     .pos-tab {
       min-width: 210px;
       border: 1px solid color-mix(in srgb, var(--outline) 45%, transparent);
@@ -604,6 +719,10 @@ interface CatalogoPosItem {
     .payment-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: .5rem; align-items: center; }
     .payments-balance { margin: 0; font-size: .9rem; color: var(--muted-foreground); }
     .payments-balance.error { color: #b3261e; font-weight: 600; }
+    .cobro-rapido { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+    .recibido-field { width: 160px; }
+    .cambio-line { margin: 0; font-size: 1.05rem; }
+    .cambio-line strong { color: #1f7a1f; }
     .actions { display: flex; justify-content: flex-end; gap: .6rem; }
     .empty-label { color: var(--muted-foreground); margin: 0; }
     @media (max-width: 1180px) {
@@ -628,6 +747,10 @@ export class VentasPosComponent {
   private readonly ventasService = inject(VentasService);
   private readonly recetasService = inject(RecetasService);
   private readonly ventasConfig = inject(VentasConfigService);
+  private readonly posConfig = inject(VentasPosConfigService);
+  private readonly cuentasAbiertasService = inject(CuentasAbiertasService);
+  private readonly facturaService = inject(FacturaService);
+  protected readonly immersiveService = inject(PosImmersiveService);
   private readonly facturacionService = inject(FacturacionConfigService);
   private readonly clientesService = inject(ClientesService);
   private readonly configClientes = inject(ConfiguracionClientesService);
@@ -649,6 +772,7 @@ export class VentasPosComponent {
     { initialValue: this.busquedaClienteControl.value }
   );
   protected readonly tabNombreControl = new FormControl('', { nonNullable: true });
+  protected readonly scanControl = new FormControl('', { nonNullable: true });
   protected readonly productos = signal<Producto[]>([]);
   protected readonly servicios = signal<Servicio[]>([]);
   protected readonly clientes = signal<Cliente[]>([]);
@@ -668,10 +792,41 @@ export class VentasPosComponent {
   protected readonly camposPersonalizadosClientes = signal([] as ClienteDialogData['camposPersonalizados']);
   protected readonly sesionActiva = signal<SesionCaja | null>(null);
   protected readonly cobrando = signal(false);
+  // Progreso de facturación automática (overlay bloqueante mientras emite al SRI).
+  protected readonly facturandoPaso = signal<string>('');
+  // Cobro rápido en efectivo: cálculo de cambio (solo visual, no altera los pagos).
+  protected readonly efectivoRecibido = signal<number | null>(null);
+  protected readonly cambio = computed(() => {
+    const recibido = this.efectivoRecibido();
+    if (recibido === null) {
+      return null;
+    }
+    return this.roundToTwo(Math.max(0, recibido - this.total()));
+  });
   protected readonly cargandoAlmacenes = signal(true);
   protected readonly vistaProductos = signal<'cards' | 'table'>('cards');
   protected readonly filtroCatalogo = signal<'TODOS' | 'PRODUCTOS' | 'SERVICIOS'>('TODOS');
   protected readonly tabEditandoId = signal<string | null>(null);
+
+  // Perfil de POS del almacén activo (modo RETAIL/RESTAURANTE + opciones de flujo)
+  protected readonly perfil = signal<PerfilPos | null>(null);
+  private perfilVistaAplicada = false;
+  private perfilSub?: Subscription;
+  protected readonly immersive = this.immersiveService.immersive;
+  protected readonly modoPos = computed<ModoPos>(() => this.perfil()?.modo ?? 'RETAIL');
+  protected readonly esRestaurante = computed(() => this.modoPos() === 'RESTAURANTE');
+  protected readonly etiquetaCuenta = computed(() => this.perfil()?.etiquetaCuenta?.trim() || 'Cuenta');
+  protected readonly tituloCuentas = computed(() =>
+    this.esRestaurante() ? `${this.etiquetaCuenta()}s abiertas` : 'Pestañas POS'
+  );
+  protected readonly permiteCuentasAbiertas = computed(
+    () => this.esRestaurante() && this.perfil()?.permitirCuentasAbiertas === true
+  );
+  protected readonly permiteDividir = computed(
+    () => this.esRestaurante() && this.perfil()?.permitirDividirCuenta === true
+  );
+  protected readonly cuentasAbiertas = signal<CuentaAbierta[]>([]);
+  private cuentasSub?: Subscription;
   private readonly avisoSinAlmacenesMostrado = signal(false);
   protected readonly sineAlmacenesPermitidos = computed(
     () => this.cargandoAlmacenes() === false && !this.almacenSesionService.tieneAlmacenesPermitidos()
@@ -739,42 +894,15 @@ export class VentasPosComponent {
     this.roundToTwo(Math.max(0, this.subtotalConIva() - this.descuentoGlobalMonto()) + this.impuesto())
   );
   protected readonly pagosDescuadrados = computed(() => Math.abs(this.balancePagos()) > 0.01);
+  protected readonly catalogoBase = computed<CatalogoPosItem[]>(() => {
+    const productos = this.productos().map((producto) => this.mapProductoItem(producto)).filter((item) => !!item.id);
+    const servicios = this.servicios().map((servicio) => this.mapServicioItem(servicio)).filter((item) => !!item.id);
+    return [...productos, ...servicios];
+  });
+
   protected readonly catalogoFiltrado = computed(() => {
     const query = this.busquedaProducto().trim().toLowerCase();
-    const productos = this.productos().map<CatalogoPosItem>((producto) => {
-      const esReceta = producto.tipo === 'RECETA';
-      const stockReceta = esReceta ? this.stockRecetaAproximado(producto) : null;
-
-      return {
-        id: producto.id ?? '',
-        tipo: esReceta ? 'RECETA' : 'PRODUCTO',
-        sku: producto.sku,
-        nombre: producto.nombre,
-        precio: Number(producto.precioVenta ?? 0),
-        costoUnitario: Number(producto.precioCosto ?? 0),
-        impuestoPorcentaje: Number.isFinite(producto.ivaPorcentaje)
-          ? Math.max(0, Number(producto.ivaPorcentaje))
-          : this.config().impuestoPorDefecto,
-        stock: esReceta ? stockReceta : this.stockProducto(producto.id),
-        permitirInventarioNegativo: esReceta && producto.permitirInventarioNegativo === true
-      };
-    }).filter((item) => !!item.id);
-
-    const servicios = this.servicios().map<CatalogoPosItem>((servicio) => ({
-      id: servicio.id ?? '',
-      tipo: 'SERVICIO',
-      sku: `SRV-${(servicio.id ?? '').slice(0, 8).toUpperCase()}`,
-      nombre: servicio.nombre,
-      precio: Number(servicio.precio ?? 0),
-      costoUnitario: 0,
-      impuestoPorcentaje: Number.isFinite(servicio.impuestoPorcentaje)
-        ? Math.max(0, Number(servicio.impuestoPorcentaje))
-        : this.config().impuestoPorDefecto,
-      stock: null
-    })).filter((item) => !!item.id);
-
-    const base = [...productos, ...servicios];
-    const byTipo = base.filter((item) => {
+    const byTipo = this.catalogoBase().filter((item) => {
       if (this.filtroCatalogo() === 'PRODUCTOS') {
         return item.tipo === 'PRODUCTO' || item.tipo === 'RECETA';
       }
@@ -791,7 +919,11 @@ export class VentasPosComponent {
     }
 
     return byTipo.filter((item) => {
-      return item.nombre.toLowerCase().includes(query) || item.sku.toLowerCase().includes(query);
+      return (
+        item.nombre.toLowerCase().includes(query) ||
+        item.sku.toLowerCase().includes(query) ||
+        (item.codigoBarras?.toLowerCase().includes(query) ?? false)
+      );
     });
   });
   protected readonly clientesFiltrados = computed(() => {
@@ -910,6 +1042,12 @@ export class VentasPosComponent {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((configuracion) => this.camposPersonalizadosClientes.set(configuracion.camposPersonalizados));
 
+    // Al salir del POS, restaurar el chrome de la app si quedó en pantalla completa.
+    this.destroyRef.onDestroy(() => {
+      if (this.immersive()) {
+        void this.immersiveService.desactivar();
+      }
+    });
   }
 
   protected stockProducto(productoId?: string): number {
@@ -918,6 +1056,39 @@ export class VentasPosComponent {
     }
 
     return this.stockPorAlmacen()[productoId] ?? 0;
+  }
+
+  private mapProductoItem(producto: Producto): CatalogoPosItem {
+    const esReceta = producto.tipo === 'RECETA';
+    return {
+      id: producto.id ?? '',
+      tipo: esReceta ? 'RECETA' : 'PRODUCTO',
+      sku: producto.sku,
+      codigoBarras: producto.codigoBarras?.trim() || undefined,
+      nombre: producto.nombre,
+      precio: Number(producto.precioVenta ?? 0),
+      costoUnitario: Number(producto.precioCosto ?? 0),
+      impuestoPorcentaje: Number.isFinite(producto.ivaPorcentaje)
+        ? Math.max(0, Number(producto.ivaPorcentaje))
+        : this.config().impuestoPorDefecto,
+      stock: esReceta ? this.stockRecetaAproximado(producto) : this.stockProducto(producto.id),
+      permitirInventarioNegativo: esReceta && producto.permitirInventarioNegativo === true
+    };
+  }
+
+  private mapServicioItem(servicio: Servicio): CatalogoPosItem {
+    return {
+      id: servicio.id ?? '',
+      tipo: 'SERVICIO',
+      sku: `SRV-${(servicio.id ?? '').slice(0, 8).toUpperCase()}`,
+      nombre: servicio.nombre,
+      precio: Number(servicio.precio ?? 0),
+      costoUnitario: 0,
+      impuestoPorcentaje: Number.isFinite(servicio.impuestoPorcentaje)
+        ? Math.max(0, Number(servicio.impuestoPorcentaje))
+        : this.config().impuestoPorDefecto,
+      stock: null
+    };
   }
 
   protected seleccionarFiltroCatalogo(filtro: 'TODOS' | 'PRODUCTOS' | 'SERVICIOS'): void {
@@ -989,6 +1160,55 @@ export class VentasPosComponent {
     }
 
     return 'Disponible';
+  }
+
+  /**
+   * Procesa una lectura del lector físico. Acepta un multiplicador de cantidad
+   * (p.ej. "3*7501234567890" o "3x7501...") y busca por código de barras o SKU.
+   */
+  protected escanear(): void {
+    const raw = this.scanControl.value.trim();
+    this.scanControl.setValue('');
+    if (!raw) {
+      return;
+    }
+
+    let cantidad = 1;
+    let code = raw;
+    const multiplicador = raw.match(/^(\d+)\s*[*x]\s*(.+)$/i);
+    if (multiplicador) {
+      cantidad = Math.max(1, Math.min(999, Number.parseInt(multiplicador[1], 10)));
+      code = multiplicador[2].trim();
+    }
+
+    const item = this.buscarPorCodigo(code);
+    if (!item) {
+      this.snackBar.open(`Sin coincidencias para "${code}".`, 'Cerrar', { duration: 2200 });
+      return;
+    }
+
+    // Si el perfil no auto-agrega, solo filtra el catálogo para selección manual.
+    if (this.perfil()?.autoAgregarAlEscanear === false) {
+      this.busquedaProductoControl.setValue(item.nombre);
+      return;
+    }
+
+    for (let i = 0; i < cantidad; i += 1) {
+      this.agregarDesdeCatalogo(item);
+    }
+  }
+
+  /** Busca un ítem del catálogo por código de barras exacto o, en su defecto, por SKU. */
+  private buscarPorCodigo(code: string): CatalogoPosItem | null {
+    const lower = code.toLowerCase();
+    const porBarras = this.catalogoBase().find(
+      (item) => item.codigoBarras && item.codigoBarras.toLowerCase() === lower
+    );
+    if (porBarras) {
+      return porBarras;
+    }
+
+    return this.catalogoBase().find((item) => item.sku.toLowerCase() === lower) ?? null;
   }
 
   protected agregarDesdeCatalogo(item: CatalogoPosItem): void {
@@ -1274,6 +1494,17 @@ export class VentasPosComponent {
   protected limpiarCarrito(): void {
     this.state.limpiar();
     this.busquedaClienteControl.setValue('');
+    this.efectivoRecibido.set(null);
+  }
+
+  protected setEfectivoRecibido(event: Event): void {
+    const raw = Number((event.target as HTMLInputElement).value);
+    this.efectivoRecibido.set(Number.isFinite(raw) && raw > 0 ? this.roundToTwo(raw) : null);
+  }
+
+  /** Botón de efectivo exacto: iguala lo recibido al total (cambio 0). */
+  protected efectivoExacto(): void {
+    this.efectivoRecibido.set(this.total());
   }
 
   protected async cobrar(): Promise<void> {
@@ -1389,6 +1620,14 @@ export class VentasPosComponent {
         verticalPosition: 'top'
       });
 
+      // Facturación automática al SRI (si el perfil del almacén lo tiene activado).
+      if (this.perfil()?.facturacionAutomatica) {
+        const resultado = await this.emitirFacturaAuto(ventaId, sesion.almacenId);
+        if (resultado === 'SIN_CONFIG') {
+          this.snackBar.open('Venta creada. Sin firma configurada: factúrala luego desde el detalle.', 'Cerrar', { duration: 3500 });
+        }
+      }
+
       await this.router.navigate(['/workspace/ventas/resumen', ventaId]);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'No se pudo completar la venta.';
@@ -1398,8 +1637,267 @@ export class VentasPosComponent {
     }
   }
 
+  /** Retiene el carrito activo como cuenta abierta compartida y libera la caja. */
+  protected async retenerCuenta(): Promise<void> {
+    const carrito = this.state.carrito();
+    if (carrito.items.length === 0) {
+      this.snackBar.open(`No hay productos en la ${this.etiquetaCuenta().toLowerCase()}.`, 'Cerrar', { duration: 2200 });
+      return;
+    }
+
+    const almacenId = this.sesionActiva()?.almacenId ?? this.almacenSeleccionadoId();
+    const user = this.auth.currentUser();
+    if (!almacenId || !user) {
+      return;
+    }
+
+    const activeTab = this.state.activeTab();
+    const cuenta: CuentaAbierta = {
+      id: activeTab?.id ?? `cuenta-${Date.now()}`,
+      almacenId,
+      etiqueta: activeTab?.nombre?.trim() || `${this.etiquetaCuenta()} ${this.cuentasAbiertas().length + 1}`,
+      carrito,
+      abiertaPor: user.uid,
+      abiertaPorNombre: user.displayName ?? 'Sin nombre',
+      abiertaEn: Date.now(),
+      actualizadoEn: Date.now()
+    };
+
+    try {
+      await this.cuentasAbiertasService.guardarCuenta(cuenta);
+      this.state.limpiar();
+      this.busquedaClienteControl.setValue('');
+      this.snackBar.open(`${this.etiquetaCuenta()} retenida.`, 'Cerrar', { duration: 2200 });
+    } catch {
+      this.snackBar.open('No se pudo retener la cuenta.', 'Cerrar', { duration: 2600 });
+    }
+  }
+
+  /** Retoma una cuenta abierta en la pestaña activa y la reclama (la elimina del compartido). */
+  protected async resumirCuenta(cuenta: CuentaAbierta): Promise<void> {
+    if (this.state.carrito().items.length > 0) {
+      this.snackBar.open('Limpia o retén la cuenta actual antes de retomar otra.', 'Cerrar', { duration: 2600 });
+      return;
+    }
+
+    this.state.cargarCarrito(cuenta.carrito);
+    this.busquedaClienteControl.setValue(cuenta.carrito.clienteNombre ?? '');
+    try {
+      await this.cuentasAbiertasService.eliminarCuenta(cuenta.almacenId, cuenta.id);
+    } catch {
+      // La cuenta ya está cargada localmente; ignorar error de limpieza.
+    }
+  }
+
+  protected async eliminarCuentaAbierta(cuenta: CuentaAbierta, event: Event): Promise<void> {
+    event.stopPropagation();
+    try {
+      await this.cuentasAbiertasService.eliminarCuenta(cuenta.almacenId, cuenta.id);
+    } catch {
+      this.snackBar.open('No se pudo eliminar la cuenta.', 'Cerrar', { duration: 2400 });
+    }
+  }
+
+  /** Abre el diálogo para dividir la cuenta y cobra cada sub-cuenta como venta/factura independiente. */
+  protected async dividirYCobrar(): Promise<void> {
+    const items = this.state.carrito().items;
+    if (items.length === 0) {
+      this.snackBar.open('Agrega productos antes de dividir.', 'Cerrar', { duration: 2200 });
+      return;
+    }
+
+    const sesion = this.sesionActiva();
+    const user = this.auth.currentUser();
+    if (!sesion?.id || !sesion.almacenId || !user) {
+      this.snackBar.open('No hay una sesion de caja activa.', 'Cerrar', { duration: 2300 });
+      return;
+    }
+
+    const clientesOpciones = this.clientes()
+      .filter((cliente) => !!cliente.id)
+      .map((cliente) => ({
+        id: cliente.id ?? null,
+        nombre: cliente.nombreCompleto,
+        identificacion: cliente.identificacion
+      }));
+
+    const dialogRef = this.dialog.open(DividirCuentaDialogComponent, {
+      maxWidth: '95vw',
+      panelClass: 'dividir-cuenta-panel',
+      data: {
+        items,
+        metodosPago: this.metodosPago(),
+        etiquetaCuenta: this.etiquetaCuenta(),
+        clientes: clientesOpciones,
+        clienteActualId: this.state.carrito().clienteId,
+        clienteActualNombre: this.state.carrito().clienteNombre,
+        camposPersonalizados: this.camposPersonalizadosClientes() ?? []
+      }
+    });
+
+    const result = (await firstValueFrom(dialogRef.afterClosed())) as DividirCuentaResult | null | undefined;
+    if (!result || result.subcuentas.length === 0) {
+      return;
+    }
+
+    this.cobrando.set(true);
+    const ventaIds: string[] = [];
+    try {
+      for (const sub of result.subcuentas) {
+        const total = this.calcularTotalVenta(sub.items, this.config().impuestoPorDefecto);
+        const ventaId = await this.ventasService.confirmarVenta({
+          sesionId: sesion.id,
+          almacenId: sesion.almacenId,
+          vendedorId: user.uid,
+          vendedorNombre: user.displayName ?? 'Sin nombre',
+          clienteId: sub.clienteId,
+          clienteNombre: sub.clienteNombre,
+          items: sub.items,
+          pagos: [{ metodo: sub.metodoPago, monto: total, referencia: '' }],
+          descuentoGlobal: 0,
+          impuestoPorcentaje: this.config().impuestoPorDefecto,
+          notas: this.state.carrito().notas
+        });
+        ventaIds.push(ventaId);
+      }
+
+      // Facturación automática por sub-cuenta (si el perfil del almacén lo activa).
+      if (this.perfil()?.facturacionAutomatica && ventaIds.length > 0) {
+        let sinConfig = false;
+        for (let i = 0; i < ventaIds.length; i += 1) {
+          const resultado = await this.emitirFacturaAuto(
+            ventaIds[i],
+            sesion.almacenId,
+            `Cuenta ${i + 1} de ${ventaIds.length} · `
+          );
+          if (resultado === 'SIN_CONFIG') {
+            sinConfig = true;
+            break;
+          }
+        }
+        if (sinConfig) {
+          this.snackBar.open('Cuentas creadas. Sin firma configurada: factúralas luego desde el detalle.', 'Cerrar', { duration: 3500 });
+        }
+      }
+
+      this.state.limpiar();
+      this.busquedaClienteControl.setValue('');
+      this.efectivoRecibido.set(null);
+      this.snackBar.openFromComponent(SuccessSnackbarComponent, {
+        data: { message: `${ventaIds.length} cuenta(s) cobradas correctamente.`, icon: 'point_of_sale' },
+        duration: 2800,
+        horizontalPosition: 'end',
+        verticalPosition: 'top'
+      });
+
+      await this.router.navigate(['/workspace/ventas/resumen', ventaIds[0]]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo completar la division.';
+      const parcial = ventaIds.length > 0 ? ` Se cobraron ${ventaIds.length} cuenta(s) antes del error.` : '';
+      this.snackBar.open(message + parcial, 'Cerrar', { duration: 4000 });
+    } finally {
+      this.cobrando.set(false);
+    }
+  }
+
+  /** Réplica exacta del cálculo de total de VentasService.confirmarVenta para fijar el pago de cada sub-cuenta. */
+  private calcularTotalVenta(items: CarritoItem[], impuestoDefault: number): number {
+    const subtotalNetoItems = items.reduce((acum, item) => {
+      const base = this.roundToTwo(item.precioUnitario * item.cantidad);
+      const descuentoItem = this.roundToTwo(Math.min(base, base * (item.descuentoItem / 100)));
+      return this.roundToTwo(acum + Math.max(0, base - descuentoItem));
+    }, 0);
+
+    const impuesto = items.reduce((acum, item) => {
+      const base = this.roundToTwo(item.precioUnitario * item.cantidad);
+      const descuentoItem = this.roundToTwo(Math.min(base, base * (item.descuentoItem / 100)));
+      const baseNeta = this.roundToTwo(Math.max(0, base - descuentoItem));
+      const ivaPorcentaje = Number.isFinite(item.ivaPorcentaje) ? Math.max(0, item.ivaPorcentaje) : impuestoDefault;
+      return this.roundToTwo(acum + this.roundToTwo(baseNeta * (ivaPorcentaje / 100)));
+    }, 0);
+
+    return this.roundToTwo(subtotalNetoItems + impuesto);
+  }
+
+  /**
+   * Emite y autoriza la factura al SRI para una venta ya COMPLETADA (mismos pasos que el
+   * botón "Facturar" del detalle, sin diálogo de confirmación). No afecta la contabilidad.
+   * Devuelve 'SIN_CONFIG' si el almacén no tiene firma configurada.
+   */
+  private async emitirFacturaAuto(
+    ventaId: string,
+    almacenId: string,
+    prefijo = ''
+  ): Promise<'AUTORIZADA' | 'ERROR' | 'SIN_CONFIG'> {
+    const firma = await firstValueFrom(this.facturacionService.getFirmaParaAlmacen(almacenId));
+    if (!firma) {
+      return 'SIN_CONFIG';
+    }
+
+    const textoPaso: Record<string, string> = {
+      armando: 'Preparando factura...',
+      generando: 'Generando factura...',
+      firmando: 'Firmando y enviando...',
+      autorizando: 'Consultando autorización SRI...',
+      autorizada: 'Autorizada'
+    };
+
+    this.facturandoPaso.set(`${prefijo}Preparando factura...`);
+    try {
+      await this.facturaService.emitirYAutorizarFactura(ventaId, {
+        onStep: (step) => this.facturandoPaso.set(`${prefijo}${textoPaso[step] ?? ''}`)
+      });
+      return 'AUTORIZADA';
+    } catch (error) {
+      if (error instanceof FacturaSriError) {
+        this.dialog.open(FacturaSriErrorDialogComponent, {
+          width: '620px',
+          maxWidth: '95vw',
+          data: {
+            estadoSri: error.estadoSri,
+            claveAcceso: error.claveAcceso,
+            mensaje: error.mensajes || error.message
+          }
+        });
+      } else {
+        const message = error instanceof Error ? error.message : 'No se pudo completar la facturación.';
+        this.snackBar.open(message, 'Cerrar', { duration: 3500 });
+      }
+      return 'ERROR';
+    } finally {
+      this.facturandoPaso.set('');
+    }
+  }
+
   protected irAConfiguracion(): void {
     this.router.navigate(['/workspace/ventas/configuracion']);
+  }
+
+  protected async togglePantallaCompleta(): Promise<void> {
+    await this.immersiveService.toggle();
+  }
+
+  /** Carga el perfil de POS del almacén activo y aplica la vista de catálogo por defecto. */
+  private cargarPerfil(almacenId: string): void {
+    this.perfilVistaAplicada = false;
+    this.perfilSub?.unsubscribe();
+    this.perfilSub = this.posConfig
+      .getPerfil(almacenId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((perfil) => {
+        this.perfil.set(perfil);
+        if (!this.perfilVistaAplicada) {
+          this.vistaProductos.set(perfil.vistaCatalogoPorDefecto === 'LISTA' ? 'table' : 'cards');
+          this.perfilVistaAplicada = true;
+        }
+      });
+
+    // Cuentas abiertas compartidas de la sucursal (modo restaurante).
+    this.cuentasSub?.unsubscribe();
+    this.cuentasSub = this.cuentasAbiertasService
+      .getCuentas(almacenId)
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((cuentas) => this.cuentasAbiertas.set(cuentas));
   }
 
   private iniciarSesionYStock(): void {
@@ -1409,6 +1907,8 @@ export class VentasPosComponent {
     if (!user || !almacenId) {
       return;
     }
+
+    this.cargarPerfil(almacenId);
 
     void this.ventasService.ensureSesionActiva(
       user.uid,

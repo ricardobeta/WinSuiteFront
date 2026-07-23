@@ -64,6 +64,7 @@ export function calculateVisibleNavIndices(
   imports: [RouterLink, MatButtonModule, MatIconModule, MatMenuModule, TourTriggerButtonComponent],
   template: `
     <section class="module-shell">
+      @if (!immersive()) {
       <header class="module-hero surface-card" [id]="tourId('header')">
         <div class="module-hero__copy">
           <p class="module-hero__eyebrow">
@@ -84,7 +85,9 @@ export function calculateVisibleNavIndices(
         </div>
       </header>
 
-      @if (items().length > 0) {
+      }
+
+      @if (!immersive() && items().length > 0) {
         <nav
           #navHost
           class="module-nav surface-card"
@@ -278,6 +281,8 @@ export class ModuleShellComponent implements AfterViewInit {
   readonly items = input<readonly ModuleNavItem[]>([]);
   readonly navigationLabel = input('Navegación del módulo');
   readonly tourEnabled = input(true);
+  /** Oculta el hero y la navegación del módulo (modo inmersivo/pantalla completa). */
+  readonly immersive = input(false);
 
   @ViewChild('navHost') private navHost?: ElementRef<HTMLElement>;
   @ViewChildren('measureItem') private measureItems?: QueryList<ElementRef<HTMLElement>>;
