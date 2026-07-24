@@ -384,10 +384,31 @@ export class NominaRolDetalleComponent implements OnInit {
       anchor.click();
       URL.revokeObjectURL(url);
     } catch (error) {
-      this.error.set(error instanceof Error ? error.message : 'No se pudieron descargar los comprobantes.');
+      this.error.set(await this.mensajeErrorDescarga(error));
     } finally {
       this.descargando.set(false);
     }
+  }
+
+  /**
+   * Con `responseType: 'blob'` el cuerpo de error tambien llega como blob, asi que el mensaje del
+   * backend queda escondido detras de un "Http failure response". Aqui se lee para mostrarlo.
+   */
+  private async mensajeErrorDescarga(error: unknown): Promise<string> {
+    const cuerpo = (error as { error?: unknown })?.error;
+    if (cuerpo instanceof Blob) {
+      try {
+        const texto = await cuerpo.text();
+        const json = JSON.parse(texto) as { message?: string; error?: string };
+        const mensaje = json.message ?? json.error;
+        if (mensaje) {
+          return mensaje;
+        }
+      } catch {
+        // Cuerpo no JSON: se cae al mensaje generico.
+      }
+    }
+    return error instanceof Error ? error.message : 'No se pudieron descargar los comprobantes.';
   }
 
   protected alternarProvisiones(empleadoDetalleId: string): void {
