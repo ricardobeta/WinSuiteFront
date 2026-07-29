@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, OnInit, inject } from '@angular/core';
+import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -7,6 +7,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -14,6 +15,8 @@ import { MatTableModule } from '@angular/material/table';
 import { MatTableDataSource } from '@angular/material/table';
 import { MatTabsModule } from '@angular/material/tabs';
 
+import { ConfigCopilotPanelComponent } from '../../../../shared/components/config-copilot-panel/config-copilot-panel.component';
+import { ConfigScreenContext } from '../../../../core/services/ai-config-copilot.service';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { Categoria, MetodoCosteo, MetodoPrecioVenta, Unidad } from '../../models/inventario.models';
@@ -35,29 +38,43 @@ import { UnidadesService } from '../../services/unidades.service';
     MatTableModule,
     MatFormFieldModule,
     MatInputModule,
+    MatIconModule,
     MatSelectModule,
     MatSlideToggleModule,
     MatButtonModule,
     MatDialogModule,
     MatSnackBarModule,
-    CamposConfigComponent
+    CamposConfigComponent,
+    ConfigCopilotPanelComponent
   ],
   template: `
     <section class="config-page">
-      <header class="surface-card hero-card">
-        <p class="eyebrow">Inventario</p>
-        <h2>Configuracion</h2>
-        <p>Administra la configuracion global del modulo y los campos dinamicos por entidad.</p>
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">Inventario</p>
+          <h2>Configuración</h2>
+          <p>Define las reglas de inventario, los catálogos base y los campos que usará el equipo.</p>
+        </div>
+        <div class="header-actions">
+          <div class="header-summary" aria-label="Resumen de catálogos">
+            <span><mat-icon>category</mat-icon>{{ categorias.length }} categorías</span>
+            <span><mat-icon>straighten</mat-icon>{{ unidades.length }} unidades</span>
+          </div>
+          <app-config-copilot-panel [context]="copilotContext" [ejemplos]="copilotEjemplos" />
+        </div>
       </header>
 
-      <mat-tab-group>
-        <mat-tab label="Campos personalizados">
+      <div class="config-surface surface-card">
+      <mat-tab-group class="config-tabs">
+        <mat-tab>
+          <ng-template mat-tab-label><mat-icon>tune</mat-icon><span>Campos personalizados</span></ng-template>
           <div class="tab-content">
             <app-campos-config />
           </div>
         </mat-tab>
 
-        <mat-tab label="Categorias">
+        <mat-tab>
+          <ng-template mat-tab-label><mat-icon>category</mat-icon><span>Categorías</span></ng-template>
           <div class="tab-content">
             <section class="surface-card form-card">
               <div class="section-toolbar">
@@ -98,7 +115,8 @@ import { UnidadesService } from '../../services/unidades.service';
           </div>
         </mat-tab>
 
-        <mat-tab label="Unidades">
+        <mat-tab>
+          <ng-template mat-tab-label><mat-icon>straighten</mat-icon><span>Unidades</span></ng-template>
           <div class="tab-content">
             <section class="surface-card form-card">
               <div class="section-toolbar">
@@ -139,10 +157,19 @@ import { UnidadesService } from '../../services/unidades.service';
           </div>
         </mat-tab>
 
-        <mat-tab label="General">
+        <mat-tab>
+          <ng-template mat-tab-label><mat-icon>settings</mat-icon><span>Reglas generales</span>@if (hasChanges()) { <span class="dirty-dot" aria-label="Cambios pendientes"></span> }</ng-template>
           <div class="tab-content">
-            <section class="surface-card form-card">
-              <h3>Moneda y precios</h3>
+            <section class="form-card">
+              <div class="section-heading"><div class="section-icon"><mat-icon>settings</mat-icon></div><div><h3>Moneda, precios y existencias</h3><p>Valores que se aplican por defecto al crear y valorar productos.</p></div></div>
+
+              @if (reglasDesactualizadas()) {
+                <p class="reglas-aviso">
+                  <mat-icon>info</mat-icon>
+                  <span>Las reglas cambiaron en otro sitio. Guarda o descarta tus cambios para ver la versión actual.</span>
+                  <button mat-stroked-button type="button" (click)="recargarReglas()">Descartar mis cambios</button>
+                </p>
+              }
 
               <form class="config-form" [formGroup]="form" (ngSubmit)="guardar()">
                 <div class="grid-2">
@@ -199,9 +226,10 @@ import { UnidadesService } from '../../services/unidades.service';
                   <mat-slide-toggle formControlName="alertasStockMinimo">Alertas de stock minimo</mat-slide-toggle>
                 </div>
 
-                <div class="actions-row">
-                  <button mat-raised-button color="primary" type="submit" [disabled]="form.invalid">
-                    Guardar configuracion
+                <div class="save-bar">
+                  <div class="save-state"><mat-icon>settings</mat-icon><span>{{ hasChanges() ? 'Tienes cambios sin guardar' : 'Todos los cambios están guardados' }}</span></div>
+                  <button mat-flat-button color="primary" type="submit" [disabled]="form.invalid || guardando || !hasChanges()">
+                    <mat-icon>save</mat-icon>{{ guardando ? 'Guardando…' : 'Guardar cambios' }}
                   </button>
                 </div>
               </form>
@@ -209,28 +237,49 @@ import { UnidadesService } from '../../services/unidades.service';
           </div>
         </mat-tab>
       </mat-tab-group>
+      </div>
     </section>
   `,
   styles: [`
-    .config-page { display: grid; gap: 1rem; }
-    .hero-card { padding: 1.25rem; background: var(--tc-surface-container-lowest); }
-    .hero-card h2 { margin: 0; font-size: 1.4rem; }
-    .hero-card p { margin: .35rem 0 0; color: var(--muted-foreground); }
+    .config-page { display: grid; gap: 1rem; max-width: 1440px; margin: 0 auto; }
+    .page-header { display: flex; align-items: end; justify-content: space-between; gap: 2rem; padding: .25rem; }
+    .page-header h2 { margin: 0; font-size: clamp(1.55rem, 2vw, 2rem); letter-spacing: -.025em; }
+    .page-header p { margin: .35rem 0 0; color: var(--muted-foreground); }
     .eyebrow { margin: 0 0 .35rem; text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; color: var(--primary); }
-    .tab-content { padding-top: 1rem; }
-    .form-card { padding: 1.25rem; background: var(--tc-surface-container-lowest); }
-    .form-card h3 { margin: 0 0 1rem; }
+    .header-actions { display: flex; align-items: center; gap: .75rem; }
+    .header-summary { display: flex; gap: .6rem; }
+    .reglas-aviso { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin: 0 0 1.25rem; padding: .75rem 1rem; border-radius: 12px; background: color-mix(in srgb, var(--primary) 9%, transparent); color: var(--muted-foreground); font-size: .86rem; }
+    .reglas-aviso mat-icon { color: var(--primary); }
+    .reglas-aviso span { flex: 1 1 220px; }
+    .header-summary span { display: inline-flex; align-items: center; gap: .35rem; min-height: 34px; padding: .2rem .7rem; border: 1px solid var(--border); border-radius: 999px; color: var(--muted-foreground); font-size: .78rem; font-weight: 650; }
+    .header-summary mat-icon { width: 18px; height: 18px; color: var(--primary); font-size: 18px; }
+    .config-surface { overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--tc-surface-container-lowest); box-shadow: 0 8px 28px rgb(15 23 42 / 5%); }
+    :host ::ng-deep .config-tabs .mat-mdc-tab-header { border-bottom: 1px solid var(--border); background: var(--tc-surface-container-low); }
+    :host ::ng-deep .config-tabs .mat-mdc-tab { min-width: 165px; height: 58px; }
+    :host ::ng-deep .config-tabs .mdc-tab__content { gap: .45rem; }
+    :host ::ng-deep .config-tabs .mdc-tab__text-label { color: var(--muted-foreground); font-weight: 650; }
+    :host ::ng-deep .config-tabs .mdc-tab--active .mdc-tab__text-label { color: var(--primary); }
+    .dirty-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--primary); }
+    .tab-content { width: min(100%, 1080px); margin: 0 auto; padding: 1.5rem; }
+    .form-card { padding-top: .25rem; }
+    .form-card h3 { margin: 0; }
+    .section-heading { display: flex; align-items: flex-start; gap: .9rem; margin-bottom: 1.5rem; }
+    .section-icon { display: grid; width: 44px; height: 44px; flex: 0 0 44px; place-items: center; border-radius: 12px; background: color-mix(in srgb, var(--primary) 11%, transparent); color: var(--primary); }
+    .section-heading p { margin: .3rem 0 0; color: var(--muted-foreground); }
     .config-form { display: grid; gap: 1rem; }
     .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
     .toggles-row { display: flex; flex-wrap: wrap; gap: 1.2rem; }
-    .actions-row { display: flex; justify-content: flex-end; }
+    .save-bar { position: sticky; bottom: .75rem; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 68px; padding: .7rem 1rem; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--tc-surface-container-lowest) 94%, transparent); box-shadow: 0 12px 30px rgb(15 23 42 / 13%); backdrop-filter: blur(12px); }
+    .save-state { display: flex; align-items: center; gap: .6rem; color: var(--muted-foreground); font-size: .82rem; }.save-state mat-icon { color: var(--primary); }
     .section-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
     .section-toolbar h3 { margin: 0; }
     .table-wrap { overflow: auto; }
     table { width: 100%; min-width: 680px; }
     @media (max-width: 900px) {
       .grid-2 { grid-template-columns: 1fr; }
-      .actions-row { justify-content: flex-start; }
+      .page-header { align-items: start; }.header-summary { display: none; }
+      :host ::ng-deep .config-tabs .mat-mdc-tab { min-width: 145px; height: 52px; }
+      .tab-content { padding: 1.1rem; }
       .section-toolbar { flex-direction: column; align-items: flex-start; }
     }
   `]
@@ -244,7 +293,23 @@ export class ConfiguracionComponent implements OnInit {
   private readonly dialog = inject(MatDialog);
   private readonly destroyRef = inject(DestroyRef);
 
+  /** screenKey debe coincidir con el ConfigToolSet del backend. */
+  protected readonly copilotContext: ConfigScreenContext = {
+    route: '/workspace/inventario/configuracion',
+    module: 'Inventario',
+    page: 'Configuracion',
+    screenKey: 'inventario.configuracion'
+  };
+  protected readonly copilotEjemplos = [
+    'Tengo una cafetería, configúrame el inventario',
+    'Agrega un campo de fecha de vencimiento a los productos',
+    'Necesito vender cable por metro'
+  ];
+
   protected guardando = false;
+  protected readonly hasChanges = signal(false);
+  /** El copiloto puede cambiar las reglas mientras el usuario tiene el formulario a medias. */
+  protected readonly reglasDesactualizadas = signal(false);
   protected categorias: Categoria[] = [];
   protected unidades: Unidad[] = [];
   protected readonly categoriasDataSource = new MatTableDataSource<Categoria>([]);
@@ -273,8 +338,19 @@ export class ConfiguracionComponent implements OnInit {
       .getConfiguracion()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((config) => {
+        // La suscripcion es en vivo: si el copiloto (o el usuario en otra pestana) cambia
+        // las reglas mientras hay ediciones sin guardar, refrescar el formulario borraria
+        // lo que se estaba escribiendo. En ese caso solo se avisa.
+        if (this.hasChanges()) {
+          this.reglasDesactualizadas.set(true);
+          return;
+        }
         this.form.patchValue(config, { emitEvent: false });
+        this.hasChanges.set(false);
+        this.reglasDesactualizadas.set(false);
       });
+
+    this.form.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe(() => this.hasChanges.set(true));
 
     this.categoriasService
       .getCategorias()
@@ -297,6 +373,15 @@ export class ConfiguracionComponent implements OnInit {
       });
   }
 
+  /** Descarta las ediciones locales y vuelve a leer lo que hay guardado. */
+  protected recargarReglas(): void {
+    void this.configService.getConfiguracionOnce().then((config) => {
+      this.form.patchValue(config, { emitEvent: false });
+      this.hasChanges.set(false);
+      this.reglasDesactualizadas.set(false);
+    });
+  }
+
   protected guardar(): void {
     if (this.form.invalid || this.guardando) {
       this.form.markAllAsTouched();
@@ -307,6 +392,7 @@ export class ConfiguracionComponent implements OnInit {
     void this.configService
       .guardarConfiguracion(this.form.getRawValue())
       .then(() => {
+        this.hasChanges.set(false);
         this.snackBar.openFromComponent(SuccessSnackbarComponent, {
           data: { message: 'Configuracion guardada.', icon: 'settings' },
           duration: 2400,

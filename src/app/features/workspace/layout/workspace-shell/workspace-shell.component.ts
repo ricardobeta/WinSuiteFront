@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { Router, RouterLink, RouterOutlet, NavigationEnd, ActivatedRoute } from '@angular/router';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { filter, firstValueFrom, map, startWith } from 'rxjs';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatMenuModule } from '@angular/material/menu';
@@ -78,6 +78,14 @@ export class WorkspaceShellComponent {
   constructor() {
     this.notifications.load().subscribe({ error: () => undefined });
     this.invitations.load().subscribe({ error: () => undefined });
+    void this.notifications.syncPush();
+    this.notifications.foregroundPush.pipe(takeUntilDestroyed()).subscribe((push) => {
+      const message = push.body ? `${push.title}: ${push.body}` : push.title;
+      const snackBarRef = this.snackBar.open(message, push.link ? 'Ver' : 'Cerrar', { duration: 6000 });
+      if (push.link) {
+        snackBarRef.onAction().subscribe(() => void this.router.navigateByUrl(push.link!));
+      }
+    });
   }
 
   protected toggleSidebar(): void {

@@ -5,7 +5,7 @@ export const DASHBOARD_TOUR_STEPS: DriveStep[] = [
     element: '#tour-dashboard-header',
     popover: {
       title: 'Bienvenido a tu Dashboard',
-      description: 'Aqui ves de un vistazo las metricas operativas de tu negocio en tiempo real.',
+      description: 'Aquí ves de un vistazo las métricas operativas de tu negocio en tiempo real.',
       side: 'bottom',
       align: 'start'
     }
@@ -14,16 +14,16 @@ export const DASHBOARD_TOUR_STEPS: DriveStep[] = [
     element: '#tour-dashboard-grid',
     popover: {
       title: 'Tus widgets',
-      description: 'Cada tarjeta es un widget. Puedes moverlos, agregar nuevos o quitarlos entrando en modo edicion.',
+      description: 'Cada tarjeta es un widget. Puedes moverlos, agregar nuevos o quitarlos entrando en modo edición.',
       side: 'top',
       align: 'center'
     }
   },
   {
-    element: '#tour-dashboard-help',
+    element: '.copilot-trigger',
     popover: {
-      title: 'Ayuda cuando la necesites',
-      description: 'Si tienes dudas, escribenos por WhatsApp desde este boton en cualquier momento.',
+      title: 'Tu asistente de WinSuite',
+      description: 'Usa el asistente global cuando necesites ayuda o contexto sobre el negocio.',
       side: 'left',
       align: 'end'
     }

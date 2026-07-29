@@ -3,12 +3,17 @@ import { CampoPersonalizado } from '../../../shared/models/clientes.models';
 export type MetodoCosteo = 'FIFO' | 'LIFO' | 'PROMEDIO';
 export type MetodoPrecioVenta = 'MARGEN_UTILIDAD' | 'MARKUP';
 
+/** Estados activos de una orden de compra. */
 export type EstadoOrdenCompra =
   | 'BORRADOR'
-  | 'ENVIADA'
-  | 'RECIBIDA_PARCIAL'
   | 'RECIBIDA'
   | 'ANULADA';
+
+/**
+ * Estados de las OC creadas antes de la simplificacion del flujo. Solo se leen desde RTDB
+ * y se normalizan con `OrdenesCompraService.normalizarEstado()`; nunca se escriben.
+ */
+export type EstadoOrdenCompraLegacy = EstadoOrdenCompra | 'ENVIADA' | 'RECIBIDA_PARCIAL';
 
 export type TipoMovimientoKardex = 'ENTRADA' | 'SALIDA' | 'AJUSTE' | 'TRASLADO';
 
@@ -123,7 +128,7 @@ export interface OrdenCompra {
   id?: string;
   numero: string;
   proveedorId: string;
-  estado: EstadoOrdenCompra;
+  estado: EstadoOrdenCompraLegacy;
   moneda: string;
   tipoCambio: number;
   subtotal: number;
@@ -158,16 +163,29 @@ export interface RecepcionOC {
   ordenId: string;
   almacenId: string;
   items: Record<string, RecepcionOrdenCompraItem>;
-  contabilizarRecepcion?: boolean;
-  documentoProveedorNumero?: string;
-  documentoProveedorFecha?: number | null;
-  documentoProveedorSubtotal?: number;
-  documentoProveedorIva?: number;
-  documentoProveedorTotal?: number;
-  documentoProveedorAutorizacion?: string;
+  /** Borrador creado en Contabilidad > Compras a partir de esta recepcion. */
+  facturaCompraId?: string | null;
+  /** Comprobante del proveedor adjuntado en la orden de compra. */
+  xmlArchivoId?: string | null;
+  pdfArchivoId?: string | null;
   notas?: string;
   creadoPor: string;
   creadoEn: number;
+
+  /** @deprecated Recepciones del flujo antiguo. Se leen, ya no se escriben. */
+  contabilizarRecepcion?: boolean;
+  /** @deprecated */
+  documentoProveedorNumero?: string;
+  /** @deprecated */
+  documentoProveedorFecha?: number | null;
+  /** @deprecated */
+  documentoProveedorSubtotal?: number;
+  /** @deprecated */
+  documentoProveedorIva?: number;
+  /** @deprecated */
+  documentoProveedorTotal?: number;
+  /** @deprecated */
+  documentoProveedorAutorizacion?: string;
 }
 
 export interface Almacen {

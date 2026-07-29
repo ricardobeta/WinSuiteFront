@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { Database, get, ref, remove, set } from '@angular/fire/database';
 
 import { AuthService } from '../../../core/services/auth.service';
-import { cloneDefaultDashboardLayout } from '../config/dashboard-defaults';
+import { cloneDefaultDashboardLayout, normalizeDashboardLayoutItem } from '../config/dashboard-defaults';
 import { DashboardLayoutConfig, DashboardLayoutItem } from '../models/dashboard.models';
 
 @Injectable({
@@ -25,7 +25,7 @@ export class DashboardConfigService {
       return tenantLayout;
     }
 
-    return cloneDefaultDashboardLayout();
+    return this.normalizeLayout(cloneDefaultDashboardLayout());
   }
 
   async saveUserLayout(items: DashboardLayoutItem[]): Promise<void> {
@@ -61,7 +61,7 @@ export class DashboardConfigService {
       updatedBy: typeof raw.updatedBy === 'string' ? raw.updatedBy : null,
       items: raw.items
         .filter((item): item is DashboardLayoutItem => this.isValidLayoutItem(item))
-        .map((item) => ({ ...item }))
+        .map((item) => normalizeDashboardLayoutItem(item))
     };
   }
 
@@ -78,6 +78,13 @@ export class DashboardConfigService {
         cols: Number(item.cols ?? 3),
         rows: Number(item.rows ?? 2)
       }))
+    };
+  }
+
+  private normalizeLayout(layout: DashboardLayoutConfig): DashboardLayoutConfig {
+    return {
+      ...layout,
+      items: layout.items.map((item) => normalizeDashboardLayoutItem(item))
     };
   }
 

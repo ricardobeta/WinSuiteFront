@@ -29,6 +29,12 @@ export type TipoRolNomina =
 
 export type RegionNomina = 'SIERRA' | 'COSTA';
 
+/**
+ * Regla legal para el inicio de los fondos de reserva. En el régimen general el derecho nace
+ * después del primer año; para trabajadores de la construcción se causa desde el primer día.
+ */
+export type RegimenFondosReserva = 'GENERAL' | 'CONSTRUCCION' | 'SERVICIOS_COMPLEMENTARIOS';
+
 /** Mensualizado: se paga en cada rol. Acumulado: se provisiona y se paga en su rol anual. */
 export type ModoDecimos = 'MENSUALIZADO' | 'ACUMULADO';
 
@@ -70,6 +76,11 @@ export interface EmpleadoNomina {
   modoDecimoTercero?: ModoDecimos;
   modoDecimoCuarto?: ModoDecimos;
   modoFondosReserva?: ModoDecimos;
+  /**
+   * Clasificación individual: CONSTRUCCION y SERVICIOS_COMPLEMENTARIOS solo corresponden a las
+   * actividades que causan fondos desde el primer día. El resto conserva el régimen GENERAL.
+   */
+  regimenFondosReserva?: RegimenFondosReserva;
   /** Conyuge e hijos que dan derecho al 5% de utilidades por cargas familiares. */
   cargasFamiliares?: number;
   /** Se llenan al liquidar al empleado; disparan el rol de finiquito. */
@@ -136,6 +147,12 @@ export interface RolPagoDetalle {
   empleadoId: string;
   empleadoNombre: string;
   cargo: string;
+  /** Remuneración mensual contractual, antes de aplicar el proporcional por ingreso. */
+  sueldoMensual?: number;
+  /** Días reconocidos dentro del período, usando la convención laboral de meses de 30 días. */
+  diasTrabajadosPeriodo?: number;
+  /** Días del período que causan fondos de reserva según el régimen asignado al trabajador. */
+  diasFondosReservaPeriodo?: number;
   sueldoBase: number;
   /**
    * Reglas del empleado congeladas al generar el rol, para que el recalculo del borrador no
@@ -144,7 +161,9 @@ export interface RolPagoDetalle {
   modoDecimoTercero?: ModoDecimos;
   modoDecimoCuarto?: ModoDecimos;
   modoFondosReserva?: ModoDecimos;
-  /** Falso mientras el empleado no cumple un año de trabajo: antes no se devengan fondos de reserva. */
+  /** Clasificación del trabajador congelada al generar el rol. */
+  regimenFondosReserva?: RegimenFondosReserva;
+  /** Indica si el trabajador causa fondos en el período según su clasificación individual. */
   aplicaFondosReserva?: boolean;
   /** Monto de decimos y fondos pagados en este rol por estar mensualizados. */
   decimoTerceroMensualizado?: number;

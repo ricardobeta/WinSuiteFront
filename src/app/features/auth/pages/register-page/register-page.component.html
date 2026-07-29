@@ -1,107 +1,138 @@
 <div class="auth-layout">
-  <section class="hero-panel">
+  <section class="hero-panel" aria-labelledby="register-hero-title">
     <img
       class="hero-image"
       src="/images/auth-hero.jpg"
-      alt="Ilustracion abstracta tecnologica"
+      alt=""
+      aria-hidden="true"
     />
-    <div class="overlay"></div>
+    <div class="hero-overlay" aria-hidden="true"></div>
     <div class="hero-content">
-      <img class="brand-logo" src="/images/winsuite-logo.png" alt="Winsuite" />
-      <h1>Empieza a trabajar en minutos</h1>
-      <p class="subtitle">
-        Crea tu cuenta. WinSuite preparara tu primera empresa y luego podras completar sus datos cuando quieras.
-      </p>
+      <img class="brand-logo" src="/images/winsuite-logo.png" alt="WinSuite — Gestión empresarial integral" />
 
-      <div class="steps benefits">
-        <div class="step-chip active"><span>1</span><div><strong>Una sola cuenta</strong><small>Cambia entre tus empresas con seguridad.</small></div></div>
-        <div class="step-chip"><span>2</span><div><strong>Configuracion despues</strong><small>Sin formularios largos para comenzar.</small></div></div>
-        <div class="step-chip"><span>3</span><div><strong>Tu equipo conectado</strong><small>Roles y permisos por cada empresa.</small></div></div>
+      <div class="hero-copy">
+        <p class="hero-kicker"><mat-icon aria-hidden="true">rocket_launch</mat-icon>Empieza sin complicaciones</p>
+        <h1 id="register-hero-title">Empieza a trabajar en minutos</h1>
+        <p class="hero-subtitle">
+          Crea tu cuenta. WinSuite preparará tu primera empresa y luego podrás completar sus datos cuando quieras.
+        </p>
+
+        <ul class="hero-capabilities" aria-label="Beneficios del registro">
+          <li>
+            <mat-icon aria-hidden="true">account_circle</mat-icon>
+            <div><strong>Una sola cuenta</strong><span>Cambia entre tus empresas con seguridad.</span></div>
+          </li>
+          <li>
+            <mat-icon aria-hidden="true">tune</mat-icon>
+            <div><strong>Configuración después</strong><span>Sin formularios largos para comenzar.</span></div>
+          </li>
+          <li>
+            <mat-icon aria-hidden="true">group</mat-icon>
+            <div><strong>Tu equipo conectado</strong><span>Roles y permisos por cada empresa.</span></div>
+          </li>
+        </ul>
       </div>
     </div>
   </section>
 
-  <section class="form-panel">
-    <mat-card appearance="outlined" class="auth-card">
-      <h2>Crear cuenta</h2>
-      <p class="muted">Solo necesitamos tus datos de acceso.</p>
+  <main class="form-panel" aria-labelledby="register-title">
+    <div class="form-frame">
+      <img class="mobile-brand" src="/images/winsuite-logo.png" alt="WinSuite" />
+      <mat-card class="auth-card auth-card--register">
+        <header class="form-heading">
+          <p class="form-kicker"><mat-icon aria-hidden="true">person_add</mat-icon>Tu cuenta WinSuite</p>
+          <h2 id="register-title">Crear cuenta</h2>
+          <p class="form-description">Solo necesitamos tus datos de acceso.</p>
+        </header>
 
-      @if (auth.error(); as apiError) {
-        <p class="error-banner">{{ apiError }}</p>
-      }
+        @if (auth.error(); as apiError) {
+          <p class="error-banner" role="alert">
+            <mat-icon aria-hidden="true">error_outline</mat-icon>
+            <span>{{ apiError }}</span>
+          </p>
+        }
 
-      <button mat-stroked-button class="google-button" type="button" [disabled]="auth.loading()" (click)="continueWithGoogle()">
-        <span class="google-mark" aria-hidden="true">G</span>
-        Continuar con Google
-      </button>
+        <button mat-stroked-button class="google-button" type="button" [disabled]="auth.loading()" (click)="continueWithGoogle()">
+          <span class="google-mark" aria-hidden="true">G</span>
+          Continuar con Google
+        </button>
 
-      <div class="auth-divider"><span>o registrate con correo</span></div>
+        <div class="auth-divider" aria-hidden="true"><span>o regístrate con correo</span></div>
 
-        <form [formGroup]="userForm" (ngSubmit)="submit()" novalidate>
+        <form class="auth-form" [formGroup]="userForm" (ngSubmit)="submit()" novalidate [attr.aria-busy]="auth.loading()">
           <mat-form-field appearance="outline">
             <mat-label>Nombre completo</mat-label>
-            <input matInput formControlName="fullName" />
+            <mat-icon matPrefix aria-hidden="true">person</mat-icon>
+            <input matInput formControlName="fullName" name="name" autocomplete="name" />
             @if (hasUserError('fullName', 'required')) {
               <mat-error>El nombre completo es obligatorio.</mat-error>
             }
           </mat-form-field>
 
           <mat-form-field appearance="outline">
-            <mat-label>Correo electronico</mat-label>
-            <input matInput type="email" formControlName="email" />
+            <mat-label>Correo electrónico</mat-label>
+            <mat-icon matPrefix aria-hidden="true">mail</mat-icon>
+            <input matInput type="email" formControlName="email" name="email" autocomplete="email" inputmode="email" />
             @if (hasUserError('email', 'required')) {
               <mat-error>El correo es obligatorio.</mat-error>
             } @else if (hasUserError('email', 'email')) {
-              <mat-error>Ingresa un correo valido.</mat-error>
+              <mat-error>Ingresa un correo válido.</mat-error>
             }
           </mat-form-field>
 
           <mat-form-field appearance="outline">
-            <mat-label>Contrasena</mat-label>
+            <mat-label>Contraseña</mat-label>
+            <mat-icon matPrefix aria-hidden="true">lock</mat-icon>
             <input
               matInput
               [type]="passwordToggle.visible() ? 'text' : 'password'"
               formControlName="password"
+              name="new-password"
               autocomplete="new-password"
             />
             <app-password-visibility-toggle #passwordToggle matSuffix />
             @if (hasUserError('password', 'required')) {
-              <mat-error>La contrasena es obligatoria.</mat-error>
+              <mat-error>La contraseña es obligatoria.</mat-error>
             } @else if (hasUserError('password', 'minlength')) {
-              <mat-error>La contrasena debe tener al menos 6 caracteres.</mat-error>
+              <mat-error>Usa al menos 6 caracteres.</mat-error>
             }
           </mat-form-field>
 
           <mat-form-field appearance="outline">
-            <mat-label>Repite la contrasena</mat-label>
+            <mat-label>Repite la contraseña</mat-label>
+            <mat-icon matPrefix aria-hidden="true">lock_reset</mat-icon>
             <input
               matInput
               [type]="confirmPasswordToggle.visible() ? 'text' : 'password'"
               formControlName="confirmPassword"
+              name="confirm-password"
               autocomplete="new-password"
             />
             <app-password-visibility-toggle #confirmPasswordToggle matSuffix />
             @if (hasUserError('confirmPassword', 'required')) {
-              <mat-error>Debes repetir la contrasena.</mat-error>
+              <mat-error>Debes repetir la contraseña.</mat-error>
             } @else if (hasPasswordMismatch()) {
-              <mat-error>Las contrasenas no coinciden.</mat-error>
+              <mat-error>Las contraseñas no coinciden.</mat-error>
             }
           </mat-form-field>
 
-          <button mat-flat-button color="primary" class="full-width" type="submit" [disabled]="auth.loading()">
+          <button mat-flat-button color="primary" class="submit-button" type="submit" [disabled]="auth.loading()">
             @if (auth.loading()) {
-              <mat-spinner diameter="18"></mat-spinner>
+              <span class="button-content"><mat-spinner diameter="18"></mat-spinner>Creando tu cuenta…</span>
             } @else {
               Crear mi cuenta
             }
           </button>
         </form>
 
-      <p class="switch-text">
-        Ya tienes cuenta?
-        <a routerLink="/auth/login">Inicia sesion</a>
-      </p>
-      <button mat-button class="copilot-help" type="button" (click)="openHelp()"><mat-icon>auto_awesome</mat-icon>Necesitas ayuda? Pregunta al asistente</button>
-    </mat-card>
-  </section>
+        <p class="switch-panel">
+          ¿Ya tienes cuenta?
+          <a routerLink="/auth/login">Inicia sesión</a>
+        </p>
+        <button mat-button class="copilot-help" type="button" aria-label="¿Necesitas ayuda? Pregunta al asistente de WinSuite" (click)="openHelp()">
+          <mat-icon aria-hidden="true">auto_awesome</mat-icon>Abrir asistente de ayuda
+        </button>
+      </mat-card>
+    </div>
+  </main>
 </div>

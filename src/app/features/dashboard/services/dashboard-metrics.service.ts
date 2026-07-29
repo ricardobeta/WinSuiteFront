@@ -14,7 +14,7 @@ import { Producto } from '../../inventario/models/inventario.models';
 import { FacturaSriRegistro } from '../../../shared/models/factura.models';
 import { VentaDocumento, VentaPago } from '../../ventas/models/ventas.models';
 import { VentasService } from '../../ventas/services/ventas.service';
-import { DashboardDataMap, DashboardTableRow } from '../models/dashboard.models';
+import { DashboardSnapshot, DashboardTableRow } from '../models/dashboard.models';
 
 @Injectable({
   providedIn: 'root'
@@ -29,7 +29,7 @@ export class DashboardMetricsService {
   private readonly database = inject(Database);
   private readonly auth = inject(AuthService);
 
-  getDashboardData(): Observable<DashboardDataMap> {
+  getDashboardSnapshot(): Observable<DashboardSnapshot> {
     return from(this.auth.waitForInitialBootstrap()).pipe(
       switchMap(() => forkJoin([
         this.ventasService.getVentas().pipe(take(1)),
@@ -54,73 +54,76 @@ export class DashboardMetricsService {
         const transaccionesHoy = ventasHoy.length;
 
         return {
-          'sales-today': {
+          data: {
+            'sales-today': {
             metric: {
               value: this.currency(totalHoy),
               helper: 'Ventas completadas desde las 00:00.',
               tone: totalHoy > 0 ? 'good' : 'neutral'
             }
-          },
-          'average-ticket': {
+            },
+            'average-ticket': {
             metric: {
               value: this.currency(transaccionesHoy ? totalHoy / transaccionesHoy : 0),
               helper: `${transaccionesHoy} transacciones hoy.`,
               tone: transaccionesHoy > 0 ? 'good' : 'neutral'
             }
-          },
-          'transactions-today': {
+            },
+            'transactions-today': {
             metric: {
               value: String(transaccionesHoy),
-              helper: `${ventas.filter((venta) => venta.estado === 'REVERTIDA').length} reversos historicos.`,
+              helper: `${ventas.filter((venta) => venta.estado === 'REVERTIDA').length} reversos históricos.`,
               tone: transaccionesHoy > 0 ? 'good' : 'neutral'
             }
-          },
-          'active-customers': {
+            },
+            'active-customers': {
             metric: {
               value: String(clientes.length),
-              helper: `${this.countRecent(clientes.map((cliente) => cliente.creadoEn))} nuevos en 30 dias.`,
+              helper: `${this.countRecent(clientes.map((cliente) => cliente.creadoEn))} nuevos en 30 días.`,
               tone: clientes.length > 0 ? 'good' : 'neutral'
             }
-          },
-          'active-services': {
+            },
+            'active-services': {
             metric: {
               value: String(servicios.filter((servicio) => servicio.activo).length),
               helper: `${servicios.length} servicios registrados.`,
               tone: servicios.some((servicio) => servicio.activo) ? 'good' : 'neutral'
             }
-          },
-          'sri-authorized-invoices': {
+            },
+            'sri-authorized-invoices': {
             metric: {
               value: String(facturasAutorizadas.length),
               helper: `${facturasAutorizadasHoy.length} autorizadas hoy.`,
               tone: facturasAutorizadas.length > 0 ? 'good' : 'neutral'
             }
-          },
-          'sales-last-7-days': {
+            },
+            'sales-last-7-days': {
             chartOptions: this.salesTrendOptions(ventas7Dias.labels, ventas7Dias.values),
-            emptyMessage: ventas7Dias.values.some((value) => value > 0) ? undefined : 'Aun no hay ventas para graficar.'
-          },
-          'payment-methods': {
+            emptyMessage: ventas7Dias.values.some((value) => value > 0) ? undefined : 'Aún no hay ventas para graficar.'
+            },
+            'payment-methods': {
             chartOptions: this.paymentMethodsOptions(pagos7Dias),
-            emptyMessage: pagos7Dias.every((item) => item.value === 0) ? 'Sin pagos registrados en los ultimos 7 dias.' : undefined
-          },
-          'low-stock-products': {
+            emptyMessage: pagos7Dias.every((item) => item.value === 0) ? 'Sin pagos registrados en los últimos 7 días.' : undefined
+            },
+            'low-stock-products': {
             rows: lowStockRows,
-            emptyMessage: lowStockRows.length ? undefined : 'No hay productos bajo minimo.'
-          },
-          'inventory-value': {
+            emptyMessage: lowStockRows.length ? undefined : 'No hay productos bajo mínimo.'
+            },
+            'inventory-value': {
             metric: {
               value: this.currency(this.inventoryValue(productos, stock)),
               helper: `${productos.filter((producto) => producto.activo).length} productos activos.`,
               tone: 'neutral'
             }
-          },
-          'accounting-month-result': {
+            },
+            'accounting-month-result': {
             chartOptions: this.accountingOptions(accounting),
             emptyMessage: accounting.totalIngresos + accounting.totalCostos + accounting.totalGastos === 0
               ? 'Sin asientos aprobados para el mes actual.'
               : undefined
-          }
+            }
+          },
+          updatedAt: Date.now()
         };
       })
     );
@@ -269,11 +272,11 @@ export class DashboardMetricsService {
       })
       .filter(({ producto, cantidad }) => cantidad <= producto.stockMinimo)
       .sort((a, b) => a.cantidad - b.cantidad)
-      .slice(0, 6)
+      .slice(0, 4)
       .map(({ producto, cantidad }) => ({
         label: producto.nombre,
         value: `${cantidad} u.`,
-        helper: `Minimo ${producto.stockMinimo}`,
+        helper: `Mínimo ${producto.stockMinimo}`,
         tone: cantidad <= 0 ? 'danger' : 'warning'
       }));
   }
@@ -298,18 +301,31 @@ export class DashboardMetricsService {
   }
 
   private paymentMethodsOptions(values: Array<{ name: string; value: number }>): EChartsCoreOption {
+    const sortedValues = [...values].sort((a, b) => b.value - a.value);
+
     return {
-      color: ['#066b5e', '#3a647d', '#00b09f', '#ff9f43', '#8b5cf6'],
-      tooltip: { trigger: 'item', valueFormatter: (value: unknown) => this.currency(Number(value ?? 0)) },
-      legend: { bottom: 0, type: 'scroll' },
+      color: ['#066b5e'],
+      tooltip: { trigger: 'axis', valueFormatter: (value: unknown) => this.currency(Number(value ?? 0)) },
+      grid: { left: 8, right: 18, top: 8, bottom: 8, containLabel: true },
+      xAxis: {
+        type: 'value',
+        axisLabel: { formatter: (value: number) => this.compact(value) },
+        splitLine: { lineStyle: { color: '#e5e7eb' } }
+      },
+      yAxis: {
+        type: 'category',
+        inverse: true,
+        data: sortedValues.map((item) => item.name),
+        axisTick: { show: false },
+        axisLine: { show: false },
+        axisLabel: { width: 104, overflow: 'truncate' }
+      },
       series: [
         {
-          type: 'pie',
-          radius: ['48%', '72%'],
-          center: ['50%', '42%'],
-          avoidLabelOverlap: true,
-          label: { formatter: '{b}' },
-          data: values
+          type: 'bar',
+          barMaxWidth: 22,
+          itemStyle: { borderRadius: [0, 6, 6, 0] },
+          data: sortedValues.map((item) => item.value)
         }
       ]
     };

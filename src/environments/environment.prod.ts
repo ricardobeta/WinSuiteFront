@@ -21,7 +21,7 @@ export const environment = {
     measurementId: "G-S0SRTBVSXJ"
   },
   // Copiar aqui la clave publica Web Push de Firebase Cloud Messaging.
-  firebaseVapidKey: '',
+  firebaseVapidKey: 'BPFBcMFrjcP806Bv1EBqOtd3oRuUz6LDcDpacQ1kmdqhflsHDm-RIGvZayDz0gL0k1D3nuBizbNTb2gU8eVA-no',
   // Sustituir por la configuracion publica de winsuite-sites antes del corte.
   sitesFirebase: {
     apiKey: "AIzaSyAAaIkR7ZDynbp3zKsRAZAx4Orj_nMxV4w",

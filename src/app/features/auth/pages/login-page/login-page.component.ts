@@ -5,6 +5,7 @@ import { MatCardModule } from '@angular/material/card';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
@@ -21,6 +22,7 @@ import { PasswordVisibilityToggleComponent } from '../../../../shared/components
     MatInputModule,
     MatButtonModule,
     MatCheckboxModule,
+    MatIconModule,
     MatProgressSpinnerModule,
     PasswordVisibilityToggleComponent
   ],
@@ -30,8 +32,6 @@ import { PasswordVisibilityToggleComponent } from '../../../../shared/components
 export class LoginPageComponent {
   private readonly router = inject(Router);
   private readonly formBuilder = inject(FormBuilder);
-  // TODO: Remove before production
-  private readonly TEST_MODE = false;
 
   protected readonly auth = inject(AuthService);
   protected readonly form = this.formBuilder.nonNullable.group({
@@ -47,15 +47,25 @@ export class LoginPageComponent {
     }
 
     const formValue = this.form.getRawValue();
-    if (!this.TEST_MODE) {
-      await this.auth.login({ email: formValue.email, password: formValue.password });
+    try {
+      await this.auth.login({
+        email: formValue.email,
+        password: formValue.password,
+        remember: formValue.remember
+      });
+      await this.router.navigateByUrl('/workspace');
+    } catch {
+      // AuthService exposes the recoverable message in the page.
     }
-    await this.router.navigateByUrl('/workspace');
   }
 
   protected async continueWithGoogle(): Promise<void> {
-    await this.auth.loginWithGoogle();
-    await this.router.navigateByUrl('/workspace');
+    try {
+      await this.auth.loginWithGoogle(this.form.controls.remember.value);
+      await this.router.navigateByUrl('/workspace');
+    } catch {
+      // AuthService exposes the recoverable message in the page.
+    }
   }
 
   protected hasControlError(controlName: 'email' | 'password', errorName: string): boolean {

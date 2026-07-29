@@ -11,6 +11,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { TwoDecimalInputDirective } from '../../../../shared/directives/two-decimal-input.directive';
 import { dateAIso } from '../../../../shared/utils/fecha-input.util';
 import { RepartoUtilidades } from '../../../contabilidad/models/nomina.models';
 import { NominaService } from '../../../contabilidad/services/nomina.service';
@@ -31,7 +32,8 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
     MatIconModule,
     MatInputModule,
     MatSnackBarModule,
-    MatTableModule
+    MatTableModule,
+    TwoDecimalInputDirective
   ],
   template: `
     <section class="utilidades-page">
@@ -59,7 +61,7 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
 
           <mat-form-field appearance="outline">
             <mat-label>Utilidad del ejercicio</mat-label>
-            <input matInput type="number" min="0" step="0.01" [(ngModel)]="utilidadBase" name="utilidad" />
+            <input matInput type="text" inputmode="decimal" appTwoDecimalInput [(ngModel)]="utilidadBase" name="utilidad" />
             <mat-hint>Utilidad contable antes de participacion</mat-hint>
           </mat-form-field>
 
@@ -192,7 +194,8 @@ export class NominaUtilidadesComponent {
   protected readonly error = signal<string | null>(null);
 
   protected anio = String(new Date().getFullYear() - 1);
-  protected utilidadBase = 0;
+  /** Mientras se teclea el input entrega texto ("600."); los usos lo pasan por Number(). */
+  protected utilidadBase: number | string = 0;
   protected fechaPagoDate: Date | null = new Date();
 
   protected async calcular(): Promise<void> {

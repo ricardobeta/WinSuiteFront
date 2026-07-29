@@ -16,6 +16,7 @@ import { PageEvent } from '@angular/material/paginator';
 import { AuthorizationService } from '../../../../core/services/authorization.service';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
+import { TwoDecimalInputDirective } from '../../../../shared/directives/two-decimal-input.directive';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { CuentaContableAutocompleteComponent } from '../../../contabilidad/components/cuenta-contable-autocomplete/cuenta-contable-autocomplete.component';
@@ -41,7 +42,8 @@ import { PlanCuentasService } from '../../../contabilidad/services/plan-cuentas.
     MatTableModule,
     MatTooltipModule,
     DataTableFrameComponent,
-    CuentaContableAutocompleteComponent
+    CuentaContableAutocompleteComponent,
+    TwoDecimalInputDirective
   ],
   template: `
     <section class="rubros-page">
@@ -96,7 +98,7 @@ import { PlanCuentasService } from '../../../contabilidad/services/plan-cuentas.
           @if (form.modoCalculo !== 'MANUAL') {
             <mat-form-field appearance="outline">
               <mat-label>{{ form.modoCalculo === 'PORCENTAJE_SUELDO' ? 'Porcentaje %' : 'Monto fijo' }}</mat-label>
-              <input matInput type="number" min="0" step="0.01" [(ngModel)]="form.valorReferencia" name="valorReferencia" [disabled]="!canUpdate()" />
+              <input matInput type="text" inputmode="decimal" appTwoDecimalInput [(ngModel)]="form.valorReferencia" name="valorReferencia" [disabled]="!canUpdate()" />
             </mat-form-field>
           }
 

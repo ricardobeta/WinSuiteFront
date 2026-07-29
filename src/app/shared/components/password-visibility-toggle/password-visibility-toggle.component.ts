@@ -10,8 +10,7 @@ import { MatIconModule } from '@angular/material/icon';
     <button
       mat-icon-button
       type="button"
-      tabindex="-1"
-      [attr.aria-label]="visible() ? 'Ocultar contrasena' : 'Mostrar contrasena'"
+      [attr.aria-label]="visible() ? 'Ocultar contraseña' : 'Mostrar contraseña'"
       [attr.aria-pressed]="visible()"
       (click)="visible.set(!visible())"
     >

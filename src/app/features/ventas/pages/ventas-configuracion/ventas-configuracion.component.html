@@ -1,0 +1,69 @@
+<section class="config-page" aria-labelledby="ventas-config-title">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Ventas</p>
+      <h2 id="ventas-config-title">Configuración</h2>
+      <p>Organiza cómo cobra el equipo, dónde trabaja y cómo opera cada punto de venta.</p>
+    </div>
+    <div class="header-summary">
+      <span><mat-icon>warehouse</mat-icon>{{ almacenesActivos().length }} almacenes</span>
+      <span><mat-icon>group</mat-icon>{{ colaboradores().length }} colaboradores</span>
+    </div>
+  </header>
+
+  <div class="config-surface surface-card">
+    <mat-tab-group class="config-tabs" [selectedIndex]="selectedTabIndex()" (selectedIndexChange)="selectedTabIndex.set($event)" [preserveContent]="true" animationDuration="180ms">
+      <mat-tab>
+        <ng-template mat-tab-label><mat-icon>payments</mat-icon><span>Cobro</span></ng-template>
+        <div class="tab-panel">
+          <div class="section-heading"><div class="section-icon"><mat-icon>payments</mat-icon></div><div><h3>Métodos de pago</h3><p>Estas opciones provienen de Facturación electrónica y estarán disponibles al cobrar.</p></div></div>
+          @if (cargandoMetodos()) {
+            <div class="loading-state"><mat-spinner diameter="36" /><p>Cargando métodos de pago…</p></div>
+          } @else if (metodosPagoActivos().length === 0) {
+            <div class="empty-state"><mat-icon>payment</mat-icon><h4>No hay métodos disponibles</h4><p>Activa al menos un método de pago antes de usar el punto de venta.</p><a mat-stroked-button routerLink="/workspace/facturacion/configuracion">Configurar métodos</a></div>
+          } @else {
+            <section class="settings-block"><div class="block-heading"><div><h4>Opciones habilitadas</h4><p>Esta lista se administra desde Facturación para mantener la información consistente.</p></div><span class="count-label">{{ metodosPagoActivos().length }} activas</span></div><div class="method-list">@for (metodo of metodosPagoActivos(); track metodo) { <div class="method-item"><mat-icon>check_circle</mat-icon><span>{{ metodo }}</span></div> }</div><a class="text-link" routerLink="/workspace/facturacion/configuracion"><mat-icon>open_in_new</mat-icon>Gestionar métodos en Facturación</a></section>
+          }
+        </div>
+      </mat-tab>
+
+      <mat-tab>
+        <ng-template mat-tab-label><mat-icon>group</mat-icon><span>Equipo y almacenes</span>@if (hayEnCambios()) { <span class="dirty-dot" aria-label="Cambios pendientes"></span> }</ng-template>
+        <div class="tab-panel">
+          <div class="section-heading"><div class="section-icon"><mat-icon>manage_accounts</mat-icon></div><div><h3>Acceso del equipo</h3><p>Asigna a cada colaborador los almacenes que puede operar al realizar ventas.</p></div></div>
+          @if (cargandoAsignaciones()) {
+            <div class="loading-state"><mat-spinner diameter="36" /><p>Cargando asignaciones…</p></div>
+          } @else if (colaboradores().length === 0) {
+            <div class="empty-state"><mat-icon>people</mat-icon><h4>No hay colaboradores disponibles</h4><p>Cuando agregues colaboradores, podrás asignarles almacenes desde aquí.</p></div>
+          } @else if (almacenesActivos().length === 0) {
+            <div class="empty-state"><mat-icon>warehouse</mat-icon><h4>No hay almacenes disponibles</h4><p>Crea un almacén antes de asignarlo al equipo.</p></div>
+          } @else {
+            <section class="settings-block"><div class="block-heading"><div><h4>Asignaciones por colaborador</h4><p>Quita un almacén desde su etiqueta o agrega uno nuevo en la misma fila.</p></div><span class="count-label">{{ colaboradores().length }} personas</span></div><div class="assignment-list">@for (row of colaboradoresAlmacenesRows(); track row.colaborador.userId) { <article class="assignment-row"><div class="person"><strong>{{ row.colaborador.fullName }}</strong><span>{{ row.colaborador.email }}</span></div><div class="assignment-controls"><div class="warehouse-chips">@for (almacen of row.almacenesAsignados; track almacen.id) { <mat-chip removable (removed)="toggleAlmacen(row.colaborador.userId, almacen.id ?? '')">{{ almacen.nombre }}<button matChipRemove [attr.aria-label]="'Quitar ' + almacen.nombre"><mat-icon>cancel</mat-icon></button></mat-chip> } @empty { <span class="no-assignment">Sin almacenes asignados</span> }</div>@if (row.almacenesNoAsignados.length > 0) { <mat-form-field appearance="outline" subscriptSizing="dynamic" class="add-almacen-field"><mat-label>Agregar almacén</mat-label><mat-select (selectionChange)="toggleAlmacen(row.colaborador.userId, $event.value)"><mat-option value="">Seleccionar…</mat-option>@for (almacen of row.almacenesNoAsignados; track almacen.id) { <mat-option [value]="almacen.id ?? ''">{{ almacen.nombre }}</mat-option> }</mat-select></mat-form-field> }</div></article> }</div></section>
+          }
+        </div>
+      </mat-tab>
+
+      <mat-tab>
+        <ng-template mat-tab-label><mat-icon>my_location</mat-icon><span>Mi almacén</span></ng-template>
+        <div class="tab-panel compact-panel">
+          <div class="section-heading"><div class="section-icon"><mat-icon>my_location</mat-icon></div><div><h3>Almacén de trabajo</h3><p>Elige el lugar desde el que realizarás las operaciones en esta sesión.</p></div></div>
+          @if (cargandoAlmacenesUsuario()) { <div class="loading-state"><mat-spinner diameter="36" /><p>Cargando tus almacenes…</p></div> } @else if (almacenesPermitidosUsuario().length === 0) { <div class="empty-state warning"><mat-icon>lock</mat-icon><h4>No tienes almacenes asignados</h4><p>Contacta a un administrador para habilitar tu acceso.</p></div> } @else { <section class="settings-block"><div class="block-heading"><div><h4>Sesión de {{ usuarioActualNombre() }}</h4><p>El cambio se aplica de inmediato y no afecta las asignaciones del equipo.</p></div></div><div class="workplace"><mat-form-field appearance="outline"><mat-label>Almacén de trabajo</mat-label><mat-select [value]="almacenActualUsuario()?.id ?? ''" (selectionChange)="seleccionarAlmacenUsuario($event.value)">@for (almacen of almacenesPermitidosUsuario(); track almacen.id) { <mat-option [value]="almacen.id ?? ''">{{ almacen.nombre }}@if (almacen.esPorDefecto) { · Predeterminado }</mat-option> }</mat-select></mat-form-field>@if (almacenActualUsuario(); as almacen) { <div class="detail-box"><div><span>Código</span><strong>{{ almacen.codigo }}</strong></div><div><span>Dirección</span><strong>{{ almacen.direccion ?? 'No especificada' }}</strong></div></div> }</div></section> }
+        </div>
+      </mat-tab>
+
+      <mat-tab>
+        <ng-template mat-tab-label><mat-icon>point_of_sale</mat-icon><span>Perfil POS</span>@if (hayCambiosPerfil()) { <span class="dirty-dot" aria-label="Cambios pendientes"></span> }</ng-template>
+        <div class="tab-panel">
+          <div class="section-heading"><div class="section-icon"><mat-icon>point_of_sale</mat-icon></div><div><h3>Perfil de punto de venta</h3><p>Define la experiencia del POS para cada almacén o sucursal.</p></div></div>
+          @if (almacenesActivos().length === 0) { <div class="empty-state"><mat-icon>warehouse</mat-icon><h4>No hay almacenes disponibles</h4><p>Crea un almacén antes de definir su perfil de POS.</p></div> } @else { <section class="settings-block"><mat-form-field appearance="outline" class="warehouse-selector"><mat-label>Almacén a configurar</mat-label><mat-select [value]="perfilAlmacenId()" (selectionChange)="seleccionarAlmacenPerfil($event.value)">@for (almacen of almacenesActivos(); track almacen.id) { <mat-option [value]="almacen.id ?? ''">{{ almacen.nombre }}</mat-option> }</mat-select></mat-form-field>@if (!perfilAlmacenId()) { <div class="inline-empty"><mat-icon>touch_app</mat-icon><span>Selecciona un almacén para configurar su POS.</span></div> } @else if (cargandoPerfil()) { <div class="loading-state"><mat-spinner diameter="36" /><p>Cargando perfil…</p></div> } @else if (perfilEditable(); as perfil) { <div class="pos-form"><div class="field-grid"><mat-form-field appearance="outline"><mat-label>Modo de operación</mat-label><mat-select [value]="perfil.modo" (selectionChange)="cambiarModo($event.value)"><mat-option value="RETAIL">Retail · mostrador y escaneo</mat-option><mat-option value="RESTAURANTE">Restaurante · cuentas abiertas</mat-option></mat-select></mat-form-field><mat-form-field appearance="outline"><mat-label>Vista de catálogo por defecto</mat-label><mat-select [value]="perfil.vistaCatalogoPorDefecto" (selectionChange)="actualizarPerfil({ vistaCatalogoPorDefecto: $event.value })"><mat-option value="TARJETAS">Tarjetas</mat-option><mat-option value="LISTA">Lista</mat-option></mat-select></mat-form-field></div><div class="toggle-list"><mat-slide-toggle [checked]="perfil.escaneoHabilitado" (change)="actualizarPerfil({ escaneoHabilitado: $event.checked })">Habilitar barra de escaneo</mat-slide-toggle><mat-slide-toggle [checked]="perfil.autoAgregarAlEscanear" [disabled]="!perfil.escaneoHabilitado" (change)="actualizarPerfil({ autoAgregarAlEscanear: $event.checked })">Agregar automáticamente al escanear</mat-slide-toggle><mat-slide-toggle [checked]="perfil.mostrarImagenes" (change)="actualizarPerfil({ mostrarImagenes: $event.checked })">Mostrar imágenes en catálogo</mat-slide-toggle><mat-slide-toggle [checked]="perfil.permitirCuentasAbiertas" (change)="actualizarPerfil({ permitirCuentasAbiertas: $event.checked })">Permitir cuentas abiertas</mat-slide-toggle><mat-slide-toggle [checked]="perfil.permitirDividirCuenta" [disabled]="!perfil.permitirCuentasAbiertas" (change)="actualizarPerfil({ permitirDividirCuenta: $event.checked })">Permitir cobrar una cuenta por partes</mat-slide-toggle><mat-slide-toggle [checked]="perfil.facturacionAutomatica" (change)="actualizarPerfil({ facturacionAutomatica: $event.checked })">Facturar automáticamente al cobrar</mat-slide-toggle></div><p class="helper">La facturación automática requiere firma y punto de emisión configurados para el almacén.</p>@if (perfil.permitirCuentasAbiertas) { <mat-form-field appearance="outline"><mat-label>Etiqueta de cuenta</mat-label><input matInput [value]="perfil.etiquetaCuenta" maxlength="20" (input)="actualizarPerfil({ etiquetaCuenta: asInput($event).value })" placeholder="Mesa, cuenta, orden…" /></mat-form-field> }</div> }</section> }
+        </div>
+      </mat-tab>
+    </mat-tab-group>
+  </div>
+
+  @if (selectedTabIndex() === 1 || selectedTabIndex() === 3) {
+    <footer class="save-bar surface-card" aria-live="polite">
+      @if (selectedTabIndex() === 1) { <div class="save-state"><mat-icon>manage_accounts</mat-icon><div><strong>Asignaciones del equipo</strong><span>{{ hayEnCambios() ? 'Tienes cambios sin guardar' : 'Todos los cambios están guardados' }}</span></div></div><button mat-flat-button color="primary" type="button" (click)="guardarAsignaciones()" [disabled]="guardando() || !hayEnCambios()"><mat-icon>save</mat-icon>{{ guardando() ? 'Guardando…' : 'Guardar asignaciones' }}</button> } @else { <div class="save-state"><mat-icon>point_of_sale</mat-icon><div><strong>Perfil de POS</strong><span>{{ hayCambiosPerfil() ? 'Tienes cambios sin guardar' : 'Todos los cambios están guardados' }}</span></div></div><button mat-flat-button color="primary" type="button" (click)="guardarPerfil()" [disabled]="guardandoPerfil() || !perfilEditable() || !hayCambiosPerfil()"><mat-icon>save</mat-icon>{{ guardandoPerfil() ? 'Guardando…' : 'Guardar perfil' }}</button> }
+    </footer>
+  }
+</section>

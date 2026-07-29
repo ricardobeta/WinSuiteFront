@@ -1,6 +1,7 @@
 @use '@angular/material' as mat;
 @use 'styles/_tokens';
 @use 'styles/_material-mapping';
+@use 'app/features/auth/styles/auth-page';
 @use 'driver.js/dist/driver.css';
 @use 'styles/_driver-theme';
 // Estilos base de los bloques del constructor de sitios (clases namespaced .ws-*)

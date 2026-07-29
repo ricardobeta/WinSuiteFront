@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
 import { AuditService } from '../../../core/services/audit.service';
+import { CompanyNotificationService } from '../../../core/services/company-notification.service';
 import { IntegracionContableService } from '../../contabilidad/services/integracion-contable.service';
 import { CostosService } from '../../inventario/services/costos.service';
 import { KardexService } from '../../inventario/services/kardex.service';
@@ -28,6 +29,7 @@ export class VentasService {
   private readonly database = inject(Database);
   private readonly authService = inject(AuthService);
   private readonly audit = inject(AuditService);
+  private readonly notifications = inject(CompanyNotificationService);
   private readonly costosService = inject(CostosService);
   private readonly kardexService = inject(KardexService);
   private readonly productosService = inject(ProductosService);
@@ -473,6 +475,8 @@ export class VentasService {
       changesAfter: { numero, cliente: input.clienteNombre, total, vendedor: input.vendedorNombre }
     });
 
+    this.notifications.notifySale(ventaId, numero, total);
+
     return ventaId;
   }
 
@@ -561,6 +565,8 @@ export class VentasService {
       changesBefore: { estado: detalle.documento.estado, total: detalle.documento.total },
       changesAfter: { estado: 'REVERTIDA', motivo }
     });
+
+    this.notifications.notifySaleReversal(ventaId, detalle.documento.numero, motivo);
   }
 
   private async generarNumeroVenta(prefijo: string): Promise<string> {

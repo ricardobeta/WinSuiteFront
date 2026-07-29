@@ -48,6 +48,11 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
           <span>Total registrados</span>
           <strong>{{ empleados().length }}</strong>
         </article>
+        <article class="surface-card kpi-card construction-kpi">
+          <span>Fondos desde día 1</span>
+          <strong>{{ empleadosDesdePrimerDia().length }}</strong>
+          <small>Construcción + servicios complementarios</small>
+        </article>
       </section>
 
       <section class="surface-card table-card">
@@ -93,6 +98,18 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
                 <td mat-cell *matCellDef="let row" class="num">{{ row.sueldoBase | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
               </ng-container>
 
+              <ng-container matColumnDef="fondos">
+                <th mat-header-cell *matHeaderCellDef>Fondos de reserva</th>
+                <td mat-cell *matCellDef="let row">
+                  <span class="regimen-pill" [class.construction]="causaDesdePrimerDia(row.regimenFondosReserva)">
+                    {{ etiquetaRegimen(row.regimenFondosReserva) }}
+                  </span>
+                  <span class="muted">
+                    {{ causaDesdePrimerDia(row.regimenFondosReserva) ? 'Desde el primer día' : 'Desde el segundo año' }}
+                  </span>
+                </td>
+              </ng-container>
+
               <ng-container matColumnDef="estado">
                 <th mat-header-cell *matHeaderCellDef>Estado</th>
                 <td mat-cell *matCellDef="let row">
@@ -128,16 +145,20 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
     .eyebrow { margin: 0 0 .35rem; text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; color: var(--primary); }
     h2, h3, p { margin: 0; }
     .page-header p, .muted, .empty-state p { color: var(--muted-foreground); }
-    .kpi-row { display: grid; grid-template-columns: repeat(2, minmax(0, 220px)); gap: 1rem; }
+    .kpi-row { display: grid; grid-template-columns: repeat(3, minmax(0, 220px)); gap: 1rem; }
     .kpi-card { display: grid; gap: .25rem; }
     .kpi-card span { color: var(--muted-foreground); font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; }
     .kpi-card strong { font-size: 1.6rem; }
+    .kpi-card small { color: var(--muted-foreground); font-size: .76rem; }
     .table-wrap { overflow: auto; }
-    table { width: 100%; min-width: 860px; }
+    table { width: 100%; min-width: 1040px; }
     td strong, td .muted { display: block; }
     .num { text-align: right; }
     .pill { display: inline-flex; padding: .25rem .65rem; border-radius: 999px; background: color-mix(in srgb, var(--primary) 16%, transparent); font-weight: 700; }
     .pill.off { background: color-mix(in srgb, var(--muted-foreground) 18%, transparent); color: var(--muted-foreground); }
+    .construction-kpi { background: color-mix(in srgb, var(--primary) 7%, var(--tc-surface-container-lowest)); }
+    .regimen-pill { display: inline-flex; padding: .25rem .6rem; border-radius: 999px; background: var(--tc-surface-container-low, var(--background)); font-size: .78rem; font-weight: 700; }
+    .regimen-pill.construction { background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
     .empty-state { min-height: 190px; display: grid; place-items: center; align-content: center; gap: .35rem; color: var(--muted-foreground); text-align: center; }
   `]
 })
@@ -147,9 +168,12 @@ export class NominaEmpleadosListComponent {
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
 
-  protected readonly columnas = ['empleado', 'cargo', 'ingreso', 'sueldo', 'estado', 'acciones'];
+  protected readonly columnas = ['empleado', 'cargo', 'ingreso', 'sueldo', 'fondos', 'estado', 'acciones'];
   protected readonly empleados = signal<EmpleadoNomina[]>([]);
   protected readonly empleadosActivos = computed(() => this.empleados().filter((empleado) => empleado.estado === 'ACTIVO'));
+  protected readonly empleadosDesdePrimerDia = computed(() =>
+    this.empleados().filter((empleado) => this.causaDesdePrimerDia(empleado.regimenFondosReserva))
+  );
   protected readonly busqueda = signal('');
   protected readonly pageIndex = signal(0);
   protected readonly pageSize = signal(10);
@@ -162,6 +186,16 @@ export class NominaEmpleadosListComponent {
     const start = this.pageIndex() * this.pageSize();
     return this.empleadosFiltrados().slice(start, start + this.pageSize());
   });
+
+  protected etiquetaRegimen(regimen: EmpleadoNomina['regimenFondosReserva']): string {
+    if (regimen === 'CONSTRUCCION') return 'Construcción directa';
+    if (regimen === 'SERVICIOS_COMPLEMENTARIOS') return 'Servicios complementarios';
+    return 'General';
+  }
+
+  protected causaDesdePrimerDia(regimen: EmpleadoNomina['regimenFondosReserva']): boolean {
+    return regimen === 'CONSTRUCCION' || regimen === 'SERVICIOS_COMPLEMENTARIOS';
+  }
 
   protected actualizarBusqueda(value: string): void {
     this.busqueda.set(value);

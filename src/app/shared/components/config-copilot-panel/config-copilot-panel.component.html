@@ -1,0 +1,194 @@
+<button
+  type="button"
+  class="copilot-trigger"
+  (click)="toggle()"
+  [attr.aria-expanded]="isOpen()"
+  aria-label="Abrir el copiloto de configuración"
+>
+  <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>
+  <span class="trigger-label">Copiloto</span>
+</button>
+
+@if (isOpen()) {
+  <button
+    type="button"
+    class="copilot-backdrop"
+    (click)="toggle()"
+    aria-label="Cerrar el copiloto de configuración"
+  ></button>
+
+  <section class="copilot-panel" role="dialog" aria-label="Copiloto de configuración">
+    <header>
+      <div class="copilot-brand">
+        <span class="material-symbols-outlined" aria-hidden="true">auto_awesome</span>
+        <div>
+          <strong>Copiloto de configuración</strong>
+          <small>{{ context().module }} · {{ context().page }}</small>
+        </div>
+      </div>
+      <button type="button" class="icon-button" (click)="toggle()" aria-label="Cerrar">
+        <span class="material-symbols-outlined" aria-hidden="true">close</span>
+      </button>
+    </header>
+
+    <div class="conversation">
+      @if (!messages().length) {
+        <div class="welcome-card">
+          <span class="material-symbols-outlined" aria-hidden="true">tune</span>
+          <h2>Configuremos esto juntos</h2>
+          <p>
+            Cuéntame de qué es tu negocio y te propongo las categorías, unidades y campos que
+            necesitas. Reviso lo que ya tienes y nada se guarda hasta que tú lo confirmes.
+          </p>
+          @for (ejemplo of ejemplos(); track ejemplo) {
+            <button type="button" (click)="useExample(ejemplo)">
+              <span>{{ ejemplo }}</span>
+              <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+            </button>
+          }
+        </div>
+      }
+
+      @for (mensaje of messages(); track $index) {
+        <article class="message" [class.user-message]="mensaje.role === 'user'">
+          <p class="message-label">{{ mensaje.role === 'user' ? 'Tú' : 'Copiloto' }}</p>
+          <p>{{ mensaje.text }}</p>
+
+          @if (mensaje.avisos?.length) {
+            <div class="avisos">
+              @for (aviso of mensaje.avisos; track aviso) {
+                <p><span class="material-symbols-outlined" aria-hidden="true">info</span>{{ aviso }}</p>
+              }
+            </div>
+          }
+
+          @if (mensaje.sources?.length) {
+            <div class="sources">
+              <span>Fuentes consultadas</span>
+              @for (fuente of mensaje.sources; track fuente) {
+                <small>{{ fuente }}</small>
+              }
+            </div>
+          }
+        </article>
+      }
+
+      @if (isSending()) {
+        <p class="thinking" aria-live="polite">
+          <span></span><span></span><span></span>
+          {{ pensando() }}
+        </p>
+      }
+
+      @if (plan().length) {
+        <section class="plan-card" aria-label="Cambios propuestos">
+          <header class="plan-header">
+            <div>
+              <strong>{{ plan().length }} {{ plan().length === 1 ? 'cambio propuesto' : 'cambios propuestos' }}</strong>
+              <small>Desmarca lo que no quieras aplicar.</small>
+            </div>
+          </header>
+
+          @for (accion of plan(); track accion.id) {
+            <div class="plan-action" [class.descartada]="!estaSeleccionada(accion.id)">
+              <label class="plan-action-main">
+                <input
+                  type="checkbox"
+                  [checked]="estaSeleccionada(accion.id)"
+                  (change)="alternarAccion(accion.id)"
+                />
+                <span class="plan-action-text">
+                  <span class="plan-action-summary">{{ accion.resumen }}</span>
+                  <span class="plan-action-meta">
+                    <small
+                      class="riesgo"
+                      [class.riesgo-bajo]="accion.riesgo === 'BAJO'"
+                      [class.riesgo-medio]="accion.riesgo === 'MEDIO'"
+                      [class.riesgo-alto]="accion.riesgo === 'ALTO'"
+                    >
+                      {{ accion.riesgo }}
+                    </small>
+                    @if (accion.origen.startsWith('preset:')) {
+                      <small class="origen">preset {{ accion.origen.slice(7) }}</small>
+                    }
+                  </span>
+                </span>
+              </label>
+
+              @for (advertencia of accion.advertencias; track advertencia) {
+                <p class="advertencia">
+                  <span class="material-symbols-outlined" aria-hidden="true">warning</span>{{ advertencia }}
+                </p>
+              }
+
+              @if (accion.detalle) {
+                <button type="button" class="detalle-toggle" (click)="alternarDetalle(accion.id)">
+                  {{ detalleAbierto().has(accion.id) ? 'Ocultar detalle' : 'Ver detalle' }}
+                </button>
+                @if (detalleAbierto().has(accion.id)) {
+                  <pre class="detalle">{{ accion.detalle }}</pre>
+                }
+              }
+            </div>
+          }
+
+          @if (hayAccionesDeRiesgo()) {
+            <p class="plan-warning">
+              <span class="material-symbols-outlined" aria-hidden="true">error</span>
+              Hay cambios destructivos seleccionados. Revísalos antes de aplicar.
+            </p>
+          }
+
+          <div class="plan-actions">
+            <button type="button" class="ghost-button" (click)="descartarPlan()" [disabled]="isApplying()">
+              Descartar
+            </button>
+            <button type="button" class="primary-button" (click)="aplicar()" [disabled]="!puedeAplicar()">
+              @if (isApplying()) {
+                Aplicando…
+              } @else {
+                Aplicar {{ seleccionadas().length }}
+                {{ seleccionadas().length === 1 ? 'cambio' : 'cambios' }}
+              }
+            </button>
+          </div>
+        </section>
+      }
+
+      @if (resultados().length) {
+        <section class="resultados" aria-label="Resultado de los cambios">
+          @for (resultado of resultados(); track resultado.id) {
+            <p [class]="'resultado resultado-' + resultado.estado.toLowerCase()">
+              <span class="material-symbols-outlined" aria-hidden="true">
+                {{ iconoDeEstado(resultado.estado) }}
+              </span>
+              {{ resultado.mensaje }}
+            </p>
+          }
+        </section>
+      }
+    </div>
+
+    <footer>
+      <textarea
+        rows="2"
+        [value]="draft()"
+        (input)="updateDraft($event)"
+        (keydown)="handleKeydown($event)"
+        [disabled]="isSending() || isApplying()"
+        placeholder="Ej. Tengo una cafetería, configúrame el inventario"
+        aria-label="Mensaje para el copiloto"
+      ></textarea>
+      <button
+        type="button"
+        class="send-button"
+        (click)="send()"
+        [disabled]="!draft().trim() || isSending() || isApplying()"
+        aria-label="Enviar"
+      >
+        <span class="material-symbols-outlined" aria-hidden="true">send</span>
+      </button>
+      <small>El copiloto propone cambios; nada se guarda hasta que confirmas.</small>
+    </footer>
+  </section>
+}

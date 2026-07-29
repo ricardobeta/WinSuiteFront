@@ -1,0 +1,690 @@
+<section class="config-page" aria-labelledby="config-title">
+  <header class="page-header">
+    <div>
+      <p class="eyebrow">Facturación electrónica</p>
+      <h2 id="config-title">Configuración</h2>
+      <p class="page-description">
+        Define cómo emite facturas tu empresa. Los cambios no se aplican hasta que los guardes.
+      </p>
+    </div>
+    <div class="header-summary" aria-label="Resumen de configuración">
+      <span>
+        <mat-icon aria-hidden="true">storefront</mat-icon>
+        {{ configuracion().establecimientos.length }} establecimientos
+      </span>
+      <span>
+        <mat-icon aria-hidden="true">point_of_sale</mat-icon>
+        {{ configuracion().puntosEmision.length }} puntos
+      </span>
+    </div>
+  </header>
+
+  @if (cargandoConfiguracion() || cargandoCatalogos() || cargandoCorreo()) {
+    <mat-progress-bar mode="indeterminate" aria-label="Cargando configuración" />
+  }
+
+  <div class="config-surface surface-card">
+    <mat-tab-group
+      class="config-tabs"
+      [selectedIndex]="selectedTabIndex()"
+      (selectedIndexChange)="selectedTabIndex.set($event)"
+      [preserveContent]="true"
+      animationDuration="180ms"
+    >
+      <mat-tab>
+        <ng-template mat-tab-label>
+          <mat-icon>domain</mat-icon>
+          <span>General</span>
+          @if (mainDirty()) { <span class="dirty-dot" aria-label="Con cambios pendientes"></span> }
+        </ng-template>
+
+        <div class="tab-panel">
+          <div class="section-heading">
+            <div class="section-icon"><mat-icon>domain</mat-icon></div>
+            <div>
+              <h3>Datos tributarios y ambiente</h3>
+              <p>Información del emisor que aparecerá en el RIDE y entorno utilizado ante el SRI.</p>
+            </div>
+          </div>
+
+          <section class="settings-block" aria-labelledby="ambiente-title">
+            <div class="block-heading">
+              <div>
+                <h4 id="ambiente-title">Ambiente del SRI</h4>
+                <p>Pruebas no genera documentos con validez tributaria. Producción sí.</p>
+              </div>
+              @if (ambienteEsProduccion()) {
+                <span class="status-badge status-production">
+                  <mat-icon>verified</mat-icon>
+                  Producción
+                </span>
+              } @else {
+                <span class="status-badge">
+                  <mat-icon>science</mat-icon>
+                  Pruebas
+                </span>
+              }
+            </div>
+
+            <mat-radio-group
+              class="choice-grid"
+              aria-label="Ambiente del SRI"
+              [value]="configuracion().ambienteActivo"
+              (change)="seleccionarAmbiente($event.value)"
+            >
+              @for (ambiente of catalogos().ambiente; track ambiente.code) {
+                <label class="choice-option" [class.selected]="configuracion().ambienteActivo === ambiente.code">
+                  <mat-radio-button [value]="ambiente.code">
+                    <strong>{{ ambiente.value }}</strong>
+                    <span>Código SRI {{ ambiente.code }}</span>
+                  </mat-radio-button>
+                </label>
+              } @empty {
+                <p class="inline-empty">No se pudieron cargar los ambientes disponibles.</p>
+              }
+            </mat-radio-group>
+
+            @if (ambienteEsProduccion()) {
+              <div class="notice warning-notice" role="status">
+                <mat-icon>warning_amber</mat-icon>
+                <div>
+                  <strong>Emisión con validez tributaria</strong>
+                  <span>Antes de facturar, confirma que cada punto de emisión tenga la firma correcta.</span>
+                </div>
+              </div>
+            }
+          </section>
+
+          <section class="settings-block" aria-labelledby="fiscal-title">
+            <div class="block-heading">
+              <div>
+                <h4 id="fiscal-title">Datos tributarios del emisor</h4>
+                <p>El RUC y la razón social se toman de la firma digital asignada.</p>
+              </div>
+            </div>
+
+            <form class="form-grid" [formGroup]="fiscalForm">
+              <mat-form-field appearance="outline" class="span-2">
+                <mat-label>Dirección matriz</mat-label>
+                <input matInput formControlName="direccionMatriz" autocomplete="street-address" />
+                <mat-hint>Dirección registrada en el RUC</mat-hint>
+                @if (fiscalForm.controls.direccionMatriz.hasError('required')) {
+                  <mat-error>Ingresa la dirección matriz</mat-error>
+                }
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Contribuyente especial</mat-label>
+                <input matInput formControlName="contribuyenteEspecial" />
+                <mat-hint>Solo si aplica</mat-hint>
+              </mat-form-field>
+
+              <mat-form-field appearance="outline">
+                <mat-label>Agente de retención</mat-label>
+                <input matInput formControlName="agenteRetencion" maxlength="8" inputmode="numeric" />
+                <mat-hint>Resolución de hasta 8 dígitos</mat-hint>
+                @if (fiscalForm.controls.agenteRetencion.hasError('pattern')) {
+                  <mat-error>Usa únicamente números</mat-error>
+                }
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" class="span-2">
+                <mat-label>Logo para el RIDE</mat-label>
+                <input matInput formControlName="logoUrl" type="url" placeholder="https://empresa.com/logo.png" />
+                <mat-hint>URL pública en formato PNG o JPG</mat-hint>
+              </mat-form-field>
+
+              <div class="toggle-list span-2">
+                <mat-slide-toggle formControlName="obligadoContabilidad">
+                  Obligado a llevar contabilidad
+                </mat-slide-toggle>
+                <mat-slide-toggle formControlName="contribuyenteRimpe">
+                  Contribuyente Régimen RIMPE
+                </mat-slide-toggle>
+              </div>
+            </form>
+          </section>
+        </div>
+      </mat-tab>
+
+      <mat-tab>
+        <ng-template mat-tab-label>
+          <mat-icon>list_alt</mat-icon>
+          <span>Catálogos SRI</span>
+        </ng-template>
+
+        <div class="tab-panel">
+          <div class="section-heading">
+            <div class="section-icon"><mat-icon>list_alt</mat-icon></div>
+            <div>
+              <h3>Opciones disponibles al facturar</h3>
+              <p>Activa solo las opciones que utiliza tu operación para mantener formularios más simples.</p>
+            </div>
+          </div>
+
+          <mat-accordion class="catalog-accordion" multi>
+            <mat-expansion-panel expanded>
+              <mat-expansion-panel-header>
+                <mat-panel-title>Formas de pago</mat-panel-title>
+                <mat-panel-description>
+                  {{ cantidadActivos('formaPagoActivos') }} activas
+                </mat-panel-description>
+              </mat-expansion-panel-header>
+              <p class="panel-help">Métodos que el equipo podrá seleccionar al emitir una factura.</p>
+              <div class="table-wrap">
+                <table mat-table [dataSource]="catalogos().formaPago" class="catalog-table">
+                  <ng-container matColumnDef="value">
+                    <th mat-header-cell *matHeaderCellDef>Forma de pago</th>
+                    <td mat-cell *matCellDef="let row">{{ row.value }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="toggle">
+                    <th mat-header-cell *matHeaderCellDef>Disponible</th>
+                    <td mat-cell *matCellDef="let row">
+                      <mat-slide-toggle
+                        color="primary"
+                        [attr.aria-label]="'Activar ' + row.value"
+                        [checked]="isActivoMultiple('formaPagoActivos', row.code)"
+                        (change)="toggleMultiple('formaPagoActivos', row.code, $event.checked)"
+                      />
+                    </td>
+                  </ng-container>
+                  <tr mat-header-row *matHeaderRowDef="columnasCatalogo"></tr>
+                  <tr mat-row *matRowDef="let row; columns: columnasCatalogo"></tr>
+                </table>
+              </div>
+            </mat-expansion-panel>
+
+            <mat-expansion-panel>
+              <mat-expansion-panel-header>
+                <mat-panel-title>Tipos de identificación</mat-panel-title>
+                <mat-panel-description>
+                  {{ cantidadActivos('tipoIdentificacionActivos') }} activos
+                </mat-panel-description>
+              </mat-expansion-panel-header>
+              <p class="panel-help">Documentos aceptados para identificar al comprador.</p>
+              <div class="table-wrap">
+                <table mat-table [dataSource]="catalogos().tipoIdentificacion" class="catalog-table">
+                  <ng-container matColumnDef="value">
+                    <th mat-header-cell *matHeaderCellDef>Tipo de identificación</th>
+                    <td mat-cell *matCellDef="let row">{{ row.value }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="toggle">
+                    <th mat-header-cell *matHeaderCellDef>Disponible</th>
+                    <td mat-cell *matCellDef="let row">
+                      <mat-slide-toggle
+                        color="primary"
+                        [attr.aria-label]="'Activar ' + row.value"
+                        [checked]="isActivoMultiple('tipoIdentificacionActivos', row.code)"
+                        (change)="toggleMultiple('tipoIdentificacionActivos', row.code, $event.checked)"
+                      />
+                    </td>
+                  </ng-container>
+                  <tr mat-header-row *matHeaderRowDef="columnasCatalogo"></tr>
+                  <tr mat-row *matRowDef="let row; columns: columnasCatalogo"></tr>
+                </table>
+              </div>
+            </mat-expansion-panel>
+
+            <mat-expansion-panel>
+              <mat-expansion-panel-header>
+                <mat-panel-title>Porcentajes de IVA</mat-panel-title>
+                <mat-panel-description>
+                  {{ cantidadActivos('codigoPorcentajeIvaActivos') }} activos
+                </mat-panel-description>
+              </mat-expansion-panel-header>
+              <p class="panel-help">Tarifas que podrán asignarse a productos y líneas de factura.</p>
+              <div class="table-wrap">
+                <table mat-table [dataSource]="catalogos().codigoPorcentajeIva" class="catalog-table">
+                  <ng-container matColumnDef="value">
+                    <th mat-header-cell *matHeaderCellDef>Porcentaje de IVA</th>
+                    <td mat-cell *matCellDef="let row">{{ row.value }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="toggle">
+                    <th mat-header-cell *matHeaderCellDef>Disponible</th>
+                    <td mat-cell *matCellDef="let row">
+                      <mat-slide-toggle
+                        color="primary"
+                        [attr.aria-label]="'Activar ' + row.value"
+                        [checked]="isActivoMultiple('codigoPorcentajeIvaActivos', row.code)"
+                        (change)="toggleMultiple('codigoPorcentajeIvaActivos', row.code, $event.checked)"
+                      />
+                    </td>
+                  </ng-container>
+                  <tr mat-header-row *matHeaderRowDef="columnasCatalogo"></tr>
+                  <tr mat-row *matRowDef="let row; columns: columnasCatalogo"></tr>
+                </table>
+              </div>
+            </mat-expansion-panel>
+          </mat-accordion>
+        </div>
+      </mat-tab>
+
+      <mat-tab>
+        <ng-template mat-tab-label>
+          <mat-icon>storefront</mat-icon>
+          <span>Establecimientos</span>
+          <span class="tab-count">{{ configuracion().establecimientos.length }}</span>
+        </ng-template>
+
+        <div class="tab-panel">
+          <div class="section-heading">
+            <div class="section-icon"><mat-icon>storefront</mat-icon></div>
+            <div>
+              <h3>Establecimientos</h3>
+              <p>Sucursales registradas ante el SRI desde las que tu empresa puede emitir.</p>
+            </div>
+          </div>
+
+          <section class="create-block" aria-labelledby="nuevo-establecimiento-title">
+            <h4 id="nuevo-establecimiento-title">Agregar establecimiento</h4>
+            <form class="form-grid form-grid-wide" [formGroup]="establecimientoForm" (ngSubmit)="agregarEstablecimiento()">
+              <mat-form-field appearance="outline">
+                <mat-label>Código SRI</mat-label>
+                <input matInput formControlName="codigo" maxlength="3" placeholder="001" inputmode="numeric" />
+                <mat-hint>3 dígitos</mat-hint>
+                @if (establecimientoForm.controls.codigo.invalid && establecimientoForm.controls.codigo.touched) {
+                  <mat-error>Usa un código de 3 dígitos</mat-error>
+                }
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Nombre</mat-label>
+                <input matInput formControlName="nombre" placeholder="Matriz" />
+                @if (establecimientoForm.controls.nombre.hasError('required')) {
+                  <mat-error>Ingresa un nombre</mat-error>
+                }
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Dirección</mat-label>
+                <input matInput formControlName="direccion" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Almacenes asociados</mat-label>
+                <mat-select formControlName="almacenes" multiple>
+                  @for (almacen of almacenes(); track almacen.id) {
+                    <mat-option [value]="almacen.id">{{ almacen.nombre }}</mat-option>
+                  }
+                </mat-select>
+                <mat-hint>Vacío permite todos los almacenes</mat-hint>
+              </mat-form-field>
+              <div class="form-action">
+                <button mat-flat-button color="primary" type="submit">
+                  <mat-icon>add</mat-icon>
+                  Agregar
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section class="list-block" aria-labelledby="establecimientos-list-title">
+            <div class="block-heading">
+              <div>
+                <h4 id="establecimientos-list-title">Establecimientos configurados</h4>
+                <p>Los cambios se aplicarán cuando guardes la configuración.</p>
+              </div>
+              <span class="count-label">{{ configuracion().establecimientos.length }} en total</span>
+            </div>
+            @if (configuracion().establecimientos.length > 0) {
+              <div class="table-wrap">
+                <table mat-table [dataSource]="configuracion().establecimientos" class="data-table">
+                  <ng-container matColumnDef="codigo">
+                    <th mat-header-cell *matHeaderCellDef>Código</th>
+                    <td mat-cell *matCellDef="let row"><span class="code-cell">{{ row.codigo }}</span></td>
+                  </ng-container>
+                  <ng-container matColumnDef="nombre">
+                    <th mat-header-cell *matHeaderCellDef>Nombre</th>
+                    <td mat-cell *matCellDef="let row"><strong>{{ row.nombre }}</strong></td>
+                  </ng-container>
+                  <ng-container matColumnDef="direccion">
+                    <th mat-header-cell *matHeaderCellDef>Dirección</th>
+                    <td mat-cell *matCellDef="let row">{{ row.direccion || 'Sin dirección' }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="almacenes">
+                    <th mat-header-cell *matHeaderCellDef>Almacenes</th>
+                    <td mat-cell *matCellDef="let row">{{ nombreAlmacenesPorIds(row.almacenIds) }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="acciones">
+                    <th mat-header-cell *matHeaderCellDef><span class="visually-hidden">Acciones</span></th>
+                    <td mat-cell *matCellDef="let row">
+                      <button
+                        mat-icon-button
+                        type="button"
+                        class="danger-action"
+                        [attr.aria-label]="'Eliminar establecimiento ' + row.nombre"
+                        (click)="eliminarEstablecimiento(row)"
+                      >
+                        <mat-icon>delete_outline</mat-icon>
+                      </button>
+                    </td>
+                  </ng-container>
+                  <tr mat-header-row *matHeaderRowDef="columnasEstablecimientos"></tr>
+                  <tr mat-row *matRowDef="let row; columns: columnasEstablecimientos"></tr>
+                </table>
+              </div>
+            } @else {
+              <div class="empty-state">
+                <mat-icon>storefront</mat-icon>
+                <h4>Aún no hay establecimientos</h4>
+                <p>Agrega la matriz o primera sucursal para poder crear puntos de emisión.</p>
+              </div>
+            }
+          </section>
+        </div>
+      </mat-tab>
+
+      <mat-tab>
+        <ng-template mat-tab-label>
+          <mat-icon>point_of_sale</mat-icon>
+          <span>Puntos de emisión</span>
+          <span class="tab-count">{{ configuracion().puntosEmision.length }}</span>
+        </ng-template>
+
+        <div class="tab-panel">
+          <div class="section-heading">
+            <div class="section-icon"><mat-icon>point_of_sale</mat-icon></div>
+            <div>
+              <h3>Puntos de emisión</h3>
+              <p>Asigna cada caja o terminal a un establecimiento y a su firma digital.</p>
+            </div>
+          </div>
+
+          @if (configuracion().establecimientos.length === 0) {
+            <div class="notice">
+              <mat-icon>info</mat-icon>
+              <div>
+                <strong>Primero crea un establecimiento</strong>
+                <span>Los puntos de emisión siempre deben pertenecer a una sucursal.</span>
+              </div>
+              <button mat-stroked-button type="button" (click)="selectedTabIndex.set(2)">Ir a establecimientos</button>
+            </div>
+          } @else if (firmas().length === 0) {
+            <div class="notice">
+              <mat-icon>badge</mat-icon>
+              <div>
+                <strong>Necesitas una firma digital</strong>
+                <span>Carga una firma antes de agregar el primer punto de emisión.</span>
+              </div>
+              <a mat-stroked-button routerLink="/workspace/facturacion/firmas">Gestionar firmas</a>
+            </div>
+          }
+
+          <section class="create-block" aria-labelledby="nuevo-punto-title">
+            <h4 id="nuevo-punto-title">Agregar punto de emisión</h4>
+            <form class="form-grid form-grid-wide" [formGroup]="puntoForm" (ngSubmit)="agregarPuntoEmision()">
+              <mat-form-field appearance="outline">
+                <mat-label>Establecimiento</mat-label>
+                <mat-select formControlName="establecimientoId">
+                  @for (establecimiento of configuracion().establecimientos; track establecimiento.id) {
+                    <mat-option [value]="establecimiento.id">
+                      {{ establecimiento.codigo }} · {{ establecimiento.nombre }}
+                    </mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Código SRI</mat-label>
+                <input matInput formControlName="codigo" maxlength="3" placeholder="001" inputmode="numeric" />
+                <mat-hint>3 dígitos</mat-hint>
+                @if (puntoForm.controls.codigo.invalid && puntoForm.controls.codigo.touched) {
+                  <mat-error>Usa un código de 3 dígitos</mat-error>
+                }
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Nombre de caja o terminal</mat-label>
+                <input matInput formControlName="descripcion" placeholder="Caja principal" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Firma digital</mat-label>
+                <mat-select formControlName="firmaId">
+                  @for (firma of firmas(); track firma.id) {
+                    <mat-option [value]="firma.id">{{ etiquetaFirma(firma) }}</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+              <div class="form-action">
+                <button
+                  mat-flat-button
+                  color="primary"
+                  type="submit"
+                  [disabled]="configuracion().establecimientos.length === 0 || firmas().length === 0"
+                >
+                  <mat-icon>add</mat-icon>
+                  Agregar
+                </button>
+              </div>
+            </form>
+          </section>
+
+          <section class="list-block" aria-labelledby="puntos-list-title">
+            <div class="block-heading">
+              <div>
+                <h4 id="puntos-list-title">Puntos configurados</h4>
+                <p>Un establecimiento puede tener varias cajas con códigos diferentes.</p>
+              </div>
+              <span class="count-label">{{ configuracion().puntosEmision.length }} en total</span>
+            </div>
+            @if (configuracion().puntosEmision.length > 0) {
+              <div class="table-wrap">
+                <table mat-table [dataSource]="configuracion().puntosEmision" class="data-table">
+                  <ng-container matColumnDef="codigo">
+                    <th mat-header-cell *matHeaderCellDef>Código</th>
+                    <td mat-cell *matCellDef="let row"><span class="code-cell">{{ row.codigo }}</span></td>
+                  </ng-container>
+                  <ng-container matColumnDef="establecimiento">
+                    <th mat-header-cell *matHeaderCellDef>Establecimiento</th>
+                    <td mat-cell *matCellDef="let row">{{ nombreEstablecimientoPorId(row.establecimientoId) }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="descripcion">
+                    <th mat-header-cell *matHeaderCellDef>Terminal</th>
+                    <td mat-cell *matCellDef="let row"><strong>{{ row.descripcion }}</strong></td>
+                  </ng-container>
+                  <ng-container matColumnDef="firma">
+                    <th mat-header-cell *matHeaderCellDef>Firma asignada</th>
+                    <td mat-cell *matCellDef="let row">{{ nombreFirmaPorId(row.firmaId) }}</td>
+                  </ng-container>
+                  <ng-container matColumnDef="acciones">
+                    <th mat-header-cell *matHeaderCellDef><span class="visually-hidden">Acciones</span></th>
+                    <td mat-cell *matCellDef="let row">
+                      <button
+                        mat-icon-button
+                        type="button"
+                        class="danger-action"
+                        [attr.aria-label]="'Eliminar punto de emisión ' + row.descripcion"
+                        (click)="eliminarPunto(row)"
+                      >
+                        <mat-icon>delete_outline</mat-icon>
+                      </button>
+                    </td>
+                  </ng-container>
+                  <tr mat-header-row *matHeaderRowDef="columnasPuntos"></tr>
+                  <tr mat-row *matRowDef="let row; columns: columnasPuntos"></tr>
+                </table>
+              </div>
+            } @else {
+              <div class="empty-state">
+                <mat-icon>point_of_sale</mat-icon>
+                <h4>Aún no hay puntos de emisión</h4>
+                <p>Agrega la primera caja o terminal cuando tengas un establecimiento y una firma.</p>
+              </div>
+            }
+          </section>
+        </div>
+      </mat-tab>
+
+      <mat-tab>
+        <ng-template mat-tab-label>
+          <mat-icon>forward_to_inbox</mat-icon>
+          <span>Correo</span>
+          @if (correoDirty()) { <span class="dirty-dot" aria-label="Con cambios pendientes"></span> }
+        </ng-template>
+
+        <div class="tab-panel">
+          <div class="section-heading">
+            <div class="section-icon"><mat-icon>forward_to_inbox</mat-icon></div>
+            <div>
+              <h3>Envío de facturas por correo</h3>
+              <p>Configura el remitente que enviará al cliente el RIDE y el XML autorizado.</p>
+            </div>
+          </div>
+
+          <form [formGroup]="correoForm">
+            <section class="settings-block" aria-labelledby="remitente-title">
+              <div class="block-heading">
+                <div>
+                  <h4 id="remitente-title">Servicio de envío</h4>
+                  <p>WinSuite es la opción recomendada. Usa SMTP si necesitas enviar desde tu dominio.</p>
+                </div>
+              </div>
+
+              <mat-radio-group class="choice-grid" formControlName="mode" aria-label="Servicio de envío">
+                <label class="choice-option" [class.selected]="correoForm.controls.mode.value === 'SAAS_DEFAULT'">
+                  <mat-radio-button value="SAAS_DEFAULT">
+                    <strong>Correo de WinSuite</strong>
+                    <span>Sin configuración técnica y con respaldo administrado.</span>
+                  </mat-radio-button>
+                </label>
+                <label class="choice-option" [class.selected]="correoForm.controls.mode.value === 'TENANT_SMTP'">
+                  <mat-radio-button value="TENANT_SMTP">
+                    <strong>SMTP de la empresa</strong>
+                    <span>Envía desde tu propio servidor y dominio.</span>
+                  </mat-radio-button>
+                </label>
+              </mat-radio-group>
+            </section>
+
+            @if (correoForm.controls.mode.value === 'TENANT_SMTP') {
+              <section class="settings-block" aria-labelledby="smtp-title">
+                <div class="block-heading">
+                  <div>
+                    <h4 id="smtp-title">Servidor SMTP</h4>
+                    <p>Solicita estos datos al administrador de tu correo corporativo.</p>
+                  </div>
+                </div>
+                <div class="form-grid">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Servidor SMTP</mat-label>
+                    <input matInput formControlName="host" placeholder="smtp.empresa.com" autocomplete="url" />
+                    @if (!correoForm.controls.host.value.trim() && correoForm.controls.host.touched) {
+                      <mat-error>Ingresa el servidor SMTP</mat-error>
+                    }
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Puerto</mat-label>
+                    <input matInput type="number" formControlName="port" min="1" max="65535" />
+                    @if (correoForm.controls.port.invalid) {
+                      <mat-error>Ingresa un puerto entre 1 y 65535</mat-error>
+                    }
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Usuario</mat-label>
+                    <input matInput formControlName="username" autocomplete="username" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Clave o clave de aplicación</mat-label>
+                    <input
+                      matInput
+                      type="password"
+                      formControlName="password"
+                      autocomplete="new-password"
+                      [placeholder]="passwordConfigured() ? 'Dejar vacío para conservar' : 'Ingresa la clave'"
+                    />
+                    @if (passwordConfigured()) {
+                      <mat-hint>Ya existe una clave guardada</mat-hint>
+                    }
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Correo remitente</mat-label>
+                    <input matInput type="email" formControlName="fromAddress" autocomplete="email" />
+                    @if (!correoForm.controls.fromAddress.value.trim() && correoForm.controls.fromAddress.touched) {
+                      <mat-error>Ingresa el correo remitente</mat-error>
+                    } @else if (correoForm.controls.fromAddress.hasError('email')) {
+                      <mat-error>Ingresa un correo válido</mat-error>
+                    }
+                  </mat-form-field>
+                  <mat-form-field appearance="outline">
+                    <mat-label>Nombre remitente</mat-label>
+                    <input matInput formControlName="fromName" />
+                  </mat-form-field>
+                  <mat-form-field appearance="outline" class="span-2">
+                    <mat-label>Responder a</mat-label>
+                    <input matInput type="email" formControlName="replyTo" />
+                    <mat-hint>Opcional. Recibirá las respuestas de los clientes.</mat-hint>
+                    @if (correoForm.controls.replyTo.hasError('email')) {
+                      <mat-error>Ingresa un correo válido</mat-error>
+                    }
+                  </mat-form-field>
+                  <div class="toggle-list span-2">
+                    <mat-slide-toggle formControlName="startTls">Usar STARTTLS</mat-slide-toggle>
+                    <mat-slide-toggle formControlName="ssl">Usar SSL</mat-slide-toggle>
+                  </div>
+                </div>
+              </section>
+            }
+
+            <section class="test-block" aria-labelledby="test-title">
+              <div>
+                <h4 id="test-title">Comprobar el envío</h4>
+                <p>Guarda primero la configuración y envía una prueba a un correo al que tengas acceso.</p>
+              </div>
+              <div class="test-controls">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                  <mat-label>Destinatario de prueba</mat-label>
+                  <input matInput type="email" formControlName="testRecipient" />
+                  @if (correoForm.controls.testRecipient.hasError('email')) {
+                    <mat-error>Ingresa un correo válido</mat-error>
+                  }
+                </mat-form-field>
+                <button
+                  mat-stroked-button
+                  type="button"
+                  (click)="probarCorreo()"
+                  [disabled]="probandoCorreo() || correoDirty()"
+                >
+                  <mat-icon>send</mat-icon>
+                  {{ probandoCorreo() ? 'Enviando…' : 'Enviar prueba' }}
+                </button>
+              </div>
+            </section>
+          </form>
+        </div>
+      </mat-tab>
+    </mat-tab-group>
+  </div>
+
+  <footer class="save-bar surface-card" aria-live="polite">
+    <div class="save-state">
+      <mat-icon>{{ selectedTabIndex() === 4 ? 'forward_to_inbox' : 'settings' }}</mat-icon>
+      <div>
+        <strong>{{ selectedTabIndex() === 4 ? 'Configuración de correo' : 'Configuración de facturación' }}</strong>
+        @if (selectedTabIndex() === 4 ? correoDirty() : mainDirty()) {
+          <span>Tienes cambios sin guardar</span>
+        } @else {
+          <span>Todos los cambios están guardados</span>
+        }
+      </div>
+    </div>
+
+    @if (selectedTabIndex() === 4) {
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        (click)="guardarCorreo()"
+        [disabled]="guardandoCorreo() || !correoDirty() || correoConfiguracionInvalida()"
+      >
+        <mat-icon>save</mat-icon>
+        {{ guardandoCorreo() ? 'Guardando…' : 'Guardar correo' }}
+      </button>
+    } @else {
+      <button
+        mat-flat-button
+        color="primary"
+        type="button"
+        (click)="guardarConfiguracion()"
+        [disabled]="guardando() || !mainDirty() || cargandoCatalogos()"
+      >
+        <mat-icon>save</mat-icon>
+        {{ guardando() ? 'Guardando…' : 'Guardar cambios' }}
+      </button>
+    }
+  </footer>
+</section>

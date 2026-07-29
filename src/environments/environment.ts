@@ -43,7 +43,7 @@ export const environment: AppEnvironment = {
     appId: "1:1098700113511:web:ca5e38d15972a3c016f6c2",
     measurementId: "G-S0SRTBVSXJ"
   },
-  firebaseVapidKey: '',
+  firebaseVapidKey: 'BPFBcMFrjcP806Bv1EBqOtd3oRuUz6LDcDpacQ1kmdqhflsHDm-RIGvZayDz0gL0k1D3nuBizbNTb2gU8eVA-no',
   // Durante la migracion puede apuntar al proyecto principal. En despliegue debe
   // reemplazarse por la configuracion publica del proyecto exclusivo de sitios.
   sitesFirebase: {

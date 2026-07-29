@@ -2,6 +2,8 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import {
   Auth,
   User,
+  browserLocalPersistence,
+  browserSessionPersistence,
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
   linkWithPopup,
@@ -9,6 +11,7 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
+  setPersistence,
   updateProfile
 } from '@angular/fire/auth';
 import { firstValueFrom } from 'rxjs';
@@ -26,6 +29,8 @@ import { TenantApiService } from './tenant-api.service';
 import { HttpClient } from '@angular/common/http';
 import { HttpErrorResponse } from '@angular/common/http';
 import { environment } from '../../../environments/environment';
+
+export type AuthBootstrapState = 'loading' | 'ready' | 'error';
 
 @Injectable({
   providedIn: 'root'
@@ -49,6 +54,8 @@ export class AuthService {
   readonly activeModules = signal<string[]>([]);
   readonly ownedCompanyLimit = signal(2);
   readonly ownedCompanyCount = signal(0);
+  readonly bootstrapState = signal<AuthBootstrapState>('loading');
+  readonly bootstrapError = signal<string | null>(null);
   readonly isAuthenticated = computed(() => this.currentUser() !== null);
   private readonly http = inject(HttpClient);
   private authStateReadyResolver: (() => void) | null = null;
@@ -81,6 +88,8 @@ export class AuthService {
       this.currentUser.set(user);
       this.authStateReadyResolver?.();
       this.authStateReadyResolver = null;
+      this.bootstrapState.set('loading');
+      this.bootstrapError.set(null);
 
       try {
         if (!user) {
@@ -92,6 +101,7 @@ export class AuthService {
           this.currentTenant.set(null);
           this.activeModules.set([]);
           this.clearTenantFromStorage();
+          this.bootstrapState.set('ready');
           return;
         }
 
@@ -103,7 +113,15 @@ export class AuthService {
         }
 
         await this.hydrateTenantId(user);
+        if (this.bootstrapState() === 'error') {
+          return;
+        }
         await this.loadAuthorizationContext(user.uid);
+        this.bootstrapState.set('ready');
+      } catch (error: unknown) {
+        this.clearAuthorizationContext();
+        this.bootstrapState.set('error');
+        this.bootstrapError.set(this.toReadableBootstrapError(error));
       } finally {
         if (!this.initialBootstrapResolved) {
           this.initialBootstrapResolved = true;
@@ -120,6 +138,10 @@ export class AuthService {
     this.error.set(null);
 
     try {
+      await setPersistence(
+        this.auth,
+        payload.remember === false ? browserSessionPersistence : browserLocalPersistence
+      );
       await signInWithEmailAndPassword(this.auth, payload.email, payload.password);
       const token = await this.auth.currentUser?.getIdToken();
       if (token) {
@@ -128,7 +150,7 @@ export class AuthService {
       await this.bootstrapSession();
 
     } catch (error: unknown) {
-      this.error.set(this.toReadableAuthError(error));
+      this.error.set(this.bootstrapError() ?? this.toReadableAuthError(error));
       throw error;
     } finally {
       this.loading.set(false);
@@ -152,23 +174,27 @@ export class AuthService {
       this.authToken.set(token);
       await this.bootstrapSession();
     } catch (error: unknown) {
-      this.error.set(this.toReadableAuthError(error));
+      this.error.set(this.bootstrapError() ?? this.toReadableAuthError(error));
       throw error;
     } finally {
       this.loading.set(false);
     }
   }
 
-  async loginWithGoogle(): Promise<void> {
+  async loginWithGoogle(remember = true): Promise<void> {
     this.loading.set(true);
     this.error.set(null);
     try {
+      await setPersistence(
+        this.auth,
+        remember ? browserLocalPersistence : browserSessionPersistence
+      );
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(this.auth, provider);
       await this.bootstrapSession();
     } catch (error: unknown) {
-      this.error.set(this.toReadableAuthError(error));
+      this.error.set(this.bootstrapError() ?? this.toReadableAuthError(error));
       throw error;
     } finally {
       this.loading.set(false);
@@ -202,6 +228,17 @@ export class AuthService {
   }
 
   async refreshCompanies(): Promise<void> {
+    await this.bootstrapSession();
+  }
+
+  async retryBootstrap(): Promise<void> {
+    const user = this.auth.currentUser;
+    if (!user) {
+      this.bootstrapState.set('error');
+      this.bootstrapError.set('Tu sesión terminó. Vuelve a iniciar sesión para continuar.');
+      throw new Error('No hay una sesión autenticada para reintentar.');
+    }
+
     await this.bootstrapSession();
   }
 
@@ -313,8 +350,7 @@ export class AuthService {
       await this.bootstrapSession();
     } catch (error: unknown) {
       if (error instanceof HttpErrorResponse && error.status === 403) {
-        this.error.set('La empresa activa cambió en otra ventana. Inicia sesión nuevamente.');
-        await signOut(this.auth);
+        this.clearAuthorizationContext();
         return;
       }
       // Keep cached tenantId if available; consumers can retry later.
@@ -386,11 +422,9 @@ export class AuthService {
       this.currentTenant.set(context.tenant);
       this.activeModules.set(context.tenant.activeModules ?? []);
       this.currentProfile.set(context.profile?.userId === userId ? context.profile : null);
-    } catch {
-      this.currentProfile.set(null);
-      this.roles.set([]);
-      this.currentTenant.set(null);
-      this.activeModules.set([]);
+    } catch (error: unknown) {
+      this.clearAuthorizationContext();
+      throw error;
     }
   }
 
@@ -398,12 +432,28 @@ export class AuthService {
     if (this.bootstrapInFlight) {
       return this.bootstrapInFlight;
     }
+    this.bootstrapState.set('loading');
+    this.bootstrapError.set(null);
     this.bootstrapInFlight = this.performBootstrapSession();
     try {
       await this.bootstrapInFlight;
+      this.bootstrapState.set('ready');
+    } catch (error: unknown) {
+      this.clearAuthorizationContext();
+      this.bootstrapState.set('error');
+      this.bootstrapError.set(this.toReadableBootstrapError(error));
+      throw error;
     } finally {
       this.bootstrapInFlight = null;
     }
+  }
+
+  private clearAuthorizationContext(): void {
+    this.currentProfile.set(null);
+    this.roles.set([]);
+    this.companies.set([]);
+    this.currentTenant.set(null);
+    this.activeModules.set([]);
   }
 
   private async performBootstrapSession(): Promise<void> {
@@ -464,5 +514,17 @@ export class AuthService {
     };
 
     return dictionary[code] ?? 'No se pudo completar la operacion.';
+  }
+
+  private toReadableBootstrapError(error: unknown): string {
+    if (error instanceof HttpErrorResponse) {
+      if (error.status === 0) {
+        return 'No pudimos conectar con WinSuite. Revisa tu conexión e intenta nuevamente.';
+      }
+      if (error.status === 401 || error.status === 403) {
+        return 'No pudimos validar tu empresa y permisos. Reintenta o vuelve a iniciar sesión.';
+      }
+    }
+    return 'No pudimos preparar tu espacio de trabajo. Intenta nuevamente.';
   }
 }

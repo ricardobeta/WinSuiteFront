@@ -7,9 +7,7 @@ import { ProductoKardexComponent } from './pages/producto-kardex/producto-kardex
 import { ProveedoresListComponent } from './pages/proveedores-list/proveedores-list.component';
 import { ProveedorFormComponent } from './pages/proveedor-form/proveedor-form.component';
 import { OrdenesCompraListComponent } from './pages/ordenes-compra-list/ordenes-compra-list.component';
-import { OrdenesCompraKanbanComponent } from './pages/ordenes-compra-kanban/ordenes-compra-kanban.component';
 import { OrdenCompraFormComponent } from './pages/orden-compra-form/orden-compra-form.component';
-import { OrdenCompraRecepcionComponent } from './pages/orden-compra-recepcion/orden-compra-recepcion.component';
 import { CostosComponent } from './pages/costos/costos.component';
 import { AlmacenesComponent } from './pages/almacenes/almacenes.component';
 import { ConfiguracionComponent } from './pages/configuracion/configuracion.component';
@@ -111,14 +109,6 @@ export const INVENTARIO_ROUTES: Routes = [
         }
       },
       {
-        path: 'ordenes-compra/kanban',
-        component: OrdenesCompraKanbanComponent,
-        data: {
-          module: 'Inventario',
-          page: 'Kanban ordenes de compra'
-        }
-      },
-      {
         path: 'ordenes-compra/new',
         component: OrdenCompraFormComponent,
         data: {
@@ -140,14 +130,6 @@ export const INVENTARIO_ROUTES: Routes = [
         data: {
           module: 'Inventario',
           page: 'Editar orden de compra'
-        }
-      },
-      {
-        path: 'ordenes-compra/:id/recibir',
-        component: OrdenCompraRecepcionComponent,
-        data: {
-          module: 'Inventario',
-          page: 'Recepcion de orden de compra'
         }
       },
       {

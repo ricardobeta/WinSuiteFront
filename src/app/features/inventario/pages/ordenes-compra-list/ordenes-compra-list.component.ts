@@ -24,10 +24,9 @@ import { OrdenesCompraService } from '../../services/ordenes-compra.service';
         <div>
           <p class="eyebrow">Inventario</p>
           <h2>Ordenes de compra</h2>
-          <p>Gestion de estados y acciones operativas de recepcion.</p>
+          <p>Registra la compra y, al marcarla como recibida, entra el stock.</p>
         </div>
         <div class="header-actions">
-          <a mat-stroked-button routerLink="/workspace/inventario/ordenes-compra/kanban">Kanban drag and drow</a>
           <a mat-raised-button color="primary" routerLink="/workspace/inventario/ordenes-compra/new">Nueva OC</a>
         </div>
       </div>
@@ -78,19 +77,8 @@ import { OrdenesCompraService } from '../../services/ordenes-compra.service';
             <td mat-cell *matCellDef="let row">
               @if (row.estado === 'BORRADOR') {
                 <a mat-button [routerLink]="['/workspace/inventario/ordenes-compra', row.id, 'editar']">Editar</a>
-                <button mat-button type="button" (click)="enviar(row)">Enviar</button>
                 <button mat-button color="warn" type="button" (click)="anular(row)">Anular</button>
-              }
-              @if (row.estado === 'ENVIADA') {
-                <a mat-button [routerLink]="['/workspace/inventario/ordenes-compra', row.id, 'ver']">Ver</a>
-                <a mat-button [routerLink]="['/workspace/inventario/ordenes-compra', row.id, 'recibir']">Recibir</a>
-                <button mat-button color="warn" type="button" (click)="anular(row)">Anular</button>
-              }
-              @if (row.estado === 'RECIBIDA_PARCIAL') {
-                <a mat-button [routerLink]="['/workspace/inventario/ordenes-compra', row.id, 'ver']">Ver</a>
-                <a mat-button [routerLink]="['/workspace/inventario/ordenes-compra', row.id, 'recibir']">Recibir mas</a>
-              }
-              @if (row.estado === 'RECIBIDA' || row.estado === 'ANULADA') {
+              } @else {
                 <a mat-button [routerLink]="['/workspace/inventario/ordenes-compra', row.id, 'ver']">Ver</a>
               }
             </td>
@@ -167,19 +155,6 @@ export class OrdenesCompraListComponent implements OnInit {
 
   private normalizar(value: string): string {
     return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim();
-  }
-
-  protected async enviar(orden: OrdenCompra): Promise<void> {
-    if (!orden.id) {
-      return;
-    }
-
-    try {
-      await this.service.cambiarEstadoOrdenCompra(orden.id, 'ENVIADA');
-      this.mostrarExito('Orden enviada.', 'send');
-    } catch (error) {
-      this.mostrarExito(error instanceof Error ? error.message : 'No fue posible cambiar el estado.', 'error');
-    }
   }
 
   protected anular(orden: OrdenCompra): void {

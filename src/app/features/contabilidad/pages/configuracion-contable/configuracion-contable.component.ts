@@ -90,7 +90,7 @@ type CuentaIntegracionCampo = {
   ],
   template: `
     <section class="config-page">
-      <header class="surface-card page-header">
+      <header class="page-header">
         <div>
           <p class="eyebrow">Contabilidad</p>
           <h2>
@@ -99,7 +99,7 @@ type CuentaIntegracionCampo = {
               <mat-icon>help_outline</mat-icon>
             </button>
           </h2>
-          <p>Define la empresa que llevara contabilidad y controla sus periodos mensuales.</p>
+          <p>Configura la empresa, los períodos fiscales y las reglas que generan asientos automáticos.</p>
         </div>
       </header>
 
@@ -110,13 +110,14 @@ type CuentaIntegracionCampo = {
         </section>
       }
 
-      @if (error()) {
+      @if (error() && tabInicial() !== 2) {
         <section class="error-box">{{ error() }}</section>
       }
 
-      <section class="surface-card tabs-card">
-        <mat-tab-group [selectedIndex]="tabInicial()">
-          <mat-tab label="Empresa">
+      <section class="tabs-card surface-card">
+        <mat-tab-group class="config-tabs" [selectedIndex]="tabInicial()" (selectedIndexChange)="seleccionarPestana($event)">
+          <mat-tab>
+            <ng-template mat-tab-label><mat-icon>domain</mat-icon><span>Empresa</span></ng-template>
             <form class="empresa-form" (ngSubmit)="guardarEmpresa()">
               <div class="grid-3">
                 <mat-form-field appearance="outline">
@@ -237,7 +238,8 @@ type CuentaIntegracionCampo = {
             </form>
           </mat-tab>
 
-          <mat-tab label="Periodos">
+          <mat-tab>
+            <ng-template mat-tab-label><mat-icon>calendar_month</mat-icon><span>Períodos</span></ng-template>
             <section class="periodos-panel">
               <div class="periodos-toolbar">
                 <mat-form-field appearance="outline">
@@ -318,8 +320,12 @@ type CuentaIntegracionCampo = {
             </section>
           </mat-tab>
 
-          <mat-tab label="Integraciones">
+          <mat-tab>
+            <ng-template mat-tab-label><mat-icon>sync_alt</mat-icon><span>Integraciones</span>@if (integracionDirty()) { <span class="dirty-dot" aria-label="Cambios generales pendientes"></span> }</ng-template>
             <section class="integraciones-panel">
+              @if (error()) {
+                <section class="error-box integration-error" role="alert"><mat-icon>error_outline</mat-icon><div><strong>No se pudo completar la acción</strong><span>{{ error() }}</span></div></section>
+              }
               <div class="integration-header">
                 <div>
                   <h3>Automatizacion contable</h3>
@@ -327,6 +333,7 @@ type CuentaIntegracionCampo = {
                 </div>
                 <mat-slide-toggle
                   [(ngModel)]="integracionForm.habilitarAsientosAutomaticos"
+                  (ngModelChange)="marcarCambioIntegracion()"
                   name="habilitarAsientosAutomaticos"
                   [disabled]="!canUpdate()"
                 >
@@ -337,7 +344,7 @@ type CuentaIntegracionCampo = {
               <div class="grid-3">
                 <mat-form-field appearance="outline">
                   <mat-label>Crear asientos como</mat-label>
-                  <mat-select [(ngModel)]="integracionForm.modoAsientoAutomatico" name="modoAsientoAutomatico" [disabled]="!canUpdate()">
+                  <mat-select [(ngModel)]="integracionForm.modoAsientoAutomatico" (ngModelChange)="marcarCambioIntegracion()" name="modoAsientoAutomatico" [disabled]="!canUpdate()">
                     <mat-option value="BORRADOR">Borrador</mat-option>
                     <mat-option value="APROBADO">Aprobado</mat-option>
                   </mat-select>
@@ -458,7 +465,7 @@ type CuentaIntegracionCampo = {
                         <ng-container matColumnDef="acciones">
                           <th mat-header-cell *matHeaderCellDef></th>
                           <td mat-cell *matCellDef="let row">
-                            <button mat-button type="button" (click)="guardarMapeoProveedor(row)" [disabled]="!canUpdate()">Guardar</button>
+                            <button mat-stroked-button type="button" class="mapping-save" (click)="guardarMapeoProveedor(row)" [disabled]="!canUpdate()"><mat-icon>save</mat-icon>Guardar mapeo</button>
                           </td>
                         </ng-container>
                         <tr mat-header-row *matHeaderRowDef="columnasMapeoProveedor"></tr>
@@ -592,7 +599,7 @@ type CuentaIntegracionCampo = {
                       <ng-container matColumnDef="acciones">
                         <th mat-header-cell *matHeaderCellDef></th>
                         <td mat-cell *matCellDef="let row">
-                          <button mat-button type="button" (click)="guardarMapeoCategoria(row)" [disabled]="!canUpdate()">Guardar</button>
+                          <button mat-stroked-button type="button" class="mapping-save" (click)="guardarMapeoCategoria(row)" [disabled]="!canUpdate()"><mat-icon>save</mat-icon>Guardar mapeo</button>
                         </td>
                       </ng-container>
 
@@ -630,15 +637,16 @@ type CuentaIntegracionCampo = {
                 </mat-expansion-panel>
               </mat-accordion>
 
-              <footer class="actions-row">
-                <button mat-raised-button color="primary" type="button" (click)="guardarIntegracion()" [disabled]="guardandoIntegracion() || !canUpdate()">
+              <footer class="integration-save-bar">
+                <div class="save-state"><mat-icon>sync_alt</mat-icon><div><strong>Cuentas generales y automatización</strong><span>{{ integracionDirty() ? 'Tienes cambios sin guardar' : 'Todos los cambios generales están guardados' }}</span></div></div>
+                <button mat-flat-button color="primary" type="button" (click)="guardarIntegracion()" [disabled]="guardandoIntegracion() || !canUpdate() || !integracionDirty()">
                   <mat-icon>save</mat-icon>
-                  Guardar cuentas generales
+                  {{ guardandoIntegracion() ? 'Guardando…' : 'Guardar cambios generales' }}
                 </button>
               </footer>
 
               <section class="mapping-section">
-                <h3>Pendientes de contabilizacion</h3>
+                <div class="mapping-heading"><div><h3>Pendientes de contabilización</h3><p class="muted">Reintenta únicamente los documentos que no lograron generar un asiento.</p></div></div>
                 <div class="table-wrap">
                   <table mat-table [dataSource]="pendientes()">
                     <ng-container matColumnDef="origen">
@@ -685,21 +693,31 @@ type CuentaIntegracionCampo = {
     </section>
   `,
   styles: [`
-    .config-page { display: grid; gap: 1rem; }
-    .page-header { padding: 1.25rem; background: var(--tc-surface-container-lowest); }
-    .page-header h2 { margin: 0; font-size: 1.45rem; }
+    :host { display: block; min-width: 0; max-width: 100%; overflow-x: clip; }
+    .config-page { display: grid; gap: 1rem; min-width: 0; max-width: min(1440px, 100%); margin: 0 auto; overflow-x: clip; }
+    .page-header { display: flex; align-items: end; justify-content: space-between; gap: 2rem; padding: .25rem; }
+    .page-header h2 { margin: 0; font-size: clamp(1.55rem, 2vw, 2rem); letter-spacing: -.025em; }
     .page-header h2 { display: inline-flex; align-items: center; gap: .35rem; }
     .page-header p { margin: .35rem 0 0; color: var(--muted-foreground); }
     .eyebrow { margin: 0 0 .35rem; text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; color: var(--primary); }
-    .tabs-card { padding: 0; overflow: hidden; background: var(--tc-surface-container-lowest); }
-    .empresa-form, .periodos-panel, .integraciones-panel { padding: 1.25rem; display: grid; gap: 1rem; }
+    .tabs-card { min-width: 0; max-width: 100%; padding: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 16px; background: var(--tc-surface-container-lowest); box-shadow: 0 8px 28px rgb(15 23 42 / 5%); }
+    :host ::ng-deep .config-tabs .mat-mdc-tab-header { border-bottom: 1px solid var(--border); background: var(--tc-surface-container-low); }
+    :host ::ng-deep .config-tabs .mat-mdc-tab { min-width: 165px; height: 58px; }
+    :host ::ng-deep .config-tabs .mdc-tab__content { gap: .45rem; }
+    :host ::ng-deep .config-tabs .mdc-tab__text-label { color: var(--muted-foreground); font-weight: 650; }
+    :host ::ng-deep .config-tabs .mdc-tab--active .mdc-tab__text-label { color: var(--primary); }
+    :host ::ng-deep .config-tabs .mat-mdc-tab-body-wrapper, :host ::ng-deep .config-tabs .mat-mdc-tab-body, :host ::ng-deep .config-tabs .mat-mdc-tab-body-content { min-width: 0; max-width: 100%; }
+    .dirty-dot { width: 7px; height: 7px; border-radius: 999px; background: var(--primary); }
+    .empresa-form, .periodos-panel, .integraciones-panel { min-width: 0; max-width: 100%; padding: 1.25rem; display: grid; gap: 1rem; }
     .grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; align-items: center; }
     .span-2 { grid-column: span 2; }
     .integration-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: .85rem; border: 1px solid color-mix(in srgb, var(--outline) 45%, transparent); border-radius: .5rem; background: var(--tc-surface-container-low); }
     .integration-header h3, .integration-header p, .mapping-section h3, .mapping-section p { margin: 0; }
-    .mapping-section { display: grid; gap: .75rem; }
+    .mapping-section { display: grid; gap: .75rem; padding-top: 1.25rem; border-top: 1px solid var(--border); }
+    .mapping-heading h3, .mapping-heading p { margin: 0; }.mapping-heading p { margin-top: .3rem; }
     .account-groups { display: grid; gap: .85rem; }
-    .cuentas-accordion { display: block; margin: .5rem 0 1rem; }
+    .cuentas-accordion { display: block; min-width: 0; max-width: 100%; margin: .5rem 0 1rem; }
+    :host ::ng-deep .cuentas-accordion .mat-expansion-panel-body { min-width: 0; max-width: 100%; }
     .cuentas-accordion h4 { margin: 1rem 0 .5rem; font-size: .95rem; }
     .cuentas-accordion mat-panel-title { display: flex; align-items: center; gap: .5rem; }
     .cuentas-accordion mat-panel-title mat-icon { color: var(--primary); }
@@ -713,13 +731,15 @@ type CuentaIntegracionCampo = {
     .field-label mat-icon { font-size: 18px; width: 18px; height: 18px; }
     .check-help { display: inline-flex; align-items: center; gap: .5rem; }
     button[mat-icon-button] { color: var(--muted-foreground); }
-    .table-account { display: block; width: 260px; margin: .35rem 0 -.95rem; }
+    .table-account { display: block; width: 260px; max-width: 100%; margin: .35rem 0 -.95rem; }
     .actions-row, .periodos-toolbar { display: flex; justify-content: flex-end; align-items: center; gap: .75rem; flex-wrap: wrap; }
+    .integration-save-bar { position: sticky; bottom: .75rem; z-index: 3; display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 72px; padding: .75rem 1rem; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--tc-surface-container-lowest) 94%, transparent); box-shadow: 0 12px 30px rgb(15 23 42 / 13%); backdrop-filter: blur(12px); }.save-state { display: flex; align-items: center; gap: .75rem; }.save-state > mat-icon { color: var(--primary); }.save-state div { display: grid; gap: .1rem; }.save-state strong { font-size: .86rem; }.save-state span { color: var(--muted-foreground); font-size: .76rem; }.integration-save-bar button { min-width: 220px; min-height: 44px; }.mapping-save { min-height: 40px; white-space: nowrap; }.mapping-save mat-icon { width: 18px; height: 18px; font-size: 18px; }
     .periodos-toolbar { justify-content: space-between; }
     .warning-box, .error-box { display: flex; align-items: center; gap: .6rem; padding: .8rem 1rem; border-radius: .5rem; }
     .warning-box { background: color-mix(in srgb, #f59e0b 15%, transparent); color: #7a4b00; }
     .error-box { background: color-mix(in srgb, #b3261e 12%, transparent); color: #b3261e; }
-    .table-wrap { overflow: auto; }
+    .integration-error { align-items: flex-start; }.integration-error div { display: grid; gap: .2rem; }.integration-error span { font-size: .86rem; }
+    .table-wrap { width: 100%; min-width: 0; max-width: 100%; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; }
     table { width: 100%; min-width: 820px; }
     td strong, td .muted { display: block; }
     .muted { color: var(--muted-foreground); font-size: .86rem; }
@@ -733,6 +753,10 @@ type CuentaIntegracionCampo = {
       .account-grid { grid-template-columns: 1fr; }
       .span-2 { grid-column: auto; }
       .actions-row, .periodos-toolbar { justify-content: flex-start; }
+      :host ::ng-deep .config-tabs .mat-mdc-tab { min-width: 145px; height: 52px; }
+      .integration-save-bar { bottom: .5rem; }.save-state strong, .save-state > mat-icon { display: none; }.integration-save-bar button { min-width: 185px; }
+      .empresa-form, .periodos-panel, .integraciones-panel { padding: 1.1rem; }
+      .table-account { width: 220px; }
     }
   `]
 })
@@ -764,6 +788,12 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
   protected readonly cargandoPeriodos = signal(true);
   protected readonly guardandoEmpresa = signal(false);
   protected readonly guardandoIntegracion = signal(false);
+  private readonly integracionGuardada = signal<ConfiguracionIntegracionContable>(this.getDefaultIntegracion());
+  private readonly integracionVersion = signal(0);
+  protected readonly integracionDirty = computed(() => {
+    this.integracionVersion();
+    return JSON.stringify(this.integracionForm) !== JSON.stringify(this.integracionGuardada());
+  });
   protected readonly generandoPeriodos = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly empresaConfigurada = signal(false);
@@ -1008,6 +1038,7 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
 
     try {
       await this.integracionService.guardarConfiguracion({ ...this.integracionForm });
+      this.integracionGuardada.set({ ...this.integracionForm });
       this.mostrarMensaje('Integracion contable guardada.', 'sync_alt');
     } catch (error: unknown) {
       this.error.set(error instanceof Error ? error.message : 'No se pudo guardar la integracion contable.');
@@ -1018,6 +1049,16 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
 
   protected seleccionarCuentaIntegracion(campo: CuentaIntegracionKey, cuenta: CuentaContable | null): void {
     this.integracionForm[campo] = cuenta?.id ?? '';
+    this.marcarCambioIntegracion();
+  }
+
+  protected marcarCambioIntegracion(): void {
+    this.integracionVersion.update((version) => version + 1);
+  }
+
+  protected seleccionarPestana(index: number): void {
+    this.error.set(null);
+    this.tabInicial.set(index);
   }
 
   protected mapeoCategoria(categoriaId: string | undefined): MapeoCategoriaContable {
@@ -1119,7 +1160,11 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
     this.integracionService
       .getConfiguracion()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((config) => Object.assign(this.integracionForm, this.getDefaultIntegracion(), config));
+      .subscribe((config) => {
+        Object.assign(this.integracionForm, this.getDefaultIntegracion(), config);
+        this.integracionGuardada.set({ ...this.integracionForm });
+        this.integracionVersion.update((version) => version + 1);
+      });
 
     this.planCuentasService
       .getCuentas()

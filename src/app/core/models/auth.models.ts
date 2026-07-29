@@ -3,6 +3,7 @@ import { RoleDefinition } from './rbac.models';
 export interface LoginPayload {
   email: string;
   password: string;
+  remember?: boolean;
 }
 
 export interface RegisterUserPayload {

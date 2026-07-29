@@ -3,7 +3,7 @@ import { Database, get, limitToLast, onValue, orderByChild, push, query, ref, re
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
-import { OrdenCompra, OrdenCompraItem, Producto, RecepcionOC } from '../../inventario/models/inventario.models';
+import { Producto } from '../../inventario/models/inventario.models';
 import { ProductosService } from '../../inventario/services/productos.service';
 import { ProveedoresService } from '../../inventario/services/proveedores.service';
 import { VentaDetalle, VentaItem } from '../../ventas/models/ventas.models';
@@ -377,67 +377,6 @@ export class IntegracionContableService {
         origenModulo: 'VENTAS'
       };
       await this.guardarAsiento(config, reverso);
-    });
-  }
-
-  async contabilizarRecepcionOrdenCompra(orden: OrdenCompra, items: OrdenCompraItem[], recepcion: RecepcionOC): Promise<void> {
-    await this.ejecutarSeguro('RECEPCION_OC', recepcion.id ?? orden.id ?? '', orden.numero, 'INVENTARIO', async () => {
-      const config = await this.getConfiguracionOnce();
-      if (!config.habilitarAsientosAutomaticos) {
-        return;
-      }
-      if (!recepcion.contabilizarRecepcion || !recepcion.documentoProveedorNumero) {
-        throw new Error('Recepcion sin factura/documento de proveedor asociado.');
-      }
-      await this.validarNoContabilizado('RECEPCION_OC', recepcion.id ?? orden.id ?? '');
-
-      const contexto = await this.crearContexto(config);
-      const productos = await this.cargarProductos(items.map((item) => ({
-        productoId: item.productoId
-      }) as VentaItem));
-      const lineas: AsientoContableLinea[] = [];
-
-      for (const item of items) {
-        const cantidad = recepcion.items[item.id ?? '']?.cantidadRecibida ?? 0;
-        if (cantidad <= 0) {
-          continue;
-        }
-        const producto = productos.get(item.productoId);
-        const monto = this.roundToTwo(cantidad * item.costoUnitario);
-        // Prioridad de cuenta de inventario: override por proveedor → mapeo por categoría → global.
-        const overrideProv = this.cuentaOverrideProveedor(contexto, orden.proveedorId, 'cuentaInventarioId');
-        const cuentaDebe = overrideProv
-          ? this.requerir(overrideProv, 'Cuenta de inventario')
-          : this.resolverCuenta(contexto, producto, 'cuentaInventarioId', config.cuentaInventarioId, 'Cuenta de inventario');
-        lineas.push(this.crearLinea(contexto, cuentaDebe, item.descripcion, monto, 0));
-      }
-
-      if ((recepcion.documentoProveedorIva ?? 0) > 0) {
-        lineas.push(this.crearLinea(contexto, this.requerir(config.cuentaIvaComprasId, 'Cuenta de IVA compras'), 'IVA compras', recepcion.documentoProveedorIva ?? 0, 0));
-      }
-
-      const totalHaber = lineas.reduce((total, linea) => total + linea.debe, 0);
-      // Cuenta por pagar: override por proveedor → global.
-      const cuentaPorPagarId = this.cuentaOverrideProveedor(contexto, orden.proveedorId, 'cuentaCuentasPorPagarId') || config.cuentaCuentasPorPagarId;
-      lineas.push(this.crearLinea(contexto, this.requerir(cuentaPorPagarId, 'Cuenta por pagar proveedores'), `Factura proveedor ${recepcion.documentoProveedorNumero}`, 0, totalHaber));
-
-      await this.guardarAsiento(config, {
-        fecha: this.fechaDesdeTimestamp(recepcion.documentoProveedorFecha ?? recepcion.creadoEn),
-        periodo: '',
-        tipo: 'AJUSTE',
-        glosa: `Recepcion OC ${orden.numero} - Factura ${recepcion.documentoProveedorNumero}`,
-        referencia: recepcion.documentoProveedorNumero,
-        estado: 'BORRADOR',
-        origen: 'RECEPCION_OC',
-        origenTipo: 'RECEPCION_OC',
-        origenId: recepcion.id ?? null,
-        origenNumero: orden.numero,
-        origenModulo: 'INVENTARIO',
-        lineas,
-        totalDebe: 0,
-        totalHaber: 0,
-        diferencia: 0
-      });
     });
   }
 

@@ -79,11 +79,16 @@ export class CamposInventarioService {
   }
 
   private normalizarCampo(campo: CampoPersonalizado): CampoPersonalizado {
+    // visibleEnLista y activo se preservan a proposito: guardarCampo() normaliza antes de
+    // escribir, asi que omitirlos aqui los borraba de RTDB y las columnas dinamicas de la
+    // lista de productos (que filtra por visibleEnLista) nunca llegaban a aparecer.
     const base: CampoPersonalizado = {
       idCampo: campo.idCampo,
       nombreMostrar: campo.nombreMostrar,
       tipo: campo.tipo,
       requerido: campo.requerido ?? false,
+      visibleEnLista: campo.visibleEnLista ?? false,
+      activo: campo.activo ?? true,
       orden: campo.orden ?? 0
     };
 

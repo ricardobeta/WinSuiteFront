@@ -35,7 +35,7 @@ export const routes: Routes = [
             (component) => component.DashboardPageComponent,
           ),
         data: {
-          module: 'Ventas',
+          module: 'Inicio',
           page: 'Dashboard',
         },
       },

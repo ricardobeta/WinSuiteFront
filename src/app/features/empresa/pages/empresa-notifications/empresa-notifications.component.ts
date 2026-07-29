@@ -1,4 +1,5 @@
 import { Component, inject, signal } from '@angular/core';
+import { HttpErrorResponse } from '@angular/common/http';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -8,6 +9,17 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { finalize } from 'rxjs';
 import { CompanyNotificationService } from '../../../../core/services/company-notification.service';
+import { environment } from '../../../../../environments/environment';
+
+const PUSH_ERRORS: Record<string, string> = {
+  PUSH_NOT_SUPPORTED: 'Este navegador no soporta notificaciones push (o estas en modo incognito).',
+  PUSH_DENIED: 'El navegador bloqueo las notificaciones. Habilitalas en el candado de la barra de direcciones.',
+  PUSH_SW_FAILED: 'No se pudo instalar el service worker de notificaciones. Requiere HTTPS o localhost.',
+  PUSH_MESSAGING_UNAVAILABLE: 'No se pudo inicializar Firebase Messaging en este navegador.',
+  PUSH_TOKEN_FAILED: 'Firebase rechazo la suscripcion. Revisa la clave VAPID y que la API de FCM este habilitada.',
+  PUSH_TOKEN_EMPTY: 'Firebase no devolvio un token para este dispositivo.',
+  PUSH_DEVICE_REJECTED: 'No se pudo registrar el dispositivo en el servidor.'
+};
 
 @Component({
   selector: 'app-empresa-notifications',
@@ -58,10 +70,24 @@ export class EmpresaNotificationsComponent {
       if (value.pushEnabled) await this.notifications.enablePush();
       await new Promise<void>((resolve, reject) => this.notifications.savePreferences(value).subscribe({ next: () => resolve(), error: reject }));
       this.show('Preferencias guardadas.');
-    } catch {
+    } catch (error) {
       this.form.controls.pushEnabled.setValue(false);
-      this.show('No se pudo activar push. Revisa el permiso de notificaciones del navegador.');
+      this.show(this.describe(error));
     } finally { this.saving.set(false); }
   }
-  private show(message: string): void { this.snackBar.open(message, 'Cerrar', { duration: 3600 }); }
+
+  private describe(error: unknown): string {
+    const known = PUSH_ERRORS[(error as Error)?.message];
+    if (known) return known;
+    console.error('[notificaciones] no se pudieron guardar las preferencias', error);
+    if (error instanceof HttpErrorResponse) {
+      // status 0 = la peticion nunca llego (backend caido, CORS, mixed content).
+      return error.status === 0
+        ? 'No se pudo contactar al servidor. Revisa que el backend este arriba en ' + environment.apiBaseUrl + '.'
+        : `El servidor rechazo el guardado (HTTP ${error.status}).`;
+    }
+    return 'No se pudo guardar. Revisa la consola del navegador.';
+  }
+
+  private show(message: string): void { this.snackBar.open(message, 'Cerrar', { duration: 6000 }); }
 }

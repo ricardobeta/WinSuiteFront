@@ -55,6 +55,13 @@ import { MatTooltipModule } from '@angular/material/tooltip';
     </article>
   `,
   styles: [`
+    :host {
+      display: block;
+      width: 100%;
+      height: 100%;
+      container-type: size;
+    }
+
     .widget-shell {
       height: 100%;
       display: grid;
@@ -163,6 +170,54 @@ import { MatTooltipModule } from '@angular/material/tooltip';
     .empty-state .material-symbols-outlined {
       font-size: 34px;
       color: var(--primary);
+    }
+
+    @container (max-height: 180px) {
+      .widget-shell {
+        gap: .35rem;
+        padding: .625rem;
+      }
+
+      .widget-header {
+        gap: .4rem;
+      }
+
+      .title-group {
+        align-items: center;
+        gap: .45rem;
+      }
+
+      .title-group p {
+        display: none;
+      }
+
+      .widget-icon,
+      .drag-handle {
+        width: 28px;
+        height: 28px;
+      }
+
+      .widget-icon {
+        font-size: 18px;
+      }
+
+      h3 {
+        font-size: .88rem;
+      }
+
+      .widget-actions {
+        gap: 0;
+      }
+
+      .widget-actions button {
+        width: 32px;
+        height: 32px;
+        padding: 4px;
+      }
+
+      .empty-state {
+        min-height: 64px;
+      }
     }
 
     :host-context(html.theme-dark) .widget-shell {

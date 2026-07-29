@@ -1,42 +1,56 @@
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { CommonModule } from '@angular/common';
 import { Component, Injector, afterNextRender, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
-import { Router } from '@angular/router';
-import { Gridster, GridsterConfig, GridsterItem as GridsterItemComponent, GridsterItemConfig } from 'angular-gridster2';
+import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatDialog, MatDialogModule } from '@angular/material/dialog';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
+import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { Gridster, GridsterConfig, GridsterItem as GridsterItemComponent, GridsterItemConfig } from 'angular-gridster2';
+import { firstValueFrom, map } from 'rxjs';
 
+import { loadTourSteps } from '../../../../core/config/tour-steps/tour-steps.registry';
 import { AuthService } from '../../../../core/services/auth.service';
 import { AuthorizationService } from '../../../../core/services/authorization.service';
 import { GuidedTourService } from '../../../../core/services/guided-tour.service';
-import { loadTourSteps } from '../../../../core/config/tour-steps/tour-steps.registry';
+import { ConfirmDialogComponent, ConfirmDialogData } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { TourTriggerButtonComponent } from '../../../../shared/components/tour-trigger-button/tour-trigger-button.component';
-import { environment } from '../../../../../environments/environment';
-import { DASHBOARD_WIDGETS, findWidgetDefinition } from '../../config/dashboard-defaults';
 import { ChartWidgetComponent } from '../../components/chart-widget/chart-widget.component';
 import { DashboardEditToolbarComponent } from '../../components/dashboard-edit-toolbar/dashboard-edit-toolbar.component';
 import { DashboardWidgetPickerComponent } from '../../components/dashboard-widget-picker/dashboard-widget-picker.component';
 import { DashboardWidgetShellComponent } from '../../components/dashboard-widget-shell/dashboard-widget-shell.component';
 import { MetricCardWidgetComponent } from '../../components/metric-card-widget/metric-card-widget.component';
 import { TableWidgetComponent } from '../../components/table-widget/table-widget.component';
+import { DASHBOARD_WIDGETS, findWidgetDefinition, normalizeDashboardLayoutItem } from '../../config/dashboard-defaults';
+import {
+  DashboardLayoutItem,
+  DashboardMobileSection,
+  DashboardSnapshot,
+  DashboardWidgetData,
+  DashboardWidgetDefinition,
+  DashboardWidgetId
+} from '../../models/dashboard.models';
 import { DashboardConfigService } from '../../services/dashboard-config.service';
 import { DashboardMetricsService } from '../../services/dashboard-metrics.service';
-import { DashboardDataMap, DashboardLayoutItem, DashboardWidgetData, DashboardWidgetDefinition, DashboardWidgetId } from '../../models/dashboard.models';
 
 @Component({
   selector: 'app-dashboard-page',
   standalone: true,
   imports: [
     CommonModule,
+    RouterLink,
     Gridster,
     GridsterItemComponent,
     MatButtonModule,
     MatDialogModule,
+    MatExpansionModule,
     MatIconModule,
+    MatProgressBarModule,
     MatSnackBarModule,
     MatTooltipModule,
     ChartWidgetComponent,
@@ -47,219 +61,401 @@ import { DashboardDataMap, DashboardLayoutItem, DashboardWidgetData, DashboardWi
     TourTriggerButtonComponent
   ],
   template: `
-    <section class="dashboard-page">
+    <section class="dashboard-page" [class.editing-page]="editing()">
       <header class="dashboard-header" id="tour-dashboard-header">
-        <div class="dashboard-title-group">
-          <div class="dashboard-kicker">
-            <span class="material-symbols-outlined">space_dashboard</span>
-            <span>Inicio operativo</span>
+        <div class="dashboard-heading">
+          <div class="title-line">
+            <span class="heading-icon material-symbols-outlined" aria-hidden="true">space_dashboard</span>
+            <div>
+              <p class="eyebrow">Dashboard</p>
+              <h1>Resumen del negocio</h1>
+            </div>
             <app-tour-trigger-button (open)="startTourManually()" />
           </div>
-          <h1>Dashboard</h1>
-          <p>Metricas operativas calculadas al abrir el panel.</p>
-          <div class="dashboard-chips">
-            <span>
-              <span class="material-symbols-outlined">widgets</span>
-              {{ visibleItems().length }} widgets
-            </span>
-            <span>
-              <span class="material-symbols-outlined">sync</span>
-              Lectura puntual
-            </span>
+
+          <div class="snapshot-status" aria-live="polite">
+            @if (refreshing()) {
+              <span class="status-dot refreshing"></span>
+              Actualizando indicadores…
+            } @else if (snapshot(); as currentSnapshot) {
+              <span class="status-dot" [class.stale]="dataError()"></span>
+              {{ dataError() ? 'Datos sin actualizar' : 'Actualizado' }} {{ formatUpdatedAt(currentSnapshot.updatedAt) }}
+            } @else {
+              <span class="status-dot stale"></span>
+              Sin datos disponibles
+            }
+
             @if (editing()) {
-              <span class="editing-chip">
-                <span class="material-symbols-outlined">drag_indicator</span>
-                Modo edicion
-              </span>
+              <span class="widget-count">{{ visibleItems().length }} widgets</span>
             }
           </div>
         </div>
 
-        <div class="dashboard-actions">
-          @if (editing()) {
-            <p class="edit-hint">Usa el icono de arrastre de cada widget para moverlo.</p>
-          }
+        <div class="header-actions">
+          <button
+            mat-icon-button
+            type="button"
+            class="refresh-button"
+            matTooltip="Actualizar indicadores"
+            aria-label="Actualizar indicadores"
+            [disabled]="refreshing() || loading() || auth.bootstrapState() === 'error'"
+            (click)="refreshDashboard()"
+          >
+            <mat-icon [class.spin]="refreshing()">refresh</mat-icon>
+          </button>
+
           <app-dashboard-edit-toolbar
             [editing]="editing()"
+            [canPublish]="canPublishBase()"
             (edit)="startEditing()"
             (add)="openWidgetPicker()"
-            (reset)="resetLayout()"
-            (publish)="publishTenantDefault()"
+            (reset)="confirmResetLayout()"
+            (publish)="confirmPublishTenantDefault()"
             (cancel)="cancelEditing()"
             (save)="saveLayout()"
           />
         </div>
       </header>
 
-      @if (loading()) {
-        <section class="loading-card surface-card">
-          <span class="material-symbols-outlined">dashboard</span>
-          <p>Cargando dashboard...</p>
-        </section>
-      } @else {
-        <gridster [options]="gridOptions()" id="tour-dashboard-grid" class="dashboard-grid" [class.editing]="editing()">
-          @for (item of visibleItems(); track item.instanceId) {
-            <gridster-item [item]="item">
-              @if (definitionFor(item.widgetId); as definition) {
-                <app-dashboard-widget-shell
-                  [title]="definition.title"
-                  [subtitle]="definition.subtitle"
-                  [icon]="definition.icon"
-                  [editing]="editing()"
-                  [emptyMessage]="dataFor(definition.id)?.emptyMessage"
-                  (remove)="removeWidget(item.instanceId)"
-                  (duplicate)="duplicateWidget(item)"
-                >
-                  @switch (definition.kind) {
-                    @case ('metric') {
-                      <app-metric-card-widget [value]="dataFor(definition.id)?.metric" />
-                    }
-                    @case ('chart') {
-                      <app-chart-widget [options]="dataFor(definition.id)?.chartOptions ?? {}" />
-                    }
-                    @case ('table') {
-                      <app-table-widget [rows]="dataFor(definition.id)?.rows ?? []" />
-                    }
-                  }
-                </app-dashboard-widget-shell>
-              }
-            </gridster-item>
-          }
-        </gridster>
+      @if (refreshing()) {
+        <mat-progress-bar class="refresh-progress" mode="indeterminate" aria-label="Actualizando dashboard" />
       }
 
-      <button
-        mat-fab
-        color="primary"
-        type="button"
-        id="tour-dashboard-help"
-        class="help-fab"
-        matTooltip="Contactar ayuda"
-        aria-label="Contactar ayuda por WhatsApp"
-        (click)="openHelp()"
-      >
-        <mat-icon>support_agent</mat-icon>
-      </button>
+      @if (auth.bootstrapState() === 'error') {
+        <section class="state-card error-state" role="alert">
+          <span class="state-icon material-symbols-outlined" aria-hidden="true">cloud_off</span>
+          <div>
+            <h2>No pudimos preparar tu espacio de trabajo</h2>
+            <p>{{ auth.bootstrapError() || 'No fue posible cargar la empresa, los permisos y los módulos de esta sesión.' }}</p>
+          </div>
+          <div class="state-actions">
+            <button mat-raised-button color="primary" type="button" [disabled]="retryingBootstrap()" (click)="retryBootstrap()">
+              <mat-icon>refresh</mat-icon>
+              {{ retryingBootstrap() ? 'Reintentando…' : 'Reintentar' }}
+            </button>
+            <button mat-button type="button" (click)="returnToLogin()">Volver a iniciar sesión</button>
+          </div>
+        </section>
+      } @else if (loading()) {
+        <section class="state-card loading-state" aria-live="polite">
+          <span class="state-icon material-symbols-outlined" aria-hidden="true">dashboard</span>
+          <div>
+            <h2>Preparando tu resumen</h2>
+            <p>Estamos cargando los indicadores y la configuración del dashboard.</p>
+          </div>
+        </section>
+      } @else {
+        @if (dataError()) {
+          <section class="inline-alert" [class.stale-alert]="snapshot()" role="status">
+            <mat-icon>{{ snapshot() ? 'schedule' : 'error_outline' }}</mat-icon>
+            <p>
+              <strong>{{ snapshot() ? 'Mostramos la última información disponible.' : 'No pudimos cargar los indicadores.' }}</strong>
+              {{ dataError() }}
+            </p>
+            <button mat-button type="button" [disabled]="refreshing()" (click)="refreshDashboard()">Reintentar</button>
+          </section>
+        }
+
+        @if (!visibleItems().length) {
+          <section class="state-card empty-dashboard">
+            <span class="state-icon material-symbols-outlined" aria-hidden="true">space_dashboard</span>
+            <div>
+              <h2>Tu dashboard aún no tiene widgets</h2>
+              <p>Agrega los indicadores que necesitas para seguir el estado del negocio.</p>
+            </div>
+            <button mat-raised-button color="primary" type="button" (click)="startEditing(); openWidgetPicker()">
+              <mat-icon>add</mat-icon>
+              Agregar widget
+            </button>
+          </section>
+        } @else if (!isMobile()) {
+          <gridster [options]="gridOptions()" id="tour-dashboard-grid" class="dashboard-grid" [class.editing]="editing()">
+            @for (item of visibleItems(); track item.instanceId) {
+              <gridster-item [item]="item">
+                @if (definitionFor(item.widgetId); as definition) {
+                  <app-dashboard-widget-shell
+                    [title]="definition.title"
+                    [subtitle]="definition.subtitle"
+                    [icon]="definition.icon"
+                    [editing]="editing()"
+                    [emptyMessage]="dataFor(definition.id)?.emptyMessage"
+                    (remove)="removeWidget(item.instanceId)"
+                    (duplicate)="duplicateWidget(item)"
+                  >
+                    <ng-container
+                      [ngTemplateOutlet]="widgetContent"
+                      [ngTemplateOutletContext]="{ definition: definition }"
+                    />
+                  </app-dashboard-widget-shell>
+                }
+              </gridster-item>
+            }
+          </gridster>
+        } @else {
+          <div id="tour-dashboard-grid" class="mobile-dashboard">
+            <section aria-labelledby="mobile-summary-title">
+              <div class="section-heading">
+                <div>
+                  <p class="section-kicker">Hoy</p>
+                  <h2 id="mobile-summary-title">Indicadores clave</h2>
+                </div>
+              </div>
+
+              <div class="mobile-kpi-grid">
+                @for (item of mobileSummaryItems(); track item.instanceId) {
+                  @if (definitionFor(item.widgetId); as definition) {
+                    <article class="mobile-kpi">
+                      <header>
+                        <span class="material-symbols-outlined" aria-hidden="true">{{ definition.icon }}</span>
+                        <h3>{{ definition.title }}</h3>
+                      </header>
+                      <app-metric-card-widget [value]="dataFor(definition.id)?.metric" />
+                    </article>
+                  }
+                }
+              </div>
+            </section>
+
+            @if (mobileAlertItems().length) {
+              <section aria-labelledby="mobile-alert-title">
+                <div class="section-heading">
+                  <div>
+                    <p class="section-kicker">Atención</p>
+                    <h2 id="mobile-alert-title">Alertas operativas</h2>
+                  </div>
+                </div>
+
+                <div class="mobile-stack">
+                  @for (item of mobileAlertItems(); track item.instanceId) {
+                    @if (definitionFor(item.widgetId); as definition) {
+                      <app-dashboard-widget-shell
+                        [title]="definition.title"
+                        [subtitle]="definition.subtitle"
+                        [icon]="definition.icon"
+                        [editing]="false"
+                        [emptyMessage]="dataFor(definition.id)?.emptyMessage"
+                      >
+                        <ng-container
+                          [ngTemplateOutlet]="widgetContent"
+                          [ngTemplateOutletContext]="{ definition: definition }"
+                        />
+                      </app-dashboard-widget-shell>
+                    }
+                  }
+                </div>
+              </section>
+            }
+
+            @if (mobileAnalysisItems().length) {
+              <mat-accordion class="more-indicators">
+                <mat-expansion-panel>
+                  <mat-expansion-panel-header>
+                    <mat-panel-title>
+                      <mat-icon>monitoring</mat-icon>
+                      Más indicadores
+                    </mat-panel-title>
+                    <mat-panel-description>{{ mobileAnalysisItems().length }} disponibles</mat-panel-description>
+                  </mat-expansion-panel-header>
+
+                  <div class="mobile-stack analysis-stack">
+                    @for (item of mobileAnalysisItems(); track item.instanceId) {
+                      @if (definitionFor(item.widgetId); as definition) {
+                        <app-dashboard-widget-shell
+                          [title]="definition.title"
+                          [subtitle]="definition.subtitle"
+                          [icon]="definition.icon"
+                          [editing]="false"
+                          [emptyMessage]="dataFor(definition.id)?.emptyMessage"
+                        >
+                          <ng-container
+                            [ngTemplateOutlet]="widgetContent"
+                            [ngTemplateOutletContext]="{ definition: definition }"
+                          />
+                        </app-dashboard-widget-shell>
+                      }
+                    }
+                  </div>
+                </mat-expansion-panel>
+              </mat-accordion>
+            }
+          </div>
+        }
+      }
     </section>
+
+    <ng-template #widgetContent let-definition="definition">
+      <div class="widget-content" [class.table-content]="definition.kind === 'table'">
+        @switch (definition.kind) {
+          @case ('metric') {
+            <app-metric-card-widget [value]="dataFor(definition.id)?.metric" />
+          }
+          @case ('chart') {
+            <app-chart-widget [options]="dataFor(definition.id)?.chartOptions ?? {}" />
+          }
+          @case ('table') {
+            <app-table-widget [rows]="dataFor(definition.id)?.rows ?? []" />
+          }
+        }
+
+        @if (definition.actionRoute && definition.actionLabel) {
+          <a mat-button color="primary" class="widget-action" [routerLink]="definition.actionRoute">
+            {{ definition.actionLabel }}
+            <mat-icon>arrow_forward</mat-icon>
+          </a>
+        }
+      </div>
+    </ng-template>
   `,
   styles: [`
     .dashboard-page {
-      position: relative;
       min-height: calc(100dvh - var(--topbar-height) - 48px);
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      align-content: start;
       gap: 1rem;
       margin: calc(var(--space-6) * -1);
       padding: var(--space-6);
-      background:
-        linear-gradient(180deg, color-mix(in srgb, var(--primary) 6%, transparent), transparent 260px),
-        var(--tc-surface-container-low);
+      background: var(--tc-surface-container-low);
     }
 
     .dashboard-header {
-      position: relative;
       display: flex;
-      align-items: stretch;
+      align-items: center;
       justify-content: space-between;
       gap: 1rem;
-      padding: clamp(1rem, 2vw, 1.5rem);
-      min-height: 132px;
-      border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--border));
+      min-height: 92px;
+      padding: 1rem 1.15rem;
+      border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border));
       border-radius: var(--radius-md);
-      background: var(--tc-hero-background);
-      box-shadow: 0 12px 28px rgb(0 0 0 / 10%);
+      background: var(--tc-surface-container-lowest);
+      box-shadow: 0 8px 20px rgb(0 0 0 / 7%);
     }
 
-    .dashboard-title-group {
+    .dashboard-heading,
+    .dashboard-heading > div,
+    .title-line,
+    .snapshot-status,
+    .header-actions,
+    .state-actions {
       min-width: 0;
-      display: grid;
-      align-content: center;
-      gap: .35rem;
     }
 
-    .dashboard-kicker,
-    .dashboard-chips,
-    .dashboard-chips span {
-      display: inline-flex;
+    .dashboard-heading {
+      display: grid;
+      gap: .45rem;
+    }
+
+    .title-line,
+    .snapshot-status,
+    .header-actions,
+    .state-actions,
+    .mobile-kpi header,
+    .mat-mdc-card-title {
+      display: flex;
       align-items: center;
     }
 
-    .dashboard-kicker {
-      gap: .35rem;
+    .title-line {
+      gap: .7rem;
+    }
+
+    .heading-icon {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      border-radius: var(--radius-md);
       color: var(--primary);
-      font-size: .78rem;
-      font-weight: 800;
-      text-transform: uppercase;
-      letter-spacing: .08em;
+      background: color-mix(in srgb, var(--primary) 12%, transparent);
     }
 
-    .dashboard-kicker .material-symbols-outlined {
-      font-size: 18px;
-      letter-spacing: 0;
-    }
-
-
-    .dashboard-header h1 {
+    .eyebrow,
+    .section-kicker {
       margin: 0;
-      font-size: clamp(1.7rem, 2.8vw, 2.35rem);
+      color: var(--primary);
+      font-size: .72rem;
+      font-weight: 800;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: .12rem 0 0;
+      font-size: clamp(1.35rem, 2.2vw, 1.85rem);
       line-height: 1.1;
     }
 
-    .dashboard-header p {
-      margin: .3rem 0 0;
+    .snapshot-status {
+      gap: .4rem;
       color: var(--muted-foreground);
+      font-size: .8rem;
+      font-weight: 600;
     }
 
-    .dashboard-chips {
-      gap: .5rem;
-      flex-wrap: wrap;
-      margin-top: .35rem;
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--primary);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 12%, transparent);
     }
 
-    .dashboard-chips > span {
-      gap: .3rem;
-      min-height: 28px;
-      padding: .28rem .55rem;
+    .status-dot.stale {
+      background: var(--warning);
+      box-shadow: 0 0 0 4px color-mix(in srgb, var(--warning) 14%, transparent);
+    }
+
+    .status-dot.refreshing {
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    .widget-count {
+      margin-left: .3rem;
+      padding-left: .7rem;
+      border-left: 1px solid var(--border);
+      color: var(--primary);
+    }
+
+    .header-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: .65rem;
+    }
+
+    .refresh-button {
+      width: 44px;
+      height: 44px;
+      flex: 0 0 auto;
+    }
+
+    .refresh-progress {
+      margin-top: -.65rem;
       border-radius: 999px;
-      color: var(--muted-foreground);
-      background: var(--tc-surface-container-low);
-      font-size: .78rem;
-      font-weight: 700;
-      line-height: 1;
+      overflow: hidden;
     }
 
-    .dashboard-chips .material-symbols-outlined {
-      font-size: 17px;
-    }
-
-    .dashboard-chips .editing-chip {
-      color: var(--primary);
-      background: color-mix(in srgb, var(--primary) 12%, var(--card));
-    }
-
-    .dashboard-actions {
-      display: grid;
-      align-content: center;
-      justify-items: end;
-      gap: .55rem;
-      min-width: min(520px, 48vw);
-    }
-
-    .edit-hint {
-      margin: 0;
-      color: var(--primary);
-      font-size: .82rem;
-      font-weight: 700;
-      text-align: right;
+    .spin {
+      animation: spin .8s linear infinite;
     }
 
     .dashboard-grid {
-      min-height: 720px;
+      width: 100% !important;
+      min-width: 0;
+      min-height: max(760px, calc(100dvh - var(--topbar-height) - 156px));
+      overflow: visible !important;
       background: transparent;
     }
 
     gridster-item {
-      background: transparent !important;
       overflow: visible;
+      border-radius: var(--radius-md);
+      background: transparent !important;
+    }
+
+    .dashboard-grid.editing {
+      padding: .35rem;
+      border: 1px dashed color-mix(in srgb, var(--primary) 38%, transparent);
       border-radius: var(--radius-md);
     }
 
@@ -267,36 +463,180 @@ import { DashboardDataMap, DashboardLayoutItem, DashboardWidgetData, DashboardWi
       cursor: grab;
     }
 
-    .dashboard-grid.editing {
-      padding: .35rem;
-      border: 1px dashed color-mix(in srgb, var(--primary) 38%, transparent);
-      border-radius: var(--radius-md);
-      background:
-        linear-gradient(color-mix(in srgb, var(--primary) 5%, transparent) 1px, transparent 1px),
-        linear-gradient(90deg, color-mix(in srgb, var(--primary) 5%, transparent) 1px, transparent 1px);
-      background-size: 24px 24px;
+    .widget-content {
+      width: 100%;
+      height: 100%;
+      min-height: 0;
+      display: grid;
     }
 
-    .loading-card {
-      min-height: 360px;
+    .table-content {
+      grid-template-rows: minmax(0, 1fr) auto;
+      gap: .3rem;
+    }
+
+    .widget-action {
+      width: fit-content;
+      min-height: 40px;
+      justify-self: end;
+    }
+
+    .state-card {
+      min-height: 320px;
       display: grid;
       place-items: center;
       align-content: center;
-      gap: .5rem;
-      color: var(--muted-foreground);
+      gap: .8rem;
+      padding: 2rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      background: var(--tc-surface-container-lowest);
+      text-align: center;
     }
 
-    .loading-card .material-symbols-outlined {
-      font-size: 40px;
+    .state-card h2,
+    .section-heading h2 {
+      margin: 0;
+    }
+
+    .state-card p {
+      max-width: 580px;
+      margin: .35rem 0 0;
+      color: var(--muted-foreground);
+      line-height: 1.55;
+    }
+
+    .state-icon {
+      font-size: 44px;
       color: var(--primary);
     }
 
-    .help-fab {
-      position: fixed;
-      right: 1.35rem;
-      bottom: 1.35rem;
-      z-index: 40;
-      box-shadow: 0 14px 34px rgb(0 0 0 / 22%);
+    .error-state .state-icon {
+      color: var(--destructive);
+    }
+
+    .state-actions {
+      display: flex;
+      justify-content: center;
+      gap: .5rem;
+      flex-wrap: wrap;
+    }
+
+    .state-actions button,
+    .empty-dashboard button {
+      min-height: 44px;
+    }
+
+    .inline-alert {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: .7rem;
+      padding: .7rem .85rem;
+      border: 1px solid color-mix(in srgb, var(--destructive) 28%, var(--border));
+      border-radius: var(--radius-md);
+      color: var(--destructive);
+      background: color-mix(in srgb, var(--destructive) 7%, var(--tc-surface-container-lowest));
+    }
+
+    .inline-alert.stale-alert {
+      border-color: color-mix(in srgb, var(--warning) 38%, var(--border));
+      color: var(--foreground);
+      background: color-mix(in srgb, var(--warning) 9%, var(--tc-surface-container-lowest));
+    }
+
+    .inline-alert p {
+      margin: 0;
+      color: inherit;
+      font-size: .86rem;
+    }
+
+    .inline-alert strong {
+      margin-right: .25rem;
+    }
+
+    .mobile-dashboard {
+      display: grid;
+      gap: 1rem;
+    }
+
+    .section-heading {
+      margin-bottom: .65rem;
+    }
+
+    .section-heading h2 {
+      margin-top: .12rem;
+      font-size: 1.1rem;
+    }
+
+    .mobile-kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .65rem;
+    }
+
+    .mobile-kpi {
+      min-width: 0;
+      min-height: 172px;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      gap: .65rem;
+      padding: .85rem;
+      border: 1px solid color-mix(in srgb, var(--primary) 12%, var(--border));
+      border-radius: var(--radius-md);
+      background: var(--tc-surface-container-lowest);
+      box-shadow: 0 6px 16px rgb(0 0 0 / 6%);
+      overflow: hidden;
+    }
+
+    .mobile-kpi header {
+      gap: .4rem;
+      min-width: 0;
+      color: var(--primary);
+    }
+
+    .mobile-kpi header .material-symbols-outlined {
+      font-size: 20px;
+    }
+
+    .mobile-kpi h3 {
+      min-width: 0;
+      margin: 0;
+      color: var(--foreground);
+      font-size: .82rem;
+      line-height: 1.25;
+    }
+
+    .mobile-stack,
+    .analysis-stack {
+      display: grid;
+      gap: .75rem;
+    }
+
+    .mobile-stack app-dashboard-widget-shell {
+      display: block;
+      min-height: 300px;
+    }
+
+    .analysis-stack app-dashboard-widget-shell {
+      min-height: 320px;
+    }
+
+    .more-indicators mat-panel-title {
+      gap: .45rem;
+      font-weight: 750;
+    }
+
+    .more-indicators mat-panel-description {
+      justify-content: flex-end;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes pulse {
+      50% { opacity: .35; transform: scale(.82); }
     }
 
     @media (max-width: 900px) {
@@ -305,29 +645,85 @@ import { DashboardDataMap, DashboardLayoutItem, DashboardWidgetData, DashboardWi
         flex-direction: column;
       }
 
-      .dashboard-actions {
-        justify-items: stretch;
-        min-width: 0;
+      .header-actions {
+        justify-content: space-between;
+      }
+    }
+
+    @media (max-width: 759px) {
+      .dashboard-page {
+        min-height: calc(100dvh - var(--topbar-height));
+        gap: .75rem;
+        margin: calc(var(--space-4) * -1);
+        padding: var(--space-4);
       }
 
-      .edit-hint {
-        text-align: left;
+      .dashboard-page.editing-page {
+        padding-bottom: 5.25rem;
       }
 
-      .dashboard-grid {
-        min-height: 980px;
+      .dashboard-header {
+        align-items: center;
+        flex-direction: row;
+        min-height: auto;
+        padding: .75rem;
+      }
+
+      .heading-icon,
+      .title-line app-tour-trigger-button {
+        display: none;
+      }
+
+      .header-actions {
+        align-items: center;
+        flex: 0 0 auto;
+      }
+
+      .header-actions app-dashboard-edit-toolbar {
+        flex: 0 0 auto;
+      }
+
+      .inline-alert {
+        grid-template-columns: auto minmax(0, 1fr);
+      }
+
+      .inline-alert button {
+        grid-column: 2;
+        justify-self: start;
+      }
+
+      .state-card {
+        min-height: 280px;
+        padding: 1.25rem;
+      }
+    }
+
+    @media (max-width: 390px) {
+      .mobile-kpi-grid {
+        gap: .5rem;
+      }
+
+      .mobile-kpi {
+        min-height: 180px;
+        padding: .7rem;
       }
     }
 
     :host-context(html.theme-dark) .dashboard-page {
-      background:
-        linear-gradient(180deg, color-mix(in srgb, var(--primary) 8%, transparent), transparent 260px),
-        #0d1113;
+      background: #0d1113;
     }
 
-    :host-context(html.theme-dark) .dashboard-header {
-      border-color: color-mix(in srgb, var(--primary) 24%, var(--border));
-      box-shadow: 0 18px 38px rgb(0 0 0 / 34%);
+    :host-context(html.theme-dark) .dashboard-header,
+    :host-context(html.theme-dark) .state-card,
+    :host-context(html.theme-dark) .mobile-kpi {
+      background: #151b1e;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .spin,
+      .status-dot.refreshing {
+        animation: none;
+      }
     }
   `]
 })
@@ -335,18 +731,27 @@ export class DashboardPageComponent {
   private readonly configService = inject(DashboardConfigService);
   private readonly metricsService = inject(DashboardMetricsService);
   private readonly authorization = inject(AuthorizationService);
-  private readonly auth = inject(AuthService);
+  protected readonly auth = inject(AuthService);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   private readonly router = inject(Router);
   private readonly guidedTour = inject(GuidedTourService);
   private readonly injector = inject(Injector);
+  private readonly breakpointObserver = inject(BreakpointObserver);
 
   protected readonly loading = signal(true);
+  protected readonly refreshing = signal(false);
+  protected readonly retryingBootstrap = signal(false);
+  protected readonly dataError = signal<string | null>(null);
   protected readonly editing = signal(false);
   protected readonly items = signal<DashboardLayoutItem[]>([]);
+  protected readonly snapshot = signal<DashboardSnapshot | null>(null);
   private readonly snapshotBeforeEdit = signal<DashboardLayoutItem[]>([]);
-  protected readonly widgetData = toSignal(this.metricsService.getDashboardData(), { initialValue: {} as DashboardDataMap });
+
+  protected readonly isMobile = toSignal(
+    this.breakpointObserver.observe('(max-width: 759px)').pipe(map((state) => state.matches)),
+    { initialValue: typeof window !== 'undefined' && window.matchMedia('(max-width: 759px)').matches }
+  );
 
   protected readonly availableWidgets = computed(() =>
     DASHBOARD_WIDGETS.filter((widget) => this.canUseWidget(widget))
@@ -359,15 +764,34 @@ export class DashboardPageComponent {
     })
   );
 
+  protected readonly mobileSummaryItems = computed(() =>
+    this.itemsForMobileSection('summary').slice(0, 4)
+  );
+
+  protected readonly mobileAlertItems = computed(() =>
+    this.itemsForMobileSection('alert')
+  );
+
+  protected readonly mobileAnalysisItems = computed(() => {
+    const remainingSummary = this.itemsForMobileSection('summary').slice(4);
+    return [...remainingSummary, ...this.itemsForMobileSection('analysis')];
+  });
+
+  protected readonly canPublishBase = computed(() =>
+    this.authorization.canAccess('empresa_modulos', 'update')
+  );
+
   protected readonly gridOptions = signal<GridsterConfig>({
-    gridType: 'scrollVertical',
+    gridType: 'verticalFixed',
+    fixedRowHeight: 70,
+    setGridSize: true,
     compactType: 'compactUp',
     margin: 12,
     outerMargin: false,
     minCols: 12,
     maxCols: 12,
-    minRows: 8,
-    mobileBreakpoint: 760,
+    minRows: 10,
+    mobileBreakpoint: 0,
     displayGrid: 'onDrag&Resize',
     pushItems: true,
     draggable: {
@@ -378,22 +802,13 @@ export class DashboardPageComponent {
     },
     resizable: {
       enabled: false,
-      handles: {
-        s: true,
-        e: true,
-        n: true,
-        w: true,
-        se: true,
-        ne: true,
-        sw: true,
-        nw: true
-      }
+      handles: { s: true, e: true, n: true, w: true, se: true, ne: true, sw: true, nw: true }
     },
     itemChangeCallback: (item) => this.syncGridItem(item)
   });
 
   constructor() {
-    void this.loadLayout();
+    void this.initializeDashboard();
   }
 
   protected definitionFor(widgetId: DashboardWidgetId): DashboardWidgetDefinition | undefined {
@@ -401,7 +816,14 @@ export class DashboardPageComponent {
   }
 
   protected dataFor(widgetId: DashboardWidgetId): DashboardWidgetData | undefined {
-    return this.widgetData()[widgetId];
+    return this.snapshot()?.data[widgetId];
+  }
+
+  protected formatUpdatedAt(timestamp: number): string {
+    return new Intl.DateTimeFormat('es-EC', {
+      hour: '2-digit',
+      minute: '2-digit'
+    }).format(timestamp);
   }
 
   protected startEditing(): void {
@@ -417,37 +839,67 @@ export class DashboardPageComponent {
   }
 
   protected async saveLayout(): Promise<void> {
-    await this.configService.saveUserLayout(this.visibleItems());
-    this.editing.set(false);
-    this.setGridEditing(false);
-    this.showSuccess('Dashboard personal guardado.', 'save');
+    try {
+      await this.configService.saveUserLayout(this.visibleItems());
+      this.editing.set(false);
+      this.setGridEditing(false);
+      this.showSuccess('Dashboard personal guardado.', 'save');
+    } catch {
+      this.showError('No pudimos guardar la personalización. Inténtalo nuevamente.');
+    }
   }
 
-  protected async publishTenantDefault(): Promise<void> {
-    await this.configService.publishTenantDefault(this.visibleItems());
-    this.showSuccess('Dashboard base del negocio actualizado.', 'business');
+  protected async confirmPublishTenantDefault(): Promise<void> {
+    const confirmed = await this.confirm({
+      title: 'Publicar dashboard como base',
+      message: 'Este diseño se convertirá en la base para las personas de la empresa. Sus diseños personales no se modificarán.',
+      confirmText: 'Publicar',
+      cancelText: 'Cancelar'
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      await this.configService.publishTenantDefault(this.visibleItems());
+      this.showSuccess('Dashboard base del negocio actualizado.', 'business');
+    } catch {
+      this.showError('No pudimos publicar el dashboard base.');
+    }
   }
 
-  protected async resetLayout(): Promise<void> {
-    const layout = await this.configService.resetUserLayout();
-    this.items.set(this.cloneItems(layout.items));
-    this.showSuccess('Se restablecio el dashboard.', 'restart_alt');
+  protected async confirmResetLayout(): Promise<void> {
+    const confirmed = await this.confirm({
+      title: 'Restablecer dashboard',
+      message: 'Se descartará tu diseño personal y volverás a la configuración base del negocio.',
+      confirmText: 'Restablecer',
+      cancelText: 'Conservar diseño'
+    });
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const layout = await this.configService.resetUserLayout();
+      this.items.set(this.cloneItems(layout.items));
+      this.snapshotBeforeEdit.set(this.cloneItems(layout.items));
+      this.showSuccess('Dashboard restablecido.', 'restart_alt');
+    } catch {
+      this.showError('No pudimos restablecer el dashboard.');
+    }
   }
 
   protected openWidgetPicker(): void {
     const dialogRef = this.dialog.open(DashboardWidgetPickerComponent, {
       width: '680px',
       maxWidth: '94vw',
-      data: {
-        widgets: this.availableWidgets()
-      }
+      data: { widgets: this.availableWidgets() }
     });
 
     dialogRef.afterClosed().subscribe((widgetId?: DashboardWidgetId) => {
-      if (!widgetId) {
-        return;
+      if (widgetId) {
+        this.addWidget(widgetId);
       }
-      this.addWidget(widgetId);
     });
   }
 
@@ -456,44 +908,88 @@ export class DashboardPageComponent {
   }
 
   protected duplicateWidget(item: DashboardLayoutItem): void {
-    const copy = {
+    const definition = findWidgetDefinition(item.widgetId);
+    const copy: DashboardLayoutItem = {
       ...item,
       instanceId: `${item.widgetId}-${Date.now()}`,
       x: 0,
-      y: this.nextRow()
+      y: this.nextRow(),
+      rows: Math.max(Number(item.rows ?? 1), definition?.minRows ?? 1),
+      minItemRows: definition?.minRows
     };
     this.items.update((items) => [...items, copy]);
   }
 
-  protected openHelp(): void {
-    const phone = environment.support?.whatsappPhone?.replace(/[^\d]/g, '') ?? '';
-    if (!phone) {
-      this.showSuccess('Configura environment.support.whatsappPhone para activar WhatsApp.', 'support_agent');
+  protected async refreshDashboard(): Promise<void> {
+    if (this.refreshing()) {
       return;
     }
 
-    const user = this.auth.currentUser();
-    const template = environment.support?.whatsappMessage || 'Hola, necesito ayuda con Winsuite.';
-    const message = [
-      template,
-      '',
-      `Usuario: ${user?.displayName || user?.email || 'Usuario Winsuite'}`,
-      `Ruta: ${this.router.url}`
-    ].join('\n');
+    this.refreshing.set(true);
+    try {
+      const nextSnapshot = await firstValueFrom(this.metricsService.getDashboardSnapshot());
+      this.snapshot.set(nextSnapshot);
+      this.dataError.set(null);
+    } catch {
+      this.dataError.set('La actualización no se completó. Revisa tu conexión y vuelve a intentarlo.');
+    } finally {
+      this.refreshing.set(false);
+    }
+  }
 
-    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(message)}`, '_blank', 'noopener,noreferrer');
+  protected async retryBootstrap(): Promise<void> {
+    if (this.retryingBootstrap()) {
+      return;
+    }
+
+    this.retryingBootstrap.set(true);
+    try {
+      await this.auth.retryBootstrap();
+      await this.initializeDashboard();
+    } catch {
+      // AuthService mantiene el mensaje contextual para el siguiente intento.
+    } finally {
+      this.retryingBootstrap.set(false);
+    }
+  }
+
+  protected async returnToLogin(): Promise<void> {
+    await this.auth.logout();
+    await this.router.navigateByUrl('/auth/login');
   }
 
   protected startTourManually(): void {
     void loadTourSteps('dashboard').then((steps) => this.guidedTour.startTour('dashboard', steps));
   }
 
-  private async loadLayout(): Promise<void> {
-    try {
-      const layout = await this.configService.getResolvedLayout();
-      this.items.set(this.cloneItems(layout.items));
-    } finally {
+  private async initializeDashboard(): Promise<void> {
+    if (this.auth.bootstrapState() === 'error') {
       this.loading.set(false);
+      return;
+    }
+
+    this.loading.set(true);
+    this.dataError.set(null);
+
+    const [layoutResult, metricsResult] = await Promise.allSettled([
+      this.configService.getResolvedLayout(),
+      firstValueFrom(this.metricsService.getDashboardSnapshot())
+    ]);
+
+    if (layoutResult.status === 'fulfilled') {
+      this.items.set(this.cloneItems(layoutResult.value.items));
+    } else {
+      this.dataError.set('No pudimos cargar la configuración del dashboard.');
+    }
+
+    if (metricsResult.status === 'fulfilled') {
+      this.snapshot.set(metricsResult.value);
+    } else {
+      this.dataError.set('No pudimos cargar los indicadores. Reintenta cuando tu conexión esté disponible.');
+    }
+
+    this.loading.set(false);
+    if (layoutResult.status === 'fulfilled') {
       this.maybeStartTour();
     }
   }
@@ -519,15 +1015,26 @@ export class DashboardPageComponent {
 
     this.items.update((items) => [
       ...items,
-      {
+      normalizeDashboardLayoutItem({
         instanceId: `${widgetId}-${Date.now()}`,
         widgetId,
         x: 0,
         y: this.nextRow(),
         cols: definition.defaultCols,
-        rows: definition.defaultRows
-      }
+        rows: definition.defaultRows,
+        minItemRows: definition.minRows
+      })
     ]);
+  }
+
+  private itemsForMobileSection(section: DashboardMobileSection): DashboardLayoutItem[] {
+    return this.visibleItems()
+      .filter((item) => findWidgetDefinition(item.widgetId)?.mobileSection === section)
+      .sort((left, right) => {
+        const leftOrder = findWidgetDefinition(left.widgetId)?.mobileOrder ?? 99;
+        const rightOrder = findWidgetDefinition(right.widgetId)?.mobileOrder ?? 99;
+        return leftOrder - rightOrder;
+      });
   }
 
   private canUseWidget(widget: DashboardWidgetDefinition): boolean {
@@ -536,15 +1043,23 @@ export class DashboardPageComponent {
 
   private syncGridItem(item: GridsterItemConfig): void {
     const changed = item as DashboardLayoutItem;
+    const definition = findWidgetDefinition(changed.widgetId);
     this.items.update((items) =>
-      items.map((current) => current.instanceId === changed.instanceId ? { ...current, ...changed } : current)
+      items.map((current) => current.instanceId === changed.instanceId
+        ? {
+            ...current,
+            ...changed,
+            rows: Math.max(Number(changed.rows ?? 1), definition?.minRows ?? 1),
+            minItemRows: definition?.minRows
+          }
+        : current)
     );
   }
 
   private setGridEditing(enabled: boolean): void {
     this.gridOptions.update((options) => ({
       ...options,
-      displayGrid: enabled ? 'always' : 'onDrag&Resize',
+      displayGrid: enabled ? 'onDrag&Resize' : 'none',
       draggable: {
         ...(options.draggable ?? {}),
         enabled,
@@ -568,10 +1083,27 @@ export class DashboardPageComponent {
     return items.map((item) => ({ ...item }));
   }
 
+  private async confirm(data: ConfirmDialogData): Promise<boolean> {
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '440px',
+      maxWidth: '92vw',
+      data
+    });
+    return firstValueFrom(dialogRef.afterClosed(), { defaultValue: false });
+  }
+
   private showSuccess(message: string, icon: string): void {
     this.snackBar.openFromComponent(SuccessSnackbarComponent, {
       data: { message, icon },
       duration: 2600,
+      horizontalPosition: 'end',
+      verticalPosition: 'top'
+    });
+  }
+
+  private showError(message: string): void {
+    this.snackBar.open(message, 'Cerrar', {
+      duration: 4200,
       horizontalPosition: 'end',
       verticalPosition: 'top'
     });

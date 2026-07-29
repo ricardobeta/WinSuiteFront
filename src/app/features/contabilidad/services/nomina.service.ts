@@ -30,9 +30,16 @@ import {
   RubroNomina,
   TipoRolNomina
 } from '../models/nomina.models';
+import { AnticiposNominaService } from './anticipos-nomina.service';
 import { AsientosContablesService } from './asientos-contables.service';
 import { ConfiguracionContableService } from './configuracion-contable.service';
 import { IntegracionContableService } from './integracion-contable.service';
+import {
+  calcularDiasFondosReservaPeriodo,
+  calcularDiasTrabajadosPeriodo,
+  calcularDevengadosLegales,
+  calcularProporcionalMensual
+} from './nomina-calculos.util';
 import { PlanCuentasService } from './plan-cuentas.service';
 
 @Injectable({
@@ -45,6 +52,10 @@ export class NominaService {
   private readonly planCuentasService = inject(PlanCuentasService);
   private readonly integracionContable = inject(IntegracionContableService);
   private readonly configuracionContable = inject(ConfiguracionContableService);
+  private readonly anticiposService = inject(AnticiposNominaService);
+
+  /** Codigo del rubro de anticipo: es la bisagra entre el auxiliar de anticipos y el rol. */
+  static readonly CODIGO_RUBRO_ANTICIPO = 'ANTIC';
 
   /**
    * Palabras clave por cuenta, en orden de preferencia y acotadas al tipo contable correcto.
@@ -110,6 +121,10 @@ export class NominaService {
       modoDecimoTercero: empleado.modoDecimoTercero ?? 'ACUMULADO',
       modoDecimoCuarto: empleado.modoDecimoCuarto ?? 'ACUMULADO',
       modoFondosReserva: empleado.modoFondosReserva ?? 'ACUMULADO',
+      regimenFondosReserva: empleado.regimenFondosReserva === 'CONSTRUCCION'
+        || empleado.regimenFondosReserva === 'SERVICIOS_COMPLEMENTARIOS'
+        ? empleado.regimenFondosReserva
+        : 'GENERAL',
       camposPersonalizados: empleado.camposPersonalizados ?? {},
       creadoEn: empleado.creadoEn ?? timestamp,
       actualizadoEn: timestamp
@@ -224,7 +239,9 @@ export class NominaService {
       })
       .map(([, nombre]) => nombre);
 
-    const activos = empleados.filter((empleado) => empleado.estado === 'ACTIVO');
+    const activos = empleados.filter((empleado) =>
+      empleado.estado === 'ACTIVO' && calcularDiasTrabajadosPeriodo(empleado.fechaIngreso, periodo) > 0
+    );
     const rubrosActivos = rubros.filter((rubro) => rubro.activo);
     const rutaConfiguracion = '/workspace/contabilidad/configuracion';
     const paramsConfiguracion = { tab: 'integraciones', panel: 'nomina' };
@@ -267,8 +284,8 @@ export class NominaService {
         etiqueta: 'Empleados activos',
         ok: activos.length > 0,
         detalle: activos.length > 0
-          ? `${activos.length} empleados entraran al rol.`
-          : 'Registra al menos un empleado activo con sueldo base.',
+          ? `${activos.length} empleados con días trabajados entrarán al rol.`
+          : 'No hay empleados activos con días trabajados en el período seleccionado.',
         rutaResolver: '/workspace/contabilidad/nomina/empleados'
       },
       await this.evaluarPeriodo(periodo)
@@ -539,14 +556,25 @@ export class NominaService {
 
     const config = await this.getConfiguracionOnce();
     const empleados = await this.getEmpleadosOnce();
-    const activos = empleados.filter((empleado) => empleado.estado === 'ACTIVO');
+    const activos = empleados.filter((empleado) =>
+      empleado.estado === 'ACTIVO' && calcularDiasTrabajadosPeriodo(empleado.fechaIngreso, periodo) > 0
+    );
     if (activos.length === 0) {
-      throw new Error('No hay empleados activos para generar el rol.');
+      throw new Error('No hay empleados activos con días trabajados en el período seleccionado.');
     }
 
     const rubros = await this.getRubrosOnce();
     const rubrosAutomaticos = rubros.filter((rubro) => rubro.activo && rubro.modoCalculo !== 'MANUAL');
-    const detalles = activos.map((empleado) => this.calcularDetalle(empleado, rubrosAutomaticos, config, periodo));
+    // Los anticipos entregados durante el periodo se descuentan integramente en este rol.
+    const anticipos = await this.anticiposService.getPendientesPorEmpleado(periodo);
+    const rubroAnticipo = rubros.find((rubro) => rubro.codigo === NominaService.CODIGO_RUBRO_ANTICIPO) ?? null;
+    const detalles = activos.map((empleado) => this.calcularDetalle(
+      empleado,
+      rubrosAutomaticos,
+      config,
+      periodo,
+      this.crearLineaAnticipo(anticipos.get(empleado.id ?? '') ?? 0, rubroAnticipo, config)
+    ));
     return this.persistirRol('MENSUAL', periodo, fechaPago, detalles, config);
   }
 
@@ -1120,6 +1148,31 @@ export class NominaService {
       aprobadoEn: timestamp
     });
     await this.registrarAcumulados(resumen);
+    await this.descontarAnticipos(resumen);
+  }
+
+  /**
+   * Cierra los anticipos que este rol acaba de descontar. Solo cuenta lo que el rol realmente
+   * descuenta: si el contador borró o redujo la linea de anticipo de un empleado, su anticipo
+   * sigue pendiente y reaparece en el siguiente rol en lugar de darse por cobrado.
+   */
+  private async descontarAnticipos(resumen: ResumenRolPago): Promise<void> {
+    if ((resumen.rol.tipo ?? 'MENSUAL') !== 'MENSUAL') {
+      return;
+    }
+    const cubierto = new Map<string, number>();
+    for (const detalle of resumen.detalles) {
+      const monto = this.roundToTwo((detalle.lineas ?? [])
+        .filter((linea) => linea.tipo === 'DESCUENTO' && linea.codigo === NominaService.CODIGO_RUBRO_ANTICIPO)
+        .reduce((total, linea) => total + linea.monto, 0));
+      if (monto > 0) {
+        cubierto.set(detalle.empleadoId, monto);
+      }
+    }
+    if (cubierto.size === 0) {
+      return;
+    }
+    await this.anticiposService.marcarDescontados(resumen.rol.periodo, cubierto, resumen.rol);
   }
 
   /**
@@ -1154,7 +1207,8 @@ export class NominaService {
         vacacionesProvision: detalle.vacacionesProvision,
         // Solo el rol mensual aporta tiempo de servicio; los demas liquidan lo ya acumulado.
         diasTrabajados: (rol.tipo ?? 'MENSUAL') === 'MENSUAL'
-          ? this.diasTrabajadosEnPeriodo(empleados.get(detalle.empleadoId)?.fechaIngreso, rol.periodo)
+          ? detalle.diasTrabajadosPeriodo
+            ?? calcularDiasTrabajadosPeriodo(empleados.get(detalle.empleadoId)?.fechaIngreso, rol.periodo)
           : 0,
         registradoEn: timestamp
       };
@@ -1174,45 +1228,6 @@ export class NominaService {
     if (Object.keys(updates).length > 0) {
       await update(ref(this.database, `${this.getNominaPath()}/acumulados`), updates);
     }
-  }
-
-  /**
-   * Dias del periodo imputables al empleado, con la convencion ecuatoriana de mes de 30 dias.
-   * Si ingreso a mitad de mes solo cuentan los dias desde su ingreso.
-   */
-  /**
-   * El derecho a fondos de reserva nace a partir del mes 13 de trabajo, no desde el ingreso.
-   * Se aplica desde el mes siguiente al primer aniversario, que es el criterio con el que operan
-   * las planillas del IESS.
-   */
-  private aplicaFondosReserva(fechaIngreso: string | undefined, periodo: string): boolean {
-    if (!fechaIngreso || fechaIngreso.length < 7) {
-      return false;
-    }
-    const anio = Number(fechaIngreso.slice(0, 4));
-    const mes = Number(fechaIngreso.slice(5, 7));
-    if (!anio || !mes) {
-      return false;
-    }
-    // Aniversario + 1 mes, normalizando el desborde de diciembre.
-    const primerMesConDerecho = new Date(anio + 1, mes, 1);
-    const clave = `${primerMesConDerecho.getFullYear()}-${String(primerMesConDerecho.getMonth() + 1).padStart(2, '0')}`;
-    return periodo >= clave;
-  }
-
-  private diasTrabajadosEnPeriodo(fechaIngreso: string | undefined, periodo: string): number {
-    if (!fechaIngreso) {
-      return 30;
-    }
-    const mesIngreso = fechaIngreso.slice(0, 7);
-    if (mesIngreso > periodo) {
-      return 0;
-    }
-    if (mesIngreso < periodo) {
-      return 30;
-    }
-    const diaIngreso = Number(fechaIngreso.slice(8, 10)) || 1;
-    return Math.max(0, Math.min(30, 30 - diaIngreso + 1));
   }
 
   async getAcumuladosEmpleados(anio: string): Promise<AcumuladoEmpleado[]> {
@@ -1290,8 +1305,8 @@ export class NominaService {
   readonly conceptosProvision: ConceptoProvision[] = ['DECIMO_TERCERO', 'DECIMO_CUARTO', 'FONDOS_RESERVA', 'VACACIONES'];
 
   readonly etiquetasConcepto: Record<ConceptoProvision, string> = {
-    DECIMO_TERCERO: 'Decimo tercero',
-    DECIMO_CUARTO: 'Decimo cuarto',
+    DECIMO_TERCERO: 'Décimo tercero',
+    DECIMO_CUARTO: 'Décimo cuarto',
     FONDOS_RESERVA: 'Fondos de reserva',
     VACACIONES: 'Vacaciones'
   };
@@ -1299,8 +1314,8 @@ export class NominaService {
   /** Base de calculo de cada provision, para explicarla en pantalla en vez de mostrar solo la cifra. */
   readonly basesCalculoProvision: Record<ConceptoProvision, string> = {
     DECIMO_TERCERO: 'Total de ingresos del mes / 12',
-    DECIMO_CUARTO: 'Salario basico unificado / 12',
-    FONDOS_RESERVA: '8.33% del total de ingresos del mes',
+    DECIMO_CUARTO: 'SBU / 12, proporcional a días trabajados',
+    FONDOS_RESERVA: 'Doceava parte del ingreso con derecho',
     VACACIONES: 'Total de ingresos del mes / 24'
   };
 
@@ -1321,6 +1336,7 @@ export class NominaService {
       actualizadoEn: Date.now(),
       anuladoEn: Date.now()
     });
+    await this.anticiposService.liberarDescontados(rolId, resumen.rol.periodo);
   }
 
   /**
@@ -1358,6 +1374,8 @@ export class NominaService {
     }
 
     await this.borrarAcumulados(resumen);
+    // Los anticipos que descontaba este rol vuelven a quedar pendientes.
+    await this.anticiposService.liberarDescontados(rolId, resumen.rol.periodo);
     // Se libera el vinculo origen->asiento para que el rol pueda regenerarse limpio si hace falta.
     await set(this.getAsientoOrigenRef(rolId), null);
     await update(ref(this.database, `${this.getNominaPath()}/rolesPago/${rolId}`), {
@@ -1417,6 +1435,33 @@ export class NominaService {
     return match ? this.normalizarRol(match[1], match[0]) : null;
   }
 
+  /**
+   * Linea de descuento por anticipo entregado en el periodo. Va como origen RUBRO, no SISTEMA:
+   * recalcularDetalle descarta y regenera todas las lineas SISTEMA, asi que un anticipo marcado
+   * como SISTEMA desapareceria al primer guardado del borrador.
+   */
+  crearLineaAnticipo(
+    monto: number,
+    rubroAnticipo: RubroNomina | null,
+    config: ConfiguracionNominaContable
+  ): RolPagoLinea | null {
+    const montoNormalizado = this.roundToTwo(monto);
+    if (montoNormalizado <= 0) {
+      return null;
+    }
+    return {
+      rubroId: rubroAnticipo?.id ?? '',
+      codigo: NominaService.CODIGO_RUBRO_ANTICIPO,
+      nombre: rubroAnticipo?.nombre ?? 'Anticipo de sueldo',
+      tipo: 'DESCUENTO',
+      afectaIess: false,
+      cuentaContableId: rubroAnticipo?.cuentaContableId || config.cuentaAnticiposEmpleadosId || '',
+      monto: montoNormalizado,
+      origen: 'RUBRO',
+      editable: true
+    };
+  }
+
   private crearLineaSueldo(sueldoBase: number): RolPagoLinea {
     return {
       rubroId: '',
@@ -1435,15 +1480,27 @@ export class NominaService {
     empleado: EmpleadoNomina,
     rubrosAutomaticos: RubroNomina[],
     config: ConfiguracionNominaContable,
-    periodo: string
+    periodo: string,
+    lineaAnticipo: RolPagoLinea | null = null
   ): RolPagoDetalle {
-    const sueldoBase = this.roundToTwo(empleado.sueldoBase);
+    const sueldoMensual = this.roundToTwo(empleado.sueldoBase);
+    const diasTrabajadosPeriodo = calcularDiasTrabajadosPeriodo(empleado.fechaIngreso, periodo);
+    const factorProporcional = diasTrabajadosPeriodo / 30;
+    const sueldoBase = calcularProporcionalMensual(sueldoMensual, diasTrabajadosPeriodo);
+    const diasFondosReservaPeriodo = calcularDiasFondosReservaPeriodo(
+      empleado.fechaIngreso,
+      periodo,
+      empleado.regimenFondosReserva ?? 'GENERAL'
+    );
     const lineas: RolPagoLinea[] = [this.crearLineaSueldo(sueldoBase)];
 
     for (const rubro of rubrosAutomaticos) {
       const monto = rubro.modoCalculo === 'PORCENTAJE_SUELDO'
         ? this.roundToTwo(sueldoBase * (Number(rubro.valorReferencia ?? 0) / 100))
-        : this.roundToTwo(Number(rubro.valorReferencia ?? 0));
+        : this.roundToTwo(
+          Number(rubro.valorReferencia ?? 0)
+          * (rubro.tipo === 'INGRESO' ? factorProporcional : 1)
+        );
       if (monto <= 0) {
         continue;
       }
@@ -1460,16 +1517,24 @@ export class NominaService {
       });
     }
 
+    if (lineaAnticipo) {
+      lineas.push({ ...lineaAnticipo });
+    }
+
     const detalleBase: RolPagoDetalle = {
       id: empleado.id ?? `emp_${Date.now()}`,
       empleadoId: empleado.id ?? '',
       empleadoNombre: `${empleado.apellidos} ${empleado.nombres}`.trim(),
       cargo: empleado.cargo,
+      sueldoMensual,
+      diasTrabajadosPeriodo,
+      diasFondosReservaPeriodo,
       sueldoBase,
       modoDecimoTercero: empleado.modoDecimoTercero ?? config.modoDecimos,
       modoDecimoCuarto: empleado.modoDecimoCuarto ?? config.modoDecimos,
       modoFondosReserva: empleado.modoFondosReserva ?? config.modoDecimos,
-      aplicaFondosReserva: this.aplicaFondosReserva(empleado.fechaIngreso, periodo),
+      regimenFondosReserva: empleado.regimenFondosReserva ?? 'GENERAL',
+      aplicaFondosReserva: diasFondosReservaPeriodo > 0,
       decimoTerceroMensualizado: 0,
       decimoCuartoMensualizado: 0,
       fondosReservaMensualizado: 0,
@@ -1498,8 +1563,8 @@ export class NominaService {
    *
    * Decimos y fondos de reserva siguen la eleccion de CADA empleado (mensualizado vs acumulado),
    * no una politica de la empresa: lo mensualizado se paga en este rol como ingreso que no afecta
-   * IESS, y lo acumulado se provisiona. Los fondos de reserva solo se devengan cuando el empleado
-   * ya cumplio un año de trabajo (`aplicaFondosReserva`).
+   * IESS, y lo acumulado se provisiona. Los fondos de reserva usan la clasificación congelada de
+   * cada trabajador: régimen general o trabajo directo de construcción.
    */
   recalcularDetalle(detalle: RolPagoDetalle, config: ConfiguracionNominaContable): RolPagoDetalle {
     const sueldoLinea = detalle.lineas.find((linea) => linea.origen === 'SUELDO');
@@ -1520,13 +1585,26 @@ export class NominaService {
     const aportePersonalIess = this.roundToTwo(baseIess * (config.porcentajeAportePersonalIess / 100));
     const aportePatronalIess = this.roundToTwo(baseIess * (config.porcentajeAportePatronalIess / 100));
 
-    const aplicaFondos = detalle.aplicaFondosReserva ?? false;
-    const devengado = {
-      decimoTercero: config.provisionarDecimoTercero ? this.roundToTwo(baseRemuneracion / 12) : 0,
-      decimoCuarto: config.provisionarDecimoCuarto && config.salarioBasicoUnificado > 0 ? this.roundToTwo(config.salarioBasicoUnificado / 12) : 0,
-      fondosReserva: config.provisionarFondosReserva && aplicaFondos ? this.roundToTwo(baseRemuneracion * 0.0833) : 0,
-      vacaciones: config.provisionarVacaciones ? this.roundToTwo(baseRemuneracion / 24) : 0
-    };
+    const diasTrabajados = Math.max(0, Math.min(30, detalle.diasTrabajadosPeriodo ?? 30));
+    const diasFondos = Math.max(
+      0,
+      Math.min(
+        diasTrabajados,
+        detalle.diasFondosReservaPeriodo ?? (detalle.aplicaFondosReserva ? diasTrabajados : 0)
+      )
+    );
+    const devengado = calcularDevengadosLegales({
+      baseRemuneracion,
+      salarioBasicoUnificado: config.salarioBasicoUnificado,
+      diasTrabajados,
+      diasFondosReserva: diasFondos,
+      calcularDecimoTercero: config.provisionarDecimoTercero,
+      calcularDecimoCuarto: config.provisionarDecimoCuarto,
+      calcularFondosReserva: config.provisionarFondosReserva
+        || detalle.regimenFondosReserva === 'CONSTRUCCION'
+        || detalle.regimenFondosReserva === 'SERVICIOS_COMPLEMENTARIOS',
+      calcularVacaciones: config.provisionarVacaciones
+    });
 
     const modoD13 = detalle.modoDecimoTercero ?? config.modoDecimos;
     const modoD14 = detalle.modoDecimoCuarto ?? config.modoDecimos;
@@ -1553,6 +1631,11 @@ export class NominaService {
 
     const totalDescuentosManuales = this.roundToTwo(descuentosManuales.reduce((total, linea) => total + linea.monto, 0));
     const totalDescuentos = this.roundToTwo(aportePersonalIess + totalDescuentosManuales);
+    // El anticipo se separa del resto de descuentos para que el rol lo muestre como tal y para
+    // que totalAnticipos del rol cuadre contra el auxiliar de anticipos.
+    const totalAnticipos = this.roundToTwo(descuentosManuales
+      .filter((linea) => linea.codigo === NominaService.CODIGO_RUBRO_ANTICIPO)
+      .reduce((total, linea) => total + linea.monto, 0));
 
     if (aportePersonalIess > 0) {
       lineasSistema.push({
@@ -1575,9 +1658,9 @@ export class NominaService {
       ingresosAdicionales: this.roundToTwo(totalIngresos - sueldoBase),
       aportePersonalIess,
       aportePatronalIess,
-      anticipos: 0,
+      anticipos: totalAnticipos,
       prestamos: 0,
-      otrosDescuentos: totalDescuentosManuales,
+      otrosDescuentos: this.roundToTwo(totalDescuentosManuales - totalAnticipos),
       decimoTerceroProvision,
       decimoCuartoProvision,
       fondosReservaProvision,

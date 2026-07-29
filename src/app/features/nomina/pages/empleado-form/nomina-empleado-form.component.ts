@@ -13,9 +13,14 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 import { CamposCustomFormComponent } from '../../../../shared/components/campos-custom-form/campos-custom-form.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { TwoDecimalInputDirective } from '../../../../shared/directives/two-decimal-input.directive';
 import { CampoPersonalizado } from '../../../../shared/models/clientes.models';
 import { dateAIso, isoADate } from '../../../../shared/utils/fecha-input.util';
-import { EmpleadoNomina, ModoDecimos } from '../../../contabilidad/models/nomina.models';
+import {
+  EmpleadoNomina,
+  ModoDecimos,
+  RegimenFondosReserva
+} from '../../../contabilidad/models/nomina.models';
 import { NominaService } from '../../../contabilidad/services/nomina.service';
 
 @Component({
@@ -32,7 +37,8 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
     MatInputModule,
     MatSelectModule,
     MatSnackBarModule,
-    CamposCustomFormComponent
+    CamposCustomFormComponent,
+    TwoDecimalInputDirective
   ],
   template: `
     <section class="empleado-form-page">
@@ -103,7 +109,7 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
 
             <mat-form-field appearance="outline">
               <mat-label>Sueldo base</mat-label>
-              <input matInput type="number" min="0" step="0.01" formControlName="sueldoBase" />
+              <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="sueldoBase" />
             </mat-form-field>
           </div>
         </section>
@@ -111,12 +117,13 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
         <section class="form-section">
           <h3>Beneficios de ley</h3>
           <p class="section-hint">
-            Cada empleado decide ante el IESS si recibe sus decimos y fondos de reserva mensualizados
-            junto al sueldo, o acumulados para cobrarlos en su fecha. No es una politica de la empresa.
+            Cada empleado decide ante el IESS si recibe sus décimos y fondos de reserva mensualizados
+            junto al sueldo, o acumulados para cobrarlos en su fecha. La fecha desde la que causa
+            fondos depende de la labor clasificada en su propia ficha.
           </p>
           <div class="grid-4">
             <mat-form-field appearance="outline">
-              <mat-label>Decimo tercero</mat-label>
+              <mat-label>Décimo tercero</mat-label>
               <mat-select formControlName="modoDecimoTercero">
                 <mat-option value="ACUMULADO">Acumulado (se paga en diciembre)</mat-option>
                 <mat-option value="MENSUALIZADO">Mensualizado (con cada rol)</mat-option>
@@ -124,7 +131,7 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
             </mat-form-field>
 
             <mat-form-field appearance="outline">
-              <mat-label>Decimo cuarto</mat-label>
+              <mat-label>Décimo cuarto</mat-label>
               <mat-select formControlName="modoDecimoCuarto">
                 <mat-option value="ACUMULADO">Acumulado (se paga en su fecha)</mat-option>
                 <mat-option value="MENSUALIZADO">Mensualizado (con cada rol)</mat-option>
@@ -143,11 +150,37 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
             </mat-form-field>
 
             <mat-form-field appearance="outline">
+              <mat-label>Actividad para fondos</mat-label>
+              <mat-select formControlName="regimenFondosReserva">
+                <mat-option value="GENERAL">Régimen general</mat-option>
+                <mat-option value="CONSTRUCCION">Trabajo directo de construcción</mat-option>
+                <mat-option value="SERVICIOS_COMPLEMENTARIOS">Servicios complementarios</mat-option>
+              </mat-select>
+              <mat-hint>No depende del sector de la empresa, sino de la labor del trabajador</mat-hint>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
               <mat-label>Cargas familiares</mat-label>
               <input matInput type="number" min="0" step="1" formControlName="cargasFamiliares" />
               <mat-hint>Conyuge e hijos: dan derecho al 5% de utilidades</mat-hint>
             </mat-form-field>
           </div>
+
+          @if (form.controls.regimenFondosReserva.value === 'CONSTRUCCION' || form.controls.regimenFondosReserva.value === 'SERVICIOS_COMPLEMENTARIOS') {
+            <div class="construction-note" role="status">
+              <mat-icon>{{ form.controls.regimenFondosReserva.value === 'CONSTRUCCION' ? 'engineering' : 'shield' }}</mat-icon>
+              <p>
+                <strong>Fondos desde el primer día.</strong>
+                @if (form.controls.regimenFondosReserva.value === 'CONSTRUCCION') {
+                  Usa esta clasificación únicamente para albañiles, maestros de obra y personas que
+                  ejecutan directamente trabajos de construcción; no para personal administrativo o de apoyo.
+                } @else {
+                  Usa esta clasificación para vigilancia y seguridad privada, limpieza, jardinería o
+                  alimentación cuando la persona trabaje bajo servicios complementarios.
+                }
+              </p>
+            </div>
+          }
         </section>
 
         <section class="form-section">
@@ -197,6 +230,17 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
     .section-hint { color: var(--muted-foreground); font-size: .88rem; max-width: 78ch; }
     .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
     .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+    .construction-note {
+      display: flex;
+      gap: .7rem;
+      align-items: flex-start;
+      padding: .85rem 1rem;
+      border-radius: .85rem;
+      background: color-mix(in srgb, var(--primary) 10%, transparent);
+      color: var(--foreground);
+    }
+    .construction-note mat-icon { flex: 0 0 auto; color: var(--primary); }
+    .construction-note p { max-width: 72ch; line-height: 1.5; }
     .custom-section { border-top: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent); padding-top: 1rem; }
     .actions-row { display: flex; justify-content: flex-end; gap: .75rem; align-items: center; flex-wrap: wrap; }
     .error-box { padding: .8rem 1rem; border-radius: .5rem; background: color-mix(in srgb, #b3261e 12%, transparent); color: #b3261e; }
@@ -234,21 +278,29 @@ export class NominaEmpleadoFormComponent implements OnInit {
     modoDecimoTercero: ['ACUMULADO' as ModoDecimos, [Validators.required]],
     modoDecimoCuarto: ['ACUMULADO' as ModoDecimos, [Validators.required]],
     modoFondosReserva: ['ACUMULADO' as ModoDecimos, [Validators.required]],
+    regimenFondosReserva: ['GENERAL' as RegimenFondosReserva, [Validators.required]],
     cargasFamiliares: [0],
     camposPersonalizados: this.formBuilder.control<Record<string, any>>({})
   });
 
-  /** Aviso de antiguedad: los fondos de reserva recien se devengan desde el mes 13 de trabajo. */
+  /** Explica la fecha de inicio según la clasificación individual del trabajador. */
   protected avisoFondosReserva(): string {
+    if (this.form.controls.regimenFondosReserva.value === 'CONSTRUCCION') {
+      return 'Régimen construcción: causa fondos desde el primer día trabajado.';
+    }
+    if (this.form.controls.regimenFondosReserva.value === 'SERVICIOS_COMPLEMENTARIOS') {
+      return 'Servicios complementarios: causa fondos desde el primer día trabajado.';
+    }
     const fecha = this.form.controls.fechaIngreso.value;
     if (!fecha) {
       return '';
     }
-    const primerMesConDerecho = new Date(fecha.getFullYear() + 1, fecha.getMonth() + 1, 1);
-    if (primerMesConDerecho <= new Date()) {
-      return '';
-    }
-    return `Aun no genera fondos de reserva: se devengan desde ${primerMesConDerecho.toLocaleDateString('es-EC', { month: 'long', year: 'numeric' })}.`;
+    const inicioDerecho = new Date(fecha.getFullYear() + 1, fecha.getMonth(), fecha.getDate());
+    return `Régimen general: causa fondos desde el ${inicioDerecho.toLocaleDateString('es-EC', {
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    })}.`;
   }
 
   ngOnInit(): void {
@@ -294,6 +346,7 @@ export class NominaEmpleadoFormComponent implements OnInit {
         modoDecimoTercero: raw.modoDecimoTercero ?? 'ACUMULADO',
         modoDecimoCuarto: raw.modoDecimoCuarto ?? 'ACUMULADO',
         modoFondosReserva: raw.modoFondosReserva ?? 'ACUMULADO',
+        regimenFondosReserva: raw.regimenFondosReserva ?? 'GENERAL',
         cargasFamiliares: Number(raw.cargasFamiliares ?? 0),
         camposPersonalizados: raw.camposPersonalizados ?? {}
       });
@@ -328,6 +381,7 @@ export class NominaEmpleadoFormComponent implements OnInit {
       modoDecimoTercero: empleado.modoDecimoTercero ?? 'ACUMULADO',
       modoDecimoCuarto: empleado.modoDecimoCuarto ?? 'ACUMULADO',
       modoFondosReserva: empleado.modoFondosReserva ?? 'ACUMULADO',
+      regimenFondosReserva: empleado.regimenFondosReserva ?? 'GENERAL',
       cargasFamiliares: empleado.cargasFamiliares ?? 0,
       camposPersonalizados: empleado.camposPersonalizados ?? {}
     });

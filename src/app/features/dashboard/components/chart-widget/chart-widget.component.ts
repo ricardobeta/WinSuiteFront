@@ -21,10 +21,16 @@ echarts.use([BarChart, LineChart, PieChart, GridComponent, LegendComponent, Tool
     <div echarts class="chart" [options]="options()" [autoResize]="true"></div>
   `,
   styles: [`
+    :host {
+      display: block;
+      width: 100%;
+      height: 100%;
+    }
+
     .chart {
       width: 100%;
       height: 100%;
-      min-height: 180px;
+      min-height: 150px;
     }
   `]
 })

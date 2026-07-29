@@ -93,6 +93,8 @@ export class PendienteContabilizacionDialogComponent {
       REVERSO_FACTURA_COMPRA: 'Reverso de factura de compra',
       ROL_PAGO: 'Rol de pago',
       REVERSO_ROL_PAGO: 'Reverso de rol de pago',
+      ANTICIPO_NOMINA: 'Anticipo de nomina',
+      REVERSO_ANTICIPO_NOMINA: 'Reverso de anticipo de nomina',
       CXP_MANUAL: 'Cuenta por pagar manual',
       REVERSO_CXP_MANUAL: 'Reverso CxP manual',
       PAGO_PROVEEDOR: 'Pago a proveedor',

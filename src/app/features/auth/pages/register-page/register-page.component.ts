@@ -35,8 +35,6 @@ export class RegisterPageComponent {
   private readonly router = inject(Router);
   private readonly formBuilder = inject(FormBuilder);
   private readonly dialog = inject(MatDialog);
-  // TODO: Remove before production
-  private readonly TEST_MODE = false;
 
   protected readonly auth = inject(AuthService);
   protected readonly userForm = this.formBuilder.nonNullable.group(
@@ -55,15 +53,21 @@ export class RegisterPageComponent {
       return;
     }
 
-    if (!this.TEST_MODE) {
+    try {
       await this.auth.register(this.userForm.getRawValue() as RegisterUserPayload);
+      await this.router.navigateByUrl('/workspace');
+    } catch {
+      // AuthService exposes the recoverable message in the page.
     }
-    await this.router.navigateByUrl('/workspace');
   }
 
   protected async continueWithGoogle(): Promise<void> {
-    await this.auth.loginWithGoogle();
-    await this.router.navigateByUrl('/workspace');
+    try {
+      await this.auth.loginWithGoogle();
+      await this.router.navigateByUrl('/workspace');
+    } catch {
+      // AuthService exposes the recoverable message in the page.
+    }
   }
 
   protected openHelp(): void {

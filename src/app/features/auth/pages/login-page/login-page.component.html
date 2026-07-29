@@ -1,82 +1,123 @@
 <div class="auth-layout">
-  <section class="hero-panel">
+  <section class="hero-panel" aria-labelledby="login-hero-title">
     <img
       class="hero-image"
       src="/images/auth-hero.jpg"
-      alt="Ilustracion abstracta tecnologica"
+      alt=""
+      aria-hidden="true"
     />
-    <div class="overlay"></div>
+    <div class="hero-overlay" aria-hidden="true"></div>
     <div class="hero-content">
-      <img class="brand-logo" src="/images/winsuite-logo.png" alt="Winsuite" />
-      <h1>Gestiona tu empresa con WinSuite</h1>
-      <p class="subtitle">
-        Contabilidad, facturacion, inventario y procesos automatizados con IA para que tu equipo trabaje con informacion clara.
-      </p>
+      <img class="brand-logo" src="/images/winsuite-logo.png" alt="WinSuite — Gestión empresarial integral" />
+
+      <div class="hero-copy">
+        <p class="hero-kicker"><mat-icon aria-hidden="true">space_dashboard</mat-icon>Tu operación, conectada</p>
+        <h1 id="login-hero-title">Gestiona tu empresa con WinSuite</h1>
+        <p class="hero-subtitle">
+          Contabilidad, facturación, inventario y procesos automatizados con IA para que tu equipo trabaje con información clara.
+        </p>
+
+        <ul class="hero-capabilities" aria-label="Capacidades de WinSuite">
+          <li>
+            <mat-icon aria-hidden="true">point_of_sale</mat-icon>
+            <div><strong>Ventas e inventario</strong><span>La operación diaria en un solo lugar.</span></div>
+          </li>
+          <li>
+            <mat-icon aria-hidden="true">account_balance</mat-icon>
+            <div><strong>Contabilidad</strong><span>Información organizada para decidir.</span></div>
+          </li>
+          <li>
+            <mat-icon aria-hidden="true">auto_awesome</mat-icon>
+            <div><strong>Automatización con IA</strong><span>Procesos más ágiles para tu equipo.</span></div>
+          </li>
+        </ul>
+      </div>
     </div>
   </section>
 
-  <section class="form-panel">
-    <mat-card appearance="outlined" class="auth-card">
-      <h2>Iniciar sesion</h2>
-      <p class="muted">Ingresa con tu cuenta para continuar.</p>
+  <main class="form-panel" aria-labelledby="login-title">
+    <div class="form-frame">
+      <img class="mobile-brand" src="/images/winsuite-logo.png" alt="WinSuite" />
+      <mat-card class="auth-card">
+        <header class="form-heading">
+          <p class="form-kicker"><mat-icon aria-hidden="true">verified_user</mat-icon>Acceso a tu espacio</p>
+          <h2 id="login-title">Iniciar sesión</h2>
+          <p class="form-description">Ingresa con tu cuenta para continuar.</p>
+        </header>
 
-      @if (auth.error(); as apiError) {
-        <p class="error-banner">{{ apiError }}</p>
-      }
+        @if (auth.error(); as apiError) {
+          <p class="error-banner" role="alert">
+            <mat-icon aria-hidden="true">error_outline</mat-icon>
+            <span>{{ apiError }}</span>
+          </p>
+        }
 
-      <button mat-stroked-button class="google-button" type="button" [disabled]="auth.loading()" (click)="continueWithGoogle()">
-        <span class="google-mark" aria-hidden="true">G</span>
-        Continuar con Google
-      </button>
-
-      <div class="auth-divider"><span>o usa tu correo</span></div>
-
-      <form [formGroup]="form" (ngSubmit)="submit()" novalidate>
-        <mat-form-field appearance="outline">
-          <mat-label>Correo electronico</mat-label>
-          <input matInput type="email" formControlName="email" />
-          @if (hasControlError('email', 'required')) {
-            <mat-error>El correo es obligatorio.</mat-error>
-          } @else if (hasControlError('email', 'email')) {
-            <mat-error>Ingresa un correo valido.</mat-error>
-          }
-        </mat-form-field>
-
-        <mat-form-field appearance="outline">
-          <mat-label>Contrasena</mat-label>
-          <input
-            matInput
-            [type]="passwordToggle.visible() ? 'text' : 'password'"
-            formControlName="password"
-            autocomplete="current-password"
-          />
-          <app-password-visibility-toggle #passwordToggle matSuffix />
-          @if (hasControlError('password', 'required')) {
-            <mat-error>La contrasena es obligatoria.</mat-error>
-          }
-        </mat-form-field>
-
-        <mat-checkbox formControlName="remember">Recordarme</mat-checkbox>
-
-        <button
-          mat-flat-button
-          color="primary"
-          class="full-width"
-          type="submit"
-          [disabled]="auth.loading()"
-        >
-          @if (auth.loading()) {
-            <mat-spinner diameter="18"></mat-spinner>
-          } @else {
-            <span>Entrar</span>
-          }
+        <button mat-stroked-button class="google-button" type="button" [disabled]="auth.loading()" (click)="continueWithGoogle()">
+          <span class="google-mark" aria-hidden="true">G</span>
+          Continuar con Google
         </button>
-      </form>
 
-      <p class="switch-text">
-        Aun no tienes cuenta?
-        <a routerLink="/auth/register">Registrate aqui</a>
-      </p>
-    </mat-card>
-  </section>
+        <div class="auth-divider" aria-hidden="true"><span>o usa tu correo</span></div>
+
+        <form class="auth-form" [formGroup]="form" (ngSubmit)="submit()" novalidate [attr.aria-busy]="auth.loading()">
+          <mat-form-field appearance="outline">
+            <mat-label>Correo electrónico</mat-label>
+            <mat-icon matPrefix aria-hidden="true">mail</mat-icon>
+            <input
+              matInput
+              type="email"
+              formControlName="email"
+              name="email"
+              autocomplete="username"
+              inputmode="email"
+            />
+            @if (hasControlError('email', 'required')) {
+              <mat-error>El correo es obligatorio.</mat-error>
+            } @else if (hasControlError('email', 'email')) {
+              <mat-error>Ingresa un correo válido.</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>Contraseña</mat-label>
+            <mat-icon matPrefix aria-hidden="true">lock</mat-icon>
+            <input
+              matInput
+              [type]="passwordToggle.visible() ? 'text' : 'password'"
+              formControlName="password"
+              name="password"
+              autocomplete="current-password"
+            />
+            <app-password-visibility-toggle #passwordToggle matSuffix />
+            @if (hasControlError('password', 'required')) {
+              <mat-error>La contraseña es obligatoria.</mat-error>
+            }
+          </mat-form-field>
+
+          <div class="form-options">
+            <mat-checkbox formControlName="remember">Mantener mi sesión iniciada</mat-checkbox>
+          </div>
+
+          <button
+            mat-flat-button
+            color="primary"
+            class="submit-button"
+            type="submit"
+            [disabled]="auth.loading()"
+          >
+            @if (auth.loading()) {
+              <span class="button-content"><mat-spinner diameter="18"></mat-spinner>Iniciando sesión…</span>
+            } @else {
+              <span>Iniciar sesión</span>
+            }
+          </button>
+        </form>
+
+        <p class="switch-panel">
+          ¿Aún no tienes cuenta?
+          <a routerLink="/auth/register">Crea una ahora</a>
+        </p>
+      </mat-card>
+    </div>
+  </main>
 </div>

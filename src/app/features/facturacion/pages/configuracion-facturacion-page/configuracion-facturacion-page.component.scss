@@ -1,0 +1,713 @@
+:host {
+  display: block;
+}
+
+.config-page {
+  display: grid;
+  gap: 1rem;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding-bottom: 0.5rem;
+}
+
+.page-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 2rem;
+  padding: 0.25rem 0.25rem 0.5rem;
+}
+
+.eyebrow {
+  margin: 0 0 0.35rem;
+  color: var(--primary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.page-header h2 {
+  margin: 0;
+  color: var(--foreground);
+  font-size: clamp(1.55rem, 2vw, 2rem);
+  font-weight: 650;
+  letter-spacing: -0.025em;
+}
+
+.page-description,
+.section-heading p,
+.block-heading p,
+.panel-help,
+.test-block p {
+  color: var(--muted-foreground);
+}
+
+.page-description {
+  max-width: 68ch;
+  margin: 0.35rem 0 0;
+}
+
+.header-summary {
+  display: flex;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.header-summary span,
+.count-label,
+.tab-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--tc-surface-container-lowest);
+  color: var(--muted-foreground);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+
+.header-summary span {
+  min-height: 36px;
+  padding: 0.3rem 0.75rem;
+}
+
+.header-summary mat-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--primary);
+  font-size: 18px;
+}
+
+.config-surface {
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  background: var(--tc-surface-container-lowest);
+  box-shadow: 0 8px 28px rgb(15 23 42 / 5%);
+}
+
+.config-tabs {
+  --mat-tab-header-active-focus-indicator-color: var(--primary);
+  --mat-tab-header-active-hover-indicator-color: var(--primary);
+  --mat-tab-header-active-label-text-color: var(--primary);
+  --mat-tab-header-active-focus-label-text-color: var(--primary);
+}
+
+:host ::ng-deep .config-tabs .mat-mdc-tab-header {
+  border-bottom: 1px solid var(--border);
+  background: var(--tc-surface-container-low);
+}
+
+:host ::ng-deep .config-tabs .mat-mdc-tab {
+  min-width: 150px;
+  height: 58px;
+}
+
+:host ::ng-deep .config-tabs .mdc-tab__content {
+  gap: 0.45rem;
+}
+
+:host ::ng-deep .config-tabs .mdc-tab__text-label {
+  color: var(--muted-foreground);
+  font-weight: 600;
+}
+
+:host ::ng-deep .config-tabs .mdc-tab--active .mdc-tab__text-label {
+  color: var(--primary);
+}
+
+:host ::ng-deep .config-tabs .mat-mdc-tab-body-content {
+  overflow: visible;
+}
+
+.dirty-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--primary);
+}
+
+.tab-count {
+  min-width: 24px;
+  min-height: 24px;
+  justify-content: center;
+  padding: 0 0.4rem;
+  background: var(--tc-surface-container);
+  font-size: 0.72rem;
+}
+
+.tab-panel {
+  display: grid;
+  gap: 1.5rem;
+  width: min(100%, 1080px);
+  margin: 0 auto;
+  padding: 1.75rem;
+}
+
+.section-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+}
+
+.section-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  place-items: center;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary) 11%, transparent);
+  color: var(--primary);
+}
+
+.section-heading h3,
+.block-heading h4,
+.create-block h4,
+.test-block h4,
+.empty-state h4 {
+  margin: 0;
+  color: var(--foreground);
+}
+
+.section-heading h3 {
+  font-size: 1.2rem;
+  letter-spacing: -0.01em;
+}
+
+.section-heading p,
+.block-heading p,
+.test-block p {
+  margin: 0.3rem 0 0;
+}
+
+.settings-block,
+.list-block {
+  padding-top: 1.4rem;
+  border-top: 1px solid var(--border);
+}
+
+.block-heading {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.15rem;
+}
+
+.block-heading h4,
+.create-block h4,
+.test-block h4 {
+  font-size: 1rem;
+  font-weight: 650;
+}
+
+.block-heading p,
+.test-block p,
+.panel-help {
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 32px;
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  background: var(--tc-surface-container);
+  color: var(--muted-foreground);
+  font-size: 0.76rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.status-badge mat-icon {
+  width: 17px;
+  height: 17px;
+  font-size: 17px;
+}
+
+.status-production {
+  background: color-mix(in srgb, #dc2626 10%, transparent);
+  color: #b91c1c;
+}
+
+.choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.choice-option {
+  display: block;
+  min-width: 0;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--tc-surface-container-lowest);
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.choice-option:hover {
+  border-color: color-mix(in srgb, var(--primary) 45%, var(--border));
+}
+
+.choice-option.selected {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 5%, var(--tc-surface-container-lowest));
+}
+
+:host ::ng-deep .choice-option .mdc-form-field,
+:host ::ng-deep .choice-option .mat-mdc-radio-button {
+  width: 100%;
+}
+
+:host ::ng-deep .choice-option .mdc-label {
+  display: grid;
+  gap: 0.2rem;
+  width: 100%;
+  padding-left: 0.45rem;
+}
+
+.choice-option strong {
+  color: var(--foreground);
+  font-size: 0.92rem;
+}
+
+.choice-option span {
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid color-mix(in srgb, var(--primary) 25%, var(--border));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--primary) 5%, var(--tc-surface-container-lowest));
+}
+
+.notice > mat-icon {
+  flex: 0 0 auto;
+  color: var(--primary);
+}
+
+.notice div {
+  display: grid;
+  flex: 1;
+  gap: 0.15rem;
+}
+
+.notice strong {
+  color: var(--foreground);
+  font-size: 0.86rem;
+}
+
+.notice span {
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+}
+
+.warning-notice {
+  margin-top: 0.9rem;
+  border-color: color-mix(in srgb, #d97706 30%, var(--border));
+  background: color-mix(in srgb, #f59e0b 8%, var(--tc-surface-container-lowest));
+}
+
+.warning-notice > mat-icon {
+  color: #b45309;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.6rem 1rem;
+  align-items: start;
+}
+
+.form-grid-wide {
+  grid-template-columns: 130px repeat(3, minmax(160px, 1fr)) auto;
+}
+
+.span-2 {
+  grid-column: 1 / -1;
+}
+
+.toggle-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+  min-height: 48px;
+  align-items: center;
+}
+
+.create-block {
+  padding: 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--tc-surface-container-low);
+}
+
+.create-block > h4 {
+  margin-bottom: 1rem;
+}
+
+.form-action {
+  display: flex;
+  align-items: center;
+  min-height: 56px;
+}
+
+.form-action button {
+  min-height: 44px;
+  white-space: nowrap;
+}
+
+.catalog-accordion {
+  display: grid;
+  gap: 0.75rem;
+}
+
+:host ::ng-deep .catalog-accordion .mat-expansion-panel {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--tc-surface-container-lowest);
+  box-shadow: none;
+}
+
+:host ::ng-deep .catalog-accordion .mat-expansion-panel-header {
+  min-height: 58px;
+}
+
+:host ::ng-deep .catalog-accordion .mat-expansion-panel-header-title {
+  color: var(--foreground);
+  font-weight: 650;
+}
+
+:host ::ng-deep .catalog-accordion .mat-expansion-panel-header-description {
+  justify-content: flex-end;
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+}
+
+.panel-help {
+  margin: 0 0 0.75rem;
+}
+
+.table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.catalog-table,
+.data-table {
+  width: 100%;
+}
+
+.data-table {
+  min-width: 760px;
+}
+
+.catalog-table th,
+.data-table th {
+  color: var(--muted-foreground);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.035em;
+  text-transform: uppercase;
+}
+
+.catalog-table td,
+.data-table td {
+  color: var(--foreground);
+}
+
+.mat-column-toggle,
+.mat-column-acciones {
+  width: 112px;
+  text-align: right;
+}
+
+.code-cell {
+  display: inline-flex;
+  padding: 0.2rem 0.5rem;
+  border-radius: 6px;
+  background: var(--tc-surface-container);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.danger-action {
+  color: #b91c1c;
+}
+
+.count-label {
+  min-height: 30px;
+  padding: 0.2rem 0.65rem;
+  white-space: nowrap;
+}
+
+.empty-state {
+  display: grid;
+  justify-items: center;
+  padding: 2.5rem 1rem;
+  border: 1px dashed var(--border);
+  border-radius: 12px;
+  text-align: center;
+}
+
+.empty-state > mat-icon {
+  width: 38px;
+  height: 38px;
+  margin-bottom: 0.65rem;
+  color: var(--muted-foreground);
+  font-size: 38px;
+}
+
+.empty-state p {
+  max-width: 52ch;
+  margin: 0.35rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.86rem;
+}
+
+.inline-empty {
+  margin: 0;
+  color: var(--muted-foreground);
+}
+
+.test-block {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding: 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--tc-surface-container-low);
+}
+
+.test-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: min(100%, 480px);
+}
+
+.test-controls mat-form-field {
+  flex: 1;
+}
+
+.test-controls button {
+  min-height: 48px;
+  white-space: nowrap;
+}
+
+.save-bar {
+  position: sticky;
+  z-index: 10;
+  bottom: 0.75rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 72px;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--tc-surface-container-lowest) 94%, transparent);
+  box-shadow: 0 12px 30px rgb(15 23 42 / 13%);
+  backdrop-filter: blur(12px);
+}
+
+.save-state {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.save-state > mat-icon {
+  color: var(--primary);
+}
+
+.save-state div {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.save-state strong {
+  color: var(--foreground);
+  font-size: 0.86rem;
+}
+
+.save-state span {
+  color: var(--muted-foreground);
+  font-size: 0.76rem;
+}
+
+.save-bar button {
+  min-width: 170px;
+  min-height: 44px;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 1100px) {
+  .form-grid-wide {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .form-action {
+    align-items: start;
+  }
+}
+
+@media (max-width: 760px) {
+  .config-page {
+    gap: 0.75rem;
+  }
+
+  .page-header {
+    align-items: start;
+  }
+
+  .header-summary {
+    display: none;
+  }
+
+  .page-description {
+    font-size: 0.88rem;
+  }
+
+  .config-surface {
+    border-radius: 12px;
+  }
+
+  :host ::ng-deep .config-tabs .mat-mdc-tab {
+    min-width: 132px;
+    height: 52px;
+  }
+
+  .tab-panel {
+    gap: 1.25rem;
+    padding: 1.1rem;
+  }
+
+  .section-heading {
+    gap: 0.7rem;
+  }
+
+  .section-icon {
+    width: 40px;
+    height: 40px;
+    flex-basis: 40px;
+    border-radius: 10px;
+  }
+
+  .choice-grid,
+  .form-grid,
+  .form-grid-wide {
+    grid-template-columns: 1fr;
+  }
+
+  .span-2 {
+    grid-column: auto;
+  }
+
+  .block-heading {
+    align-items: start;
+  }
+
+  .notice,
+  .test-block {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .notice button,
+  .notice a {
+    width: 100%;
+  }
+
+  .test-controls {
+    align-items: stretch;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .test-controls button {
+    width: 100%;
+  }
+
+  .save-bar {
+    bottom: 0.5rem;
+    min-height: 64px;
+    padding: 0.6rem;
+  }
+
+  .save-state > mat-icon,
+  .save-state strong {
+    display: none;
+  }
+
+  .save-state {
+    padding-left: 0.25rem;
+  }
+
+  .save-state span {
+    max-width: 18ch;
+  }
+
+  .save-bar button {
+    min-width: 152px;
+  }
+}
+
+@media (max-width: 420px) {
+  .page-header {
+    padding-inline: 0;
+  }
+
+  .tab-panel {
+    padding: 1rem 0.85rem;
+  }
+
+  .create-block {
+    padding: 0.9rem;
+  }
+
+  .save-state {
+    display: none;
+  }
+
+  .save-bar button {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .choice-option {
+    transition: none;
+  }
+}

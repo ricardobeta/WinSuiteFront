@@ -3,6 +3,7 @@ import { EChartsCoreOption } from 'echarts/core';
 
 export type DashboardWidgetKind = 'metric' | 'chart' | 'table';
 export type DashboardChartKind = 'line' | 'bar' | 'pie' | 'area' | 'comparison';
+export type DashboardMobileSection = 'summary' | 'alert' | 'analysis';
 
 export type DashboardWidgetId =
   | 'sales-today'
@@ -39,6 +40,11 @@ export interface DashboardWidgetDefinition {
   chartKind?: DashboardChartKind;
   defaultCols: number;
   defaultRows: number;
+  minRows: number;
+  mobileSection: DashboardMobileSection;
+  mobileOrder: number;
+  actionLabel?: string;
+  actionRoute?: string;
 }
 
 export interface DashboardMetricValue {
@@ -65,4 +71,9 @@ export interface DashboardWidgetData {
 
 export interface DashboardDataMap {
   [widgetId: string]: DashboardWidgetData;
+}
+
+export interface DashboardSnapshot {
+  data: DashboardDataMap;
+  updatedAt: number;
 }

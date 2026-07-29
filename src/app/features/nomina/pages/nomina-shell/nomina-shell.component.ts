@@ -34,6 +34,7 @@ export class NominaShellComponent {
    */
   protected readonly navigationItems: readonly ModuleNavItem[] = [
     { label: 'Roles de pago', icon: 'receipt_long', route: `${this.baseRoute}/roles` },
+    { label: 'Anticipos', icon: 'account_balance_wallet', route: `${this.baseRoute}/anticipos` },
     { label: 'Empleados', icon: 'badge', route: `${this.baseRoute}/empleados` },
     { label: 'Provisiones', icon: 'savings', route: `${this.baseRoute}/provisiones` },
     { label: 'Utilidades', icon: 'groups', route: `${this.baseRoute}/utilidades` },

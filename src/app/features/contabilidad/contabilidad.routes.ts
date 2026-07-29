@@ -31,6 +31,8 @@ import { NominaLiquidacionComponent } from '../nomina/pages/liquidacion/nomina-l
 import { NominaProvisionesComponent } from '../nomina/pages/provisiones/nomina-provisiones.component';
 import { NominaUtilidadesComponent } from '../nomina/pages/utilidades/nomina-utilidades.component';
 import { NominaRubrosComponent } from '../nomina/pages/rubros/nomina-rubros.component';
+import { NominaAnticiposComponent } from '../nomina/pages/anticipos/nomina-anticipos.component';
+import { NominaAnticipoFormComponent } from '../nomina/pages/anticipos/nomina-anticipo-form.component';
 import { NominaEmpleadosListComponent } from '../nomina/pages/empleados-list/nomina-empleados-list.component';
 import { NominaEmpleadoFormComponent } from '../nomina/pages/empleado-form/nomina-empleado-form.component';
 import { NominaCamposEmpleadoConfiguracionComponent } from './pages/nomina-configuracion/nomina-campos-empleado-configuracion.component';
@@ -324,6 +326,22 @@ export const CONTABILIDAD_ROUTES: Routes = [
             data: {
               module: 'Contabilidad',
               page: 'Provisiones de nomina'
+            }
+          },
+          {
+            path: 'anticipos',
+            component: NominaAnticiposComponent,
+            data: {
+              module: 'Contabilidad',
+              page: 'Anticipos de nomina'
+            }
+          },
+          {
+            path: 'anticipos/nuevo',
+            component: NominaAnticipoFormComponent,
+            data: {
+              module: 'Contabilidad',
+              page: 'Nuevo anticipo de nomina'
             }
           },
           {

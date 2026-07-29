@@ -25,7 +25,7 @@ import { DashboardMetricValue } from '../../models/dashboard.models';
       display: grid;
       align-content: end;
       gap: .35rem;
-      min-height: 92px;
+      min-height: 64px;
     }
 
     strong {
@@ -62,6 +62,21 @@ import { DashboardMetricValue } from '../../models/dashboard.models';
 
     .danger strong {
       color: var(--destructive);
+    }
+
+    @container (max-height: 180px) {
+      .metric-card {
+        gap: .2rem;
+      }
+
+      strong {
+        font-size: clamp(1.35rem, 2.1vw, 1.8rem);
+      }
+
+      p {
+        font-size: .76rem;
+        line-height: 1.25;
+      }
     }
   `]
 })

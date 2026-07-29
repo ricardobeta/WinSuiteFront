@@ -481,6 +481,8 @@ export class AsientosListComponent implements OnInit {
       REVERSO_FACTURA_COMPRA: 'Reverso factura de compra',
       ROL_PAGO: 'Rol de pago',
       REVERSO_ROL_PAGO: 'Reverso rol de pago',
+      ANTICIPO_NOMINA: 'Anticipo de nomina',
+      REVERSO_ANTICIPO_NOMINA: 'Reverso anticipo de nomina',
       CXP_MANUAL: 'Cuenta por pagar manual',
       REVERSO_CXP_MANUAL: 'Reverso CxP manual',
       PAGO_PROVEEDOR: 'Pago a proveedor',

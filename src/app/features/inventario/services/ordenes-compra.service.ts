@@ -1,12 +1,22 @@
 import { Injectable, inject } from '@angular/core';
 import { Database, get, onValue, push, ref, runTransaction, set, update } from '@angular/fire/database';
-import { Observable } from 'rxjs';
+import { Observable, firstValueFrom } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
-import { IntegracionContableService } from '../../contabilidad/services/integracion-contable.service';
-import { EstadoOrdenCompra, OrdenCompra, OrdenCompraItem, RecepcionOC, RecepcionOrdenCompraItem } from '../models/inventario.models';
+import { ComprasXmlService } from '../../contabilidad/services/compras-xml.service';
+import { CrearFacturaCompraInput, FacturasCompraService } from '../../contabilidad/services/facturas-compra.service';
+import { FacturaCompra, FacturaCompraItem } from '../../contabilidad/models/compras.models';
+import {
+  EstadoOrdenCompra,
+  EstadoOrdenCompraLegacy,
+  OrdenCompra,
+  OrdenCompraItem,
+  RecepcionOC,
+  RecepcionOrdenCompraItem
+} from '../models/inventario.models';
 import { KardexService } from './kardex.service';
 import { ProductosService } from './productos.service';
+import { ProveedoresService } from './proveedores.service';
 
 export interface CrearOrdenCompraInput {
   orden: Omit<OrdenCompra, 'id' | 'numero' | 'creadoEn' | 'actualizadoEn'>;
@@ -22,18 +32,20 @@ export interface RecibirOrdenCompraItemInput {
   precioVentaNuevo?: number;
 }
 
+/** Comprobante del proveedor adjuntado en la orden de compra (XML del SRI y/o PDF del RIDE). */
+export interface ComprobanteCompraRef {
+  xmlArchivoId?: string | null;
+  xmlStoragePath?: string | null;
+  pdfArchivoId?: string | null;
+  pdfDownloadUrl?: string | null;
+}
+
 export interface RecibirOrdenCompraInput {
   ordenId: string;
   almacenId: string;
   items: RecibirOrdenCompraItemInput[];
   fechaRecepcion?: number;
-  contabilizarRecepcion?: boolean;
-  documentoProveedorNumero?: string;
-  documentoProveedorFecha?: number | null;
-  documentoProveedorSubtotal?: number;
-  documentoProveedorIva?: number;
-  documentoProveedorTotal?: number;
-  documentoProveedorAutorizacion?: string;
+  comprobante?: ComprobanteCompraRef;
   notas?: string;
   userId: string;
 }
@@ -46,7 +58,9 @@ export class OrdenesCompraService {
   private readonly authService = inject(AuthService);
   private readonly kardexService = inject(KardexService);
   private readonly productosService = inject(ProductosService);
-  private readonly integracionContable = inject(IntegracionContableService);
+  private readonly proveedoresService = inject(ProveedoresService);
+  private readonly comprasXml = inject(ComprasXmlService);
+  private readonly facturasCompra = inject(FacturasCompraService);
 
   private getTenantPath(): string {
     return `inventario/${this.authService.getTenantId()}`;
@@ -92,6 +106,21 @@ export class OrdenesCompraService {
     return ref(this.database, `${this.getItemsPath(ordenId)}/${itemId}`);
   }
 
+  /**
+   * Normaliza los estados del flujo antiguo (5 estados, con pantalla de recepcion separada) al
+   * flujo actual de 3 estados. Las OC guardadas antes del cambio se leen ya normalizadas; no hay
+   * migracion de datos: al volver a guardarlas quedan con el estado nuevo.
+   */
+  normalizarEstado(estado: EstadoOrdenCompraLegacy | undefined): EstadoOrdenCompra {
+    if (estado === 'ENVIADA') {
+      return 'BORRADOR';
+    }
+    if (estado === 'RECIBIDA_PARCIAL') {
+      return 'RECIBIDA';
+    }
+    return estado ?? 'BORRADOR';
+  }
+
   getOrdenesCompra(): Observable<OrdenCompra[]> {
     return new Observable<OrdenCompra[]>((subscriber) => {
       const unsubscribe = onValue(
@@ -106,7 +135,8 @@ export class OrdenesCompraService {
           const ordenes = Object.entries(raw)
             .map(([id, orden]) => ({
               ...orden,
-              id
+              id,
+              estado: this.normalizarEstado(orden.estado)
             }));
 
           const uniqueById = new Map<string, OrdenCompra>();
@@ -224,9 +254,11 @@ export class OrdenesCompraService {
       return null;
     }
 
+    const orden = snapshot.val() as OrdenCompra;
     return {
-      ...(snapshot.val() as OrdenCompra),
-      id: ordenId
+      ...orden,
+      id: ordenId,
+      estado: this.normalizarEstado(orden.estado)
     };
   }
 
@@ -259,13 +291,18 @@ export class OrdenesCompraService {
   }
 
   async cambiarEstadoOrdenCompra(ordenId: string, estado: EstadoOrdenCompra): Promise<void> {
-    if (estado === 'RECIBIDA' || estado === 'RECIBIDA_PARCIAL') {
-      throw new Error('El estado RECIBIDA se define solamente desde el flujo de recepcion.');
+    if (estado === 'RECIBIDA') {
+      throw new Error('El estado RECIBIDA se define solamente al registrar la entrada de mercaderia.');
     }
 
     await this.actualizarOrdenCompra(ordenId, { estado });
   }
 
+  /**
+   * Registra la entrada de mercaderia de una OC: es el unico punto del modulo que incrementa stock
+   * y escribe kardex. No genera asiento contable; en su lugar deja un borrador en
+   * Contabilidad > Compras para que el asiento lo produzca el flujo contable si el negocio lo usa.
+   */
   async recibirOrdenCompra(input: RecibirOrdenCompraInput): Promise<EstadoOrdenCompra> {
     const itemsOrden = await this.getItemsOrden(input.ordenId);
     const itemsPorId = new Map(itemsOrden.map((item) => [item.id!, item]));
@@ -319,6 +356,10 @@ export class OrdenesCompraService {
       throw new Error('Orden de compra no encontrada.');
     }
 
+    // El borrador contable se crea siempre, incluso con la contabilidad desactivada: asi el
+    // historico ya esta en Compras el dia que el negocio empiece a llevar contabilidad.
+    const facturaCompraId = await this.crearBorradorCompraDesdeOC(orden, itemsOrden, input.comprobante);
+
     const recepcionRef = push(this.getRecepcionesRef());
     const recepcionId = recepcionRef.key!;
     const recepcion: RecepcionOC = {
@@ -326,13 +367,9 @@ export class OrdenesCompraService {
       ordenId: input.ordenId,
       almacenId: input.almacenId,
       items: recepcionesMap,
-      contabilizarRecepcion: input.contabilizarRecepcion ?? false,
-      documentoProveedorNumero: input.documentoProveedorNumero ?? '',
-      documentoProveedorFecha: input.documentoProveedorFecha ?? null,
-      documentoProveedorSubtotal: Number(input.documentoProveedorSubtotal ?? 0),
-      documentoProveedorIva: Number(input.documentoProveedorIva ?? 0),
-      documentoProveedorTotal: Number(input.documentoProveedorTotal ?? 0),
-      documentoProveedorAutorizacion: input.documentoProveedorAutorizacion ?? '',
+      facturaCompraId,
+      xmlArchivoId: input.comprobante?.xmlArchivoId ?? null,
+      pdfArchivoId: input.comprobante?.pdfArchivoId ?? null,
       notas: input.notas ?? '',
       creadoPor: input.userId,
       creadoEn: input.fechaRecepcion ?? Date.now()
@@ -340,30 +377,154 @@ export class OrdenesCompraService {
     const { id: _recepcionId, ...recepcionPayload } = recepcion;
     await set(recepcionRef, recepcionPayload);
 
-    const itemsActualizados = await this.getItemsOrden(input.ordenId);
-    const estado = this.calcularEstadoRecepcion(itemsActualizados);
-
     await update(this.getOrdenRef(input.ordenId), {
-      estado,
+      estado: 'RECIBIDA' as EstadoOrdenCompra,
       actualizadoEn: Date.now()
     });
 
-    await this.integracionContable.contabilizarRecepcionOrdenCompra(orden, itemsOrden, recepcion);
-
-    return estado;
+    return 'RECIBIDA';
   }
 
-  private calcularEstadoRecepcion(items: OrdenCompraItem[]): EstadoOrdenCompra {
-    if (items.length === 0) {
-      return 'ENVIADA';
-    }
+  /**
+   * Deja un borrador en Contabilidad > Compras a partir de la OC recibida. Si hay XML del proveedor
+   * se parsea y se reutiliza el mapeo XML→FacturaCompra de contabilidad; si no, se arma con los
+   * datos de la propia OC y el contador completa los campos del SRI.
+   *
+   * Nunca genera asiento: la factura nace en BORRADOR y el asiento lo produce
+   * `FacturasCompraService.registrarFacturaCompra()` cuando el contador la registre.
+   *
+   * Un fallo aqui no revierte la entrada de stock ya confirmada; se reporta y se devuelve `null`.
+   */
+  private async crearBorradorCompraDesdeOC(
+    orden: OrdenCompra,
+    items: OrdenCompraItem[],
+    comprobante?: ComprobanteCompraRef
+  ): Promise<string | null> {
+    try {
+      const archivos = {
+        archivoId: comprobante?.xmlArchivoId ?? null,
+        xmlStoragePath: comprobante?.xmlStoragePath ?? null,
+        pdfArchivoId: comprobante?.pdfArchivoId ?? null,
+        pdfDownloadUrl: comprobante?.pdfDownloadUrl ?? null
+      };
 
-    const todosRecibidos = items.every((item) => (item.cantidadRecibida ?? 0) >= item.cantidad);
-    if (todosRecibidos) {
-      return 'RECIBIDA';
-    }
+      let borrador: CrearFacturaCompraInput | null = null;
 
-    const algunoRecibido = items.some((item) => (item.cantidadRecibida ?? 0) > 0);
-    return algunoRecibido ? 'RECIBIDA_PARCIAL' : 'ENVIADA';
+      if (comprobante?.xmlStoragePath) {
+        try {
+          const parsed = await firstValueFrom(this.comprasXml.parseXml(comprobante.xmlStoragePath));
+          const duplicado = await this.facturasCompra.buscarDuplicadoDocumento({
+            claveAcceso: parsed.claveAcceso,
+            establecimiento: parsed.establecimiento,
+            puntoEmision: parsed.puntoEmision,
+            secuencial: parsed.secuencial,
+            idProv: parsed.idProv,
+            tipoComprobante: parsed.tipoComprobante
+          });
+          if (duplicado?.id) {
+            // El comprobante ya estaba cargado en Compras: se enlaza a la OC en vez de duplicarlo.
+            await this.facturasCompra.actualizarFacturaCompra(duplicado.id, {
+              ordenCompraId: orden.id ?? null,
+              proveedorId: orden.proveedorId
+            });
+            return duplicado.id;
+          }
+          borrador = this.facturasCompra.construirBorradorDesdeParsed(parsed, archivos);
+        } catch (error) {
+          // Si el parseo falla (backend caido, XML invalido) igual se deja el borrador con los
+          // datos de la OC y el XML adjunto, para que el contador no pierda el registro.
+          console.error('No se pudo analizar el XML de la factura; se usan los datos de la OC.', error);
+        }
+      }
+
+      borrador ??= await this.construirBorradorDesdeOrden(orden, items, archivos);
+
+      const factura: CrearFacturaCompraInput['factura'] = {
+        ...borrador.factura,
+        // El stock ya lo movio esta recepcion: la factura no debe volver a alimentarlo.
+        alimentaInventario: false,
+        almacenId: null,
+        ordenCompraId: orden.id ?? null,
+        proveedorId: orden.proveedorId
+      };
+
+      return await this.facturasCompra.crearFacturaCompra({ factura, items: borrador.items });
+    } catch (error) {
+      console.error('No fue posible crear el borrador de compra desde la orden de compra.', error);
+      return null;
+    }
+  }
+
+  /** Arma el borrador contable con los datos de la OC cuando no hay XML que parsear. */
+  private async construirBorradorDesdeOrden(
+    orden: OrdenCompra,
+    items: OrdenCompraItem[],
+    archivos: { archivoId: string | null; xmlStoragePath: string | null; pdfArchivoId: string | null; pdfDownloadUrl: string | null }
+  ): Promise<CrearFacturaCompraInput> {
+    const proveedor = orden.proveedorId ? await this.proveedoresService.getProveedorById(orden.proveedorId) : null;
+    const ahora = Date.now();
+
+    const itemsFactura: Omit<FacturaCompraItem, 'id'>[] = items.map((item) => {
+      const subtotal = this.redondear2(item.cantidad * item.costoUnitario);
+      const iva = this.redondear2(subtotal * Number(item.impuestoPorcentaje ?? 0) / 100);
+      return {
+        productoId: item.productoId,
+        codigoPrincipal: '',
+        descripcion: item.descripcion,
+        cantidad: item.cantidad,
+        costoUnitario: item.costoUnitario,
+        descuento: 0,
+        ivaPorcentaje: Number(item.impuestoPorcentaje ?? 0),
+        subtotal,
+        iva,
+        total: this.redondear2(subtotal + iva)
+      };
+    });
+
+    const factura: Omit<FacturaCompra, 'id' | 'numero' | 'creadoEn' | 'actualizadoEn'> = {
+      estado: 'BORRADOR',
+      origen: 'MANUAL',
+      docModificado: null,
+      tpIdProv: '01',
+      idProv: (proveedor?.ruc ?? '').trim(),
+      razonSocialProv: (proveedor?.nombre ?? '').trim(),
+      parteRel: 'NO',
+      codSustento: '01',
+      tipoComprobante: '01',
+      // Datos del SRI: los completa el contador al registrar el borrador.
+      establecimiento: '',
+      puntoEmision: '',
+      secuencial: '',
+      autorizacion: '',
+      claveAcceso: '',
+      fechaEmision: orden.fechaEmision ?? ahora,
+      fechaRegistro: ahora,
+      baseNoGraIva: 0,
+      baseImponible: 0,
+      baseImpGrav: this.redondear2(orden.subtotal ?? 0),
+      baseImpExe: 0,
+      montoIce: 0,
+      montoIva: this.redondear2(orden.impuesto ?? 0),
+      totalSinImpuestos: this.redondear2(orden.subtotal ?? 0),
+      importeTotal: this.redondear2(orden.total ?? 0),
+      formasDePago: [],
+      pagoExterior: { pagoLocExt: '01' },
+      retencionesRenta: [],
+      retencionesIva: [],
+      totalRetencion: 0,
+      alimentaInventario: false,
+      tipoGastoId: null,
+      archivoId: archivos.archivoId,
+      xmlStoragePath: archivos.xmlStoragePath,
+      pdfArchivoId: archivos.pdfArchivoId,
+      pdfDownloadUrl: archivos.pdfDownloadUrl,
+      creadoPor: this.authService.currentUser()?.uid ?? 'sistema'
+    };
+
+    return { factura, items: itemsFactura };
+  }
+
+  private redondear2(value: number): number {
+    return Math.round(value * 100) / 100;
   }
 }

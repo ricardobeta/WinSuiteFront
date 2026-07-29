@@ -41,6 +41,15 @@ export const NOMINA_ROUTES: Routes = [
     redirectTo: '/workspace/contabilidad/nomina/empleados/:id/liquidar'
   },
   {
+    path: 'anticipos',
+    pathMatch: 'full',
+    redirectTo: '/workspace/contabilidad/nomina/anticipos'
+  },
+  {
+    path: 'anticipos/nuevo',
+    redirectTo: '/workspace/contabilidad/nomina/anticipos/nuevo'
+  },
+  {
     path: 'rubros',
     redirectTo: '/workspace/contabilidad/nomina/rubros'
   },

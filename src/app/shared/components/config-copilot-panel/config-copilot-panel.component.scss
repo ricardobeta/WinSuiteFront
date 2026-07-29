@@ -1,0 +1,175 @@
+// La geometria replica la del copiloto global (panel flotante fijo) a proposito: asi el
+// copiloto no altera el layout de la pantalla que se esta configurando.
+
+:host {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+.copilot-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--tc-ghost-border);
+  border-radius: 999px;
+  color: var(--primary-foreground);
+  background: var(--primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.copilot-trigger:hover {
+  background: color-mix(in srgb, var(--primary) 88%, var(--foreground));
+  transform: translateY(-1px);
+}
+
+.copilot-trigger:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--primary) 35%, transparent);
+  outline-offset: 2px;
+}
+
+.copilot-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  border: 0;
+  background: rgb(0 0 0 / 42%);
+}
+
+.copilot-panel {
+  position: fixed;
+  z-index: 1001;
+  top: 16px;
+  right: 16px;
+  bottom: 16px;
+  width: min(440px, calc(100vw - 32px));
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  overflow: hidden;
+  border: 1px solid var(--tc-ghost-border);
+  border-radius: 22px;
+  background: var(--tc-surface-container-lowest);
+  color: var(--foreground);
+  box-shadow: 0 28px 70px rgb(0 0 0 / 28%);
+}
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px;
+  background: var(--tc-surface-container-lowest);
+}
+
+.copilot-brand { display: flex; align-items: center; gap: 11px; }
+.copilot-brand > span { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; color: var(--primary-foreground); background: var(--primary); }
+.copilot-brand div { display: grid; gap: 2px; }
+.copilot-brand small { color: var(--muted-foreground); }
+
+.icon-button { width: 44px; height: 44px; display: grid; place-items: center; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--foreground); cursor: pointer; }
+.icon-button:hover { background: var(--tc-surface-container-highest); }
+.icon-button:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 35%, transparent); outline-offset: 1px; }
+
+.conversation { overflow-y: auto; padding: 18px; background: var(--tc-surface-container-low); }
+
+.welcome-card { padding: 22px; border: 1px solid var(--tc-ghost-border); border-radius: 18px; background: var(--tc-surface-container-lowest); }
+.welcome-card > span { color: var(--primary); font-size: 34px; }
+.welcome-card h2 { margin: 10px 0 6px; font-size: 1.25rem; }
+.welcome-card p { margin: 0 0 16px; color: var(--muted-foreground); line-height: 1.5; }
+.welcome-card button { display: flex; width: 100%; min-height: 44px; align-items: center; justify-content: space-between; gap: 10px; margin-top: 8px; padding: 10px 12px; border: 1px solid var(--tc-ghost-border); border-radius: 10px; background: var(--tc-surface-container-low); color: var(--foreground); font: inherit; cursor: pointer; text-align: left; }
+.welcome-card button:hover { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, var(--tc-surface-container-lowest)); }
+.welcome-card button:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 30%, transparent); outline-offset: 1px; }
+
+.message { max-width: 91%; margin: 0 0 16px; padding: 13px 14px; border: 1px solid var(--tc-ghost-border); border-radius: 4px 16px 16px; background: var(--tc-surface-container-lowest); box-shadow: var(--tc-elevation-1); }
+.message.user-message { margin-left: auto; border-color: transparent; border-radius: 16px 4px 16px 16px; color: var(--primary-foreground); background: var(--primary); }
+.message-label { margin-bottom: 5px; font-size: .72rem; font-weight: 800; opacity: .72; text-transform: uppercase; letter-spacing: .05em; }
+.message p { margin: 0; white-space: pre-wrap; line-height: 1.5; }
+
+.avisos { margin-top: 10px; }
+.avisos p { display: flex; align-items: flex-start; gap: 6px; color: var(--muted-foreground); font-size: .84rem; }
+.avisos .material-symbols-outlined { font-size: 18px; }
+
+.sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; padding-top: 10px; }
+.sources > span { width: 100%; font-size: .72rem; color: var(--muted-foreground); }
+.sources small { padding: 4px 7px; border-radius: 999px; color: var(--foreground); background: color-mix(in srgb, var(--primary) 12%, transparent); }
+
+.thinking { display: flex; align-items: center; gap: 5px; color: var(--muted-foreground); font-size: .86rem; }
+.thinking > span { width: 6px; height: 6px; border-radius: 50%; background: var(--primary); animation: pulse 1s infinite alternate; }
+.thinking > span:nth-child(2) { animation-delay: .2s; }
+.thinking > span:nth-child(3) { animation-delay: .4s; }
+
+// -------------------------------------------------------------------- plan
+
+.plan-card { margin-top: 4px; padding: 16px; border: 1px solid var(--tc-ghost-border); border-radius: 18px; background: var(--tc-surface-container-lowest); box-shadow: var(--tc-elevation-1); }
+.plan-header { padding: 0 0 12px; }
+.plan-header div { display: grid; gap: 2px; }
+.plan-header small { color: var(--muted-foreground); }
+
+.plan-action { padding: 10px 0; }
+.plan-action + .plan-action { margin-top: 2px; }
+.plan-action.descartada { opacity: .48; }
+
+.plan-action-main { display: flex; align-items: flex-start; gap: 10px; min-height: 44px; cursor: pointer; }
+.plan-action-main input { width: 20px; height: 20px; margin-top: 2px; accent-color: var(--primary); flex: 0 0 auto; }
+.plan-action-text { display: grid; gap: 4px; }
+.plan-action-summary { line-height: 1.4; }
+.plan-action-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.riesgo { padding: 2px 8px; border-radius: 999px; font-size: .68rem; font-weight: 800; letter-spacing: .05em; }
+.riesgo-bajo { color: var(--foreground); background: color-mix(in srgb, var(--primary) 14%, transparent); }
+.riesgo-medio { color: var(--foreground); background: color-mix(in srgb, var(--tc-tertiary, #3a647d) 18%, transparent); }
+.riesgo-alto { color: var(--foreground); background: color-mix(in srgb, var(--tc-error, #b3261e) 20%, transparent); }
+.origen { padding: 2px 8px; border-radius: 999px; font-size: .68rem; color: var(--muted-foreground); background: var(--tc-surface-container-highest); }
+
+.advertencia { display: flex; align-items: flex-start; gap: 6px; margin: 6px 0 0 30px; color: var(--muted-foreground); font-size: .82rem; line-height: 1.45; }
+.advertencia .material-symbols-outlined { font-size: 18px; }
+
+.detalle-toggle { margin: 6px 0 0 30px; padding: 4px 0; border: 0; background: transparent; color: var(--primary); font: inherit; font-size: .82rem; font-weight: 700; cursor: pointer; }
+.detalle-toggle:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 30%, transparent); outline-offset: 2px; }
+.detalle { margin: 6px 0 0 30px; padding: 10px 12px; border-radius: 10px; background: var(--tc-surface-container-low); color: var(--muted-foreground); font-size: .8rem; white-space: pre-wrap; overflow-x: auto; }
+
+.plan-warning { display: flex; align-items: flex-start; gap: 6px; margin: 10px 0 0; padding: 10px 12px; border-radius: 12px; color: var(--foreground); background: color-mix(in srgb, var(--tc-error, #b3261e) 12%, transparent); font-size: .84rem; }
+.plan-warning .material-symbols-outlined { font-size: 18px; }
+
+.plan-actions { display: flex; gap: 8px; margin-top: 14px; }
+.primary-button, .ghost-button { min-height: 44px; padding: 0 18px; border-radius: 999px; font: inherit; font-weight: 700; cursor: pointer; }
+.primary-button { flex: 1; border: 0; color: var(--primary-foreground); background: var(--primary); }
+.primary-button:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 88%, var(--foreground)); }
+.primary-button:disabled { opacity: .4; cursor: default; }
+.ghost-button { border: 1px solid var(--tc-ghost-border); background: transparent; color: var(--foreground); }
+.ghost-button:hover:not(:disabled) { background: var(--tc-surface-container-highest); }
+.primary-button:focus-visible, .ghost-button:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 35%, transparent); outline-offset: 2px; }
+
+// -------------------------------------------------------------- resultados
+
+.resultados { margin-top: 12px; display: grid; gap: 6px; }
+.resultado { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 12px; border-radius: 12px; font-size: .86rem; line-height: 1.45; background: var(--tc-surface-container-lowest); }
+.resultado .material-symbols-outlined { font-size: 19px; }
+.resultado-aplicada .material-symbols-outlined { color: var(--primary); }
+.resultado-omitida { color: var(--muted-foreground); }
+.resultado-rechazada, .resultado-error { background: color-mix(in srgb, var(--tc-error, #b3261e) 12%, transparent); }
+
+// ----------------------------------------------------------------- footer
+
+footer { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 14px; background: var(--tc-surface-container-lowest); }
+textarea { resize: none; border: 1px solid var(--tc-ghost-border); border-radius: 13px; padding: 11px 12px; background: var(--tc-surface-container-low); color: var(--foreground); caret-color: var(--primary); font: inherit; outline: none; }
+textarea::placeholder { color: var(--muted-foreground); }
+textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent); }
+textarea:disabled { opacity: .6; }
+.send-button { align-self: stretch; width: 46px; min-height: 44px; border: 0; border-radius: 13px; color: var(--primary-foreground); background: var(--primary); cursor: pointer; }
+.send-button:hover:not(:disabled) { background: color-mix(in srgb, var(--primary) 88%, var(--foreground)); }
+.send-button:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 35%, transparent); outline-offset: 1px; }
+.send-button:disabled { opacity: .4; cursor: default; }
+footer > small { grid-column: 1 / -1; color: var(--muted-foreground); text-align: center; }
+
+@keyframes pulse { to { opacity: .25; transform: translateY(-2px); } }
+
+@media (max-width: 600px) {
+  .copilot-panel { inset: 0; width: 100%; border-radius: 0; }
+  .trigger-label { display: none; }
+  .copilot-trigger { width: 44px; padding: 0; justify-content: center; }
+}

@@ -14,6 +14,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
+import { TwoDecimalInputDirective } from '../../../../shared/directives/two-decimal-input.directive';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import {
   RevisarAsientoData,
@@ -28,6 +29,7 @@ import {
   RolPagoLinea,
   RubroNomina
 } from '../../../contabilidad/models/nomina.models';
+import { AnticiposNominaService } from '../../../contabilidad/services/anticipos-nomina.service';
 import { IntegracionContableService } from '../../../contabilidad/services/integracion-contable.service';
 import { NominaPdfApiService } from '../../../contabilidad/services/nomina-pdf-api.service';
 import { NominaService } from '../../../contabilidad/services/nomina.service';
@@ -47,7 +49,14 @@ interface EmpleadoEdit {
    */
   reglas: Pick<
     RolPagoDetalle,
-    'modoDecimoTercero' | 'modoDecimoCuarto' | 'modoFondosReserva' | 'aplicaFondosReserva'
+    | 'modoDecimoTercero'
+    | 'modoDecimoCuarto'
+    | 'modoFondosReserva'
+    | 'regimenFondosReserva'
+    | 'aplicaFondosReserva'
+    | 'sueldoMensual'
+    | 'diasTrabajadosPeriodo'
+    | 'diasFondosReservaPeriodo'
   >;
   resumen: RolPagoDetalle;
 }
@@ -66,7 +75,8 @@ interface EmpleadoEdit {
     MatIconModule,
     MatInputModule,
     MatSelectModule,
-    MatSnackBarModule
+    MatSnackBarModule,
+    TwoDecimalInputDirective
   ],
   template: `
     <section class="rol-page">
@@ -121,6 +131,20 @@ interface EmpleadoEdit {
         </section>
       }
 
+      @if (editable() && empleadosConAnticipoPendiente() > 0) {
+        <section class="hint aviso">
+          <mat-icon>account_balance_wallet</mat-icon>
+          <span>
+            Hay {{ empleadosConAnticipoPendiente() }} empleado(s) con anticipos del periodo que aun no estan
+            descontados en este rol.
+          </span>
+          <button mat-stroked-button type="button" (click)="traerAnticipos()" [disabled]="procesando()">
+            <mat-icon>download</mat-icon>
+            Traer anticipos del periodo
+          </button>
+        </section>
+      }
+
       <section class="empleados">
         @for (item of empleados(); track item.id; let i = $index) {
           <mat-expansion-panel class="surface-card">
@@ -128,13 +152,25 @@ interface EmpleadoEdit {
               <mat-panel-title>{{ item.empleadoNombre }}</mat-panel-title>
               <mat-panel-description>
                 <span class="desc-cargo">{{ item.cargo }}</span>
-                <span class="desc-neto">Neto {{ item.resumen.netoPagar | currency:'USD':'symbol-narrow':'1.2-2' }}</span>
+                <span class="desc-neto" [class.negativo]="item.resumen.netoPagar < 0">
+                  @if (item.resumen.netoPagar < 0) { <mat-icon>warning</mat-icon> }
+                  Neto {{ item.resumen.netoPagar | currency:'USD':'symbol-narrow':'1.2-2' }}
+                </span>
               </mat-panel-description>
             </mat-expansion-panel-header>
 
             <div class="editor">
               <div class="base-row">
-                <span>Sueldo base</span>
+                <div>
+                  <span>Remuneración del período</span>
+                  @if ((item.resumen.diasTrabajadosPeriodo ?? 30) < 30) {
+                    <small>
+                      Sueldo mensual
+                      {{ item.resumen.sueldoMensual | currency:'USD':'symbol-narrow':'1.2-2' }}
+                      · {{ item.resumen.diasTrabajadosPeriodo }} de 30 días
+                    </small>
+                  }
+                </div>
                 <strong>{{ item.sueldoBase | currency:'USD':'symbol-narrow':'1.2-2' }}</strong>
               </div>
 
@@ -154,9 +190,9 @@ interface EmpleadoEdit {
                       <mat-label>{{ linea.tipo === 'INGRESO' ? 'Ingreso' : 'Descuento' }}</mat-label>
                       <input
                         matInput
-                        type="number"
-                        min="0"
-                        step="0.01"
+                        type="text"
+                        inputmode="decimal"
+                        appTwoDecimalInput
                         [ngModel]="linea.monto"
                         (ngModelChange)="actualizarMonto(item, j, $event)"
                         [disabled]="!editable()"
@@ -186,6 +222,9 @@ interface EmpleadoEdit {
               <dl class="resumen">
                 <div><dt>Total ingresos</dt><dd>{{ item.resumen.totalIngresos | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
                 <div><dt>Aporte personal IESS</dt><dd>- {{ item.resumen.aportePersonalIess | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
+                @if (item.resumen.anticipos > 0) {
+                  <div><dt>Anticipos</dt><dd>- {{ item.resumen.anticipos | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
+                }
                 <div><dt>Otros descuentos</dt><dd>- {{ item.resumen.otrosDescuentos | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
                 <div class="provisiones-row">
                   <dt>Provisiones (patronal)</dt>
@@ -197,7 +236,13 @@ interface EmpleadoEdit {
                     </button>
                   </dd>
                 </div>
-                <div class="neto"><dt>Neto a pagar</dt><dd>{{ item.resumen.netoPagar | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
+                <div class="neto" [class.negativo]="item.resumen.netoPagar < 0"><dt>Neto a pagar</dt><dd>{{ item.resumen.netoPagar | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
+                @if (item.resumen.netoPagar < 0) {
+                  <p class="neto-aviso">
+                    Los descuentos superan los ingresos del periodo. Ajusta el monto del anticipo en la
+                    linea de arriba o difierelo al siguiente rol.
+                  </p>
+                }
               </dl>
 
               @if (provisionesAbiertas() === item.id) {
@@ -284,11 +329,18 @@ interface EmpleadoEdit {
     .kpi-card strong { font-size: 1.5rem; }
     .kpi-card.highlight { outline: 2px solid color-mix(in srgb, var(--primary) 40%, transparent); }
     .hint { display: flex; gap: .5rem; align-items: center; padding: .75rem 1rem; border-radius: .6rem; background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--foreground); }
+    .hint.aviso { flex-wrap: wrap; background: color-mix(in srgb, #f59e0b 14%, transparent); }
+    .hint.aviso span { flex: 1 1 320px; }
     .empleados { display: grid; gap: .6rem; }
     .desc-cargo { color: var(--muted-foreground); }
-    .desc-neto { margin-left: auto; font-weight: 700; }
+    .desc-neto { margin-left: auto; font-weight: 700; display: inline-flex; align-items: center; gap: .3rem; }
+    .desc-neto.negativo, .neto.negativo dt, .neto.negativo dd { color: #b3261e; }
+    .desc-neto mat-icon { font-size: 1.1rem; width: 1.1rem; height: 1.1rem; }
+    .neto-aviso { margin: .35rem 0 0; font-size: .82rem; color: #b3261e; }
     .editor { display: grid; gap: 1rem; padding-top: .5rem; }
-    .base-row { display: flex; justify-content: space-between; padding: .5rem .75rem; border-radius: .5rem; background: color-mix(in srgb, var(--foreground) 5%, transparent); }
+    .base-row { display: flex; justify-content: space-between; gap: 1rem; align-items: center; padding: .7rem .85rem; border-radius: .75rem; background: color-mix(in srgb, var(--primary) 7%, transparent); }
+    .base-row div { display: grid; gap: .15rem; min-width: 0; }
+    .base-row small { color: var(--muted-foreground); overflow-wrap: anywhere; }
     .lineas { display: grid; gap: .5rem; }
     .linea-row { display: grid; grid-template-columns: 2fr 1fr auto; gap: .6rem; align-items: center; }
     .resumen { display: grid; gap: .35rem; margin: 0; padding: .85rem 1rem; border-radius: .6rem; background: color-mix(in srgb, var(--foreground) 5%, transparent); }
@@ -317,6 +369,7 @@ interface EmpleadoEdit {
 })
 export class NominaRolDetalleComponent implements OnInit {
   private readonly nominaService = inject(NominaService);
+  private readonly anticiposService = inject(AnticiposNominaService);
   private readonly planCuentasService = inject(PlanCuentasService);
   private readonly pdfApi = inject(NominaPdfApiService);
   private readonly integracionContable = inject(IntegracionContableService);
@@ -338,6 +391,8 @@ export class NominaRolDetalleComponent implements OnInit {
   /** Id del empleado cuyo desglose de provisiones esta abierto, o null si no hay ninguno. */
   protected readonly provisionesAbiertas = signal<string | null>(null);
   protected readonly descargando = signal(false);
+  /** Anticipos del periodo pendientes por empleado, para ofrecer traerlos al borrador. */
+  private readonly anticiposPendientes = signal<Map<string, number>>(new Map());
 
   private config: ConfiguracionNominaContable = this.nominaService.getDefaultConfiguracion();
   private rolId = '';
@@ -352,6 +407,21 @@ export class NominaRolDetalleComponent implements OnInit {
       acc.netoPagar += r.netoPagar;
     }
     return acc;
+  });
+
+  /**
+   * Empleados cuyo anticipo del periodo todavia no esta cubierto por las lineas del rol. Ocurre
+   * cuando el anticipo se registro despues de generar el borrador.
+   */
+  protected readonly empleadosConAnticipoPendiente = computed(() => {
+    const pendientes = this.anticiposPendientes();
+    if (pendientes.size === 0) {
+      return 0;
+    }
+    return this.empleados().filter((item) => {
+      const pendiente = pendientes.get(item.empleadoId) ?? 0;
+      return pendiente > this.anticipoEnLineas(item);
+    }).length;
   });
 
   ngOnInit(): void {
@@ -450,8 +520,25 @@ export class NominaRolDetalleComponent implements OnInit {
     if (mensualizado > 0) {
       return `Mensualizado: se paga ${mensualizado.toFixed(2)} en este rol`;
     }
-    if (concepto === 'FONDOS_RESERVA' && resumen.aplicaFondosReserva === false) {
-      return 'Aun no cumple un año de trabajo';
+    const diasTrabajados = resumen.diasTrabajadosPeriodo ?? 30;
+    if (concepto === 'DECIMO_CUARTO' && diasTrabajados < 30) {
+      return `Proporcional a ${diasTrabajados} de 30 días`;
+    }
+    if (concepto === 'FONDOS_RESERVA') {
+      const diasFondos = resumen.diasFondosReservaPeriodo
+        ?? (resumen.aplicaFondosReserva ? diasTrabajados : 0);
+      if (diasFondos === 0) {
+        return 'Aún no inicia el período con derecho';
+      }
+      if (diasFondos < diasTrabajados) {
+        return `${diasFondos} de ${diasTrabajados} días con derecho`;
+      }
+      if (resumen.regimenFondosReserva === 'CONSTRUCCION') {
+        return 'Trabajo directo de construcción: desde el primer día';
+      }
+      if (resumen.regimenFondosReserva === 'SERVICIOS_COMPLEMENTARIOS') {
+        return 'Servicios complementarios: desde el primer día';
+      }
     }
     return '';
   }
@@ -664,6 +751,67 @@ export class NominaRolDetalleComponent implements OnInit {
     }
     this.rol.set(resumen.rol);
     this.empleados.set(resumen.detalles.map((detalle) => this.aEdit(detalle)));
+    await this.cargarAnticiposPendientes();
+  }
+
+  private async cargarAnticiposPendientes(): Promise<void> {
+    const rol = this.rol();
+    if (!rol || (rol.tipo ?? 'MENSUAL') !== 'MENSUAL' || rol.estado !== 'BORRADOR') {
+      this.anticiposPendientes.set(new Map());
+      return;
+    }
+    try {
+      this.anticiposPendientes.set(await this.anticiposService.getPendientesPorEmpleado(rol.periodo));
+    } catch {
+      // Sin anticipos legibles simplemente no se ofrece traerlos.
+      this.anticiposPendientes.set(new Map());
+    }
+  }
+
+  /**
+   * Agrega al borrador los anticipos del periodo que aun no estan descontados. Se usa cuando el
+   * anticipo se registro despues de generar el rol: el rol ya no se regenera solo.
+   */
+  protected traerAnticipos(): void {
+    const pendientes = this.anticiposPendientes();
+    const rubroAnticipo = this.rubros().find((rubro) => rubro.codigo === NominaService.CODIGO_RUBRO_ANTICIPO) ?? null;
+    let actualizados = 0;
+
+    for (const item of this.empleados()) {
+      const pendiente = pendientes.get(item.empleadoId) ?? 0;
+      const faltante = this.redondear(pendiente - this.anticipoEnLineas(item));
+      if (faltante <= 0) {
+        continue;
+      }
+
+      const existente = item.lineas.find((linea) => linea.codigo === NominaService.CODIGO_RUBRO_ANTICIPO);
+      if (existente) {
+        existente.monto = this.redondear(existente.monto + faltante);
+      } else {
+        const linea = this.nominaService.crearLineaAnticipo(faltante, rubroAnticipo, this.config);
+        if (linea) {
+          item.lineas.push(linea);
+        }
+      }
+      this.actualizarResumen(item);
+      actualizados += 1;
+    }
+
+    if (actualizados === 0) {
+      this.toast('Los anticipos del periodo ya estan descontados.', 'info');
+      return;
+    }
+    this.toast(`Anticipos agregados a ${actualizados} empleado(s). Guarda el borrador.`, 'account_balance_wallet');
+  }
+
+  private anticipoEnLineas(item: EmpleadoEdit): number {
+    return this.redondear(item.lineas
+      .filter((linea) => linea.codigo === NominaService.CODIGO_RUBRO_ANTICIPO)
+      .reduce((total, linea) => total + (Number(linea.monto) || 0), 0));
+  }
+
+  private redondear(value: number): number {
+    return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
   }
 
   private aEdit(detalle: RolPagoDetalle): EmpleadoEdit {
@@ -679,7 +827,11 @@ export class NominaRolDetalleComponent implements OnInit {
         modoDecimoTercero: detalle.modoDecimoTercero,
         modoDecimoCuarto: detalle.modoDecimoCuarto,
         modoFondosReserva: detalle.modoFondosReserva,
-        aplicaFondosReserva: detalle.aplicaFondosReserva
+        regimenFondosReserva: detalle.regimenFondosReserva,
+        aplicaFondosReserva: detalle.aplicaFondosReserva,
+        sueldoMensual: detalle.sueldoMensual,
+        diasTrabajadosPeriodo: detalle.diasTrabajadosPeriodo,
+        diasFondosReservaPeriodo: detalle.diasFondosReservaPeriodo
       },
       resumen: detalle
     };
