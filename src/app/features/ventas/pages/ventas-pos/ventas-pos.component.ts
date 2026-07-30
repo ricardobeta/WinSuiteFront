@@ -234,6 +234,7 @@ interface CatalogoPosItem {
           <p>Elige productos o servicios desde una sola vista y agregalos al carrito.</p>
         </header>
 
+        <div class="catalog-controls">
         @if (perfil()?.escaneoHabilitado) {
           <div class="scan-bar">
             <mat-form-field appearance="outline" class="scan-field">
@@ -304,7 +305,9 @@ interface CatalogoPosItem {
         </mat-form-field>
 
         <p class="products-result-label">Mostrando {{ catalogoFiltrado().length }} resultados</p>
+        </div>
 
+        <div class="catalog-results">
         @if (vistaProductos() === 'cards') {
           @if (catalogoFiltrado().length === 0) {
             <div class="productos-empty">
@@ -379,17 +382,24 @@ interface CatalogoPosItem {
             }
           </section>
         }
+        </div>
       </article>
 
       <article class="surface-card panel panel-right">
         <header class="panel-title">
-          <h2>Cobro</h2>
-          <p>Vendedor {{ vendedorNombre() }} · Sesion {{ sesionEstado() }}</p>
-          <p>Almacen: {{ almacenActualNombre() }}</p>
+          <div>
+            <h2>Cobro</h2>
+            <p>Vendedor {{ vendedorNombre() }} · Sesion {{ sesionEstado() }}</p>
+          </div>
+          <p class="store-label">
+            <mat-icon>storefront</mat-icon>
+            {{ almacenActualNombre() }}
+          </p>
         </header>
 
         <!-- Pestañas POS: el listado dentro del panel Cobro fue removido; se mantiene arriba. -->
 
+        <div class="checkout-scroll">
         <section class="client-row">
           <mat-form-field appearance="outline" class="client-search">
             <mat-label>Buscar cliente</mat-label>
@@ -419,9 +429,17 @@ interface CatalogoPosItem {
           </mat-chip-set>
         }
 
-        <section class="cart-list">
+        <section class="cart-section">
+          <header class="cart-list-header">
+            <h3>Venta actual</h3>
+            <span>{{ state.carrito().items.length }} {{ state.carrito().items.length === 1 ? 'articulo' : 'articulos' }}</span>
+          </header>
+          <div class="cart-list">
           @if (state.carrito().items.length === 0) {
-            <p class="empty-label">No hay productos o servicios en el carrito.</p>
+            <div class="empty-cart">
+              <mat-icon>shopping_cart</mat-icon>
+              <p class="empty-label">Agrega un producto para iniciar la venta.</p>
+            </div>
           } @else {
             @for (item of state.carrito().items; track item.itemTipo + '-' + item.productoId) {
               <div class="cart-row">
@@ -457,6 +475,7 @@ interface CatalogoPosItem {
               </div>
             }
           }
+          </div>
         </section>
 
         <section class="totals">
@@ -539,16 +558,24 @@ interface CatalogoPosItem {
             <p class="cambio-line">Cambio <strong>{{ cambio() | number:'1.2-2' }}</strong></p>
           }
         </section>
+        </div>
 
         <section class="actions">
-          <button mat-stroked-button type="button" (click)="limpiarCarrito()">Limpiar</button>
-          @if (permiteDividir()) {
-            <button mat-stroked-button type="button" [disabled]="cobrando()" (click)="abrirCobroPorPartes()">
-              <mat-icon>call_split</mat-icon>
-              Cobrar por partes
-            </button>
-          }
+          <div class="checkout-summary" aria-live="polite">
+            <span>Total a cobrar</span>
+            <strong>{{ total() | number:'1.2-2' }}</strong>
+          </div>
+          <div class="secondary-actions">
+            <button mat-stroked-button type="button" (click)="limpiarCarrito()">Limpiar</button>
+            @if (permiteDividir()) {
+              <button mat-stroked-button type="button" [disabled]="cobrando()" (click)="abrirCobroPorPartes()">
+                <mat-icon>call_split</mat-icon>
+                Cobrar por partes
+              </button>
+            }
+          </div>
           <button mat-raised-button color="primary" type="button" [disabled]="cobrando()" (click)="cobrar()">
+            <mat-icon>{{ cobrando() ? 'hourglass_top' : 'payments' }}</mat-icon>
             {{ cobrando() ? 'Cobrando...' : 'Cobrar' }}
           </button>
         </section>
@@ -608,63 +635,147 @@ interface CatalogoPosItem {
       background: var(--mat-sys-surface, #fff); color: var(--mat-sys-on-surface, #1a1a1a);
       box-shadow: 0 12px 40px rgba(0,0,0,.35); text-align: center;
     }
-    .facturando-titulo { margin: .25rem 0 0; font-weight: 700; font-size: 1.05rem; }
-    .facturando-paso { margin: 0; color: var(--muted-foreground); font-size: .9rem; }
-    .pos-grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 1rem; }
-    .panel { padding: 1rem; display: grid; gap: 1rem; align-content: start; }
-    .panel-title h2 { margin: 0; }
-    .panel-title p { margin: .35rem 0 0; color: var(--muted-foreground); }
-    .scan-bar { display: block; }
+    :host { display: block; min-width: 0; }
+    .pos-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.12fr) minmax(400px, .88fr);
+      grid-template-rows: auto minmax(0, 1fr);
+      gap: .875rem;
+      height: calc(100dvh - var(--topbar-height) - 3rem);
+      min-height: 620px;
+    }
+    :host-context(.workspace-shell.immersive) .pos-grid {
+      height: 100dvh;
+      min-height: 0;
+      padding: .75rem;
+    }
+    .panel {
+      min-width: 0;
+      min-height: 0;
+      padding: clamp(.75rem, 1.2vw, 1rem);
+      display: grid;
+      gap: .75rem;
+      overflow: hidden;
+    }
+    .panel-left { grid-template-rows: auto auto minmax(0, 1fr); }
+    .panel-right { grid-template-rows: auto minmax(0, 1fr) auto; }
+    .catalog-controls {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: start;
+      gap: .55rem;
+      min-width: 0;
+    }
+    .catalog-controls > mat-form-field,
+    .scan-bar,
+    .products-result-label { grid-column: 1 / -1; }
+    .catalog-controls mat-form-field { width: 100%; }
+    .catalog-results {
+      min-width: 0;
+      min-height: 0;
+      overflow: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+      padding: .1rem .3rem .4rem .1rem;
+    }
+    .checkout-scroll {
+      min-width: 0;
+      min-height: 0;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      scrollbar-gutter: stable;
+      display: grid;
+      align-content: start;
+      gap: .75rem;
+      padding-right: .3rem;
+    }
     .scan-field { width: 100%; }
     .scan-field mat-icon[matPrefix] { margin-right: .5rem; color: var(--primary); }
-    .catalog-type-switch { display: inline-flex; flex-wrap: wrap; gap: .45rem; }
-    .catalog-type-switch button.active { border-color: var(--primary); color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
-    .products-view-switch { display: inline-flex; gap: .5rem; }
-    .products-view-switch button.active { border-color: var(--primary); color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
-    .products-result-label { margin: -.35rem 0 0; color: var(--muted-foreground); font-size: .88rem; }
-    .productos-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+    .catalog-type-switch,
+    .products-view-switch {
+      display: inline-flex;
+      gap: .35rem;
+      padding: .2rem;
+      border-radius: .75rem;
+      background: var(--tc-surface-container-low);
+    }
+    .catalog-type-switch button,
+    .products-view-switch button {
+      min-width: 0;
+      border: 0;
+      border-radius: .6rem;
+    }
+    .catalog-type-switch button.active,
+    .products-view-switch button.active {
+      color: var(--primary);
+      background: var(--tc-surface-container-lowest);
+      box-shadow: 0 3px 10px color-mix(in srgb, var(--tc-on-surface) 8%, transparent);
+    }
+    .products-result-label { margin: -.25rem 0 0; color: var(--muted-foreground); font-size: .82rem; }
+    .productos-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: .65rem;
+    }
     .producto-card {
-      border: 1px solid color-mix(in srgb, var(--outline) 45%, transparent);
-      border-radius: .9rem;
-      background: linear-gradient(180deg, color-mix(in srgb, var(--tc-surface-container-low) 95%, white), var(--tc-surface-container-lowest));
+      min-width: 0;
+      min-height: 132px;
+      border: 0;
+      border-radius: var(--tc-radius-lg);
+      background: var(--tc-surface-container-low);
+      color: var(--tc-on-surface);
       text-align: left;
-      padding: .9rem;
+      padding: .8rem;
       cursor: pointer;
       display: grid;
-      gap: .6rem;
-      transition: transform .15s ease, border-color .15s ease, box-shadow .15s ease;
+      align-content: space-between;
+      gap: .55rem;
+      transition:
+        transform .18s cubic-bezier(.2, .8, .2, 1),
+        background-color .18s ease,
+        box-shadow .18s ease;
     }
-    .producto-card:hover:not(:disabled) {
-      transform: translateY(-2px);
-      border-color: color-mix(in srgb, var(--primary) 45%, transparent);
-      box-shadow: 0 8px 18px color-mix(in srgb, var(--primary) 12%, transparent);
+    @media (hover: hover) {
+      .producto-card:hover:not(:disabled) {
+        background: color-mix(in srgb, var(--tc-primary-container) 24%, var(--tc-surface-container-lowest));
+        transform: translateY(-2px);
+        box-shadow: 0 9px 22px color-mix(in srgb, var(--tc-on-surface) 10%, transparent);
+      }
+    }
+    .producto-card:active:not(:disabled) {
+      background: color-mix(in srgb, var(--tc-primary-container) 34%, var(--tc-surface-container-lowest));
+      transform: scale(.985);
+    }
+    .producto-card:focus-visible {
+      outline: 3px solid color-mix(in srgb, var(--primary) 35%, transparent);
+      outline-offset: 2px;
     }
     .producto-card:disabled { opacity: .58; cursor: not-allowed; }
     .producto-header-row { display: flex; justify-content: space-between; align-items: flex-start; gap: .5rem; }
     .producto-nombre { margin: 0; font-weight: 700; line-height: 1.2; }
     .stock-badge {
-      border-radius: 999px;
+      border-radius: .6rem;
       font-size: .72rem;
       font-weight: 700;
       letter-spacing: .02em;
       padding: .2rem .5rem;
-      color: #0f5132;
-      background: #d1e7dd;
+      color: var(--tc-on-success-container);
+      background: var(--tc-success-container);
       white-space: nowrap;
     }
-    .stock-badge.warn { color: #664d03; background: #fff3cd; }
-    .stock-badge.danger { color: #842029; background: #f8d7da; }
-    .stock-badge.service { color: #0b5394; background: #d8ebff; }
+    .stock-badge.warn { color: var(--tc-on-warning-container); background: var(--tc-warning-container); }
+    .stock-badge.danger { color: var(--tc-on-error-container); background: var(--tc-error-container); }
+    .stock-badge.service { color: var(--tc-on-info-container); background: var(--tc-info-container); }
     .producto-meta { margin: 0; color: var(--muted-foreground); font-size: .83rem; }
     .producto-footer-row { display: flex; justify-content: space-between; align-items: flex-end; gap: .6rem; }
     .producto-price-label { margin: 0; color: var(--muted-foreground); font-size: .75rem; text-transform: uppercase; letter-spacing: .08em; }
-    .producto-precio { margin: .18rem 0 0; font-size: 1.18rem; font-weight: 700; }
+    .producto-precio { margin: .12rem 0 0; font-family: var(--tc-font-family-heading); font-size: 1.18rem; font-weight: 750; }
     .producto-cta { display: inline-flex; align-items: center; gap: .3rem; font-weight: 600; color: var(--primary); }
     .producto-cta.disabled { color: var(--muted-foreground); }
     .producto-cta mat-icon { font-size: 18px; width: 18px; height: 18px; }
-    .producto-stock { margin: 0; color: #1f7a1f; font-size: .82rem; }
+    .producto-stock { margin: 0; color: var(--tc-success); font-size: .8rem; }
     .productos-empty {
-      border: 1px dashed color-mix(in srgb, var(--outline) 45%, transparent);
+      border: 0;
       border-radius: .85rem;
       padding: 1.2rem;
       display: grid;
@@ -672,27 +783,56 @@ interface CatalogoPosItem {
       gap: .4rem;
       color: var(--muted-foreground);
       text-align: center;
+      background: var(--tc-surface-container-low);
     }
     .productos-empty mat-icon { font-size: 24px; width: 24px; height: 24px; }
-    .productos-table-wrap { border: 1px solid color-mix(in srgb, var(--outline) 45%, transparent); border-radius: .75rem; overflow: hidden; }
+    .productos-table-wrap { min-width: 720px; border-radius: .75rem; overflow: hidden; background: var(--tc-surface-container-low); }
     .productos-table-head, .productos-table-row { display: grid; grid-template-columns: .8fr .9fr 1.5fr .8fr .9fr auto; gap: .5rem; align-items: center; padding: .65rem .75rem; }
-    .productos-table-head { background: color-mix(in srgb, var(--tc-surface-container-low) 92%, transparent); font-weight: 700; font-size: .85rem; text-transform: uppercase; letter-spacing: .04em; }
-    .productos-table-row { border-top: 1px solid color-mix(in srgb, var(--outline) 30%, transparent); }
+    .productos-table-head { position: sticky; top: 0; z-index: 1; background: var(--tc-surface-container-highest); font-weight: 700; font-size: .78rem; text-transform: uppercase; letter-spacing: .04em; }
+    .productos-table-row { margin-top: .25rem; background: var(--tc-surface-container-lowest); }
     .cell-sku { color: var(--muted-foreground); font-size: .9rem; }
     .cell-name { font-weight: 600; }
     mat-chip.chip-producto { background: rgb(16 185 129 / 18%); }
     mat-chip.chip-servicio { background: rgb(59 130 246 / 20%); }
     mat-chip.chip-receta { background: rgb(249 115 22 / 20%); }
-    .sin-stock { color: #b3261e; }
-    .pos-tabs { border: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); border-radius: .8rem; padding: .7rem; display: grid; gap: .55rem; grid-column: 1 / -1; }
+    .sin-stock { color: var(--tc-error); }
+    .pos-tabs {
+      min-width: 0;
+      max-height: 152px;
+      border: 0;
+      border-radius: var(--tc-radius-lg);
+      padding: .65rem .75rem;
+      display: grid;
+      gap: .45rem;
+      grid-column: 1 / -1;
+      overflow-x: hidden;
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      background: var(--tc-surface-container-low);
+    }
     .pos-tabs-header { display: flex; align-items: center; justify-content: space-between; gap: .6rem; flex-wrap: wrap; }
-    .pos-tabs-header h3 { margin: 0; font-size: .95rem; }
+    .pos-tabs-header h3 { margin: 0; font-family: var(--tc-font-family-heading); font-size: .95rem; }
     .pos-tabs-actions { display: inline-flex; gap: .5rem; flex-wrap: wrap; }
     .fullscreen-btn { color: var(--primary); }
-    .pos-tabs-list { display: flex; gap: .5rem; overflow-x: auto; padding-bottom: .2rem; }
-    .cuentas-abiertas { display: flex; align-items: center; flex-wrap: wrap; gap: .4rem; padding-top: .3rem; border-top: 1px dashed color-mix(in srgb, var(--outline) 40%, transparent); }
+    .pos-tabs-list {
+      display: flex;
+      gap: .45rem;
+      min-width: 0;
+      overflow-x: auto;
+      overscroll-behavior-inline: contain;
+      padding-bottom: .15rem;
+    }
+    .cuentas-abiertas {
+      display: flex;
+      align-items: center;
+      flex-wrap: nowrap;
+      gap: .4rem;
+      min-width: 0;
+      overflow-x: auto;
+      padding-top: .2rem;
+    }
     .cuentas-abiertas-label { font-size: .82rem; color: var(--muted-foreground); font-weight: 600; }
-    .cuenta-chip { display: inline-flex; align-items: center; gap: .35rem; padding: .2rem .3rem .2rem .55rem; border-radius: 999px; cursor: pointer; background: color-mix(in srgb, var(--primary) 10%, transparent); border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent); }
+    .cuenta-chip { display: inline-flex; align-items: center; gap: .35rem; flex: 0 0 auto; padding: .2rem .3rem .2rem .55rem; border-radius: .75rem; cursor: pointer; background: color-mix(in srgb, var(--primary) 10%, transparent); border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent); }
     .cuenta-chip:hover { background: color-mix(in srgb, var(--primary) 16%, transparent); }
     .cuenta-chip.tomada-otro {
       cursor: not-allowed;
@@ -709,9 +849,9 @@ interface CatalogoPosItem {
     .cuenta-estado { font-size: .75rem; font-weight: 700; color: var(--muted-foreground); white-space: nowrap; }
     .pos-tab {
       min-width: 210px;
-      border: 1px solid color-mix(in srgb, var(--outline) 45%, transparent);
+      border: 0;
       border-radius: .7rem;
-      background: color-mix(in srgb, var(--tc-surface-container-low) 92%, transparent);
+      background: var(--tc-surface-container-lowest);
       padding: .35rem .4rem;
       display: grid;
       grid-template-columns: 1fr auto auto auto;
@@ -720,13 +860,13 @@ interface CatalogoPosItem {
       cursor: pointer;
     }
     .pos-tab.active {
-      border-color: color-mix(in srgb, var(--primary) 55%, transparent);
       background: color-mix(in srgb, var(--primary) 10%, var(--tc-surface-container-low));
+      box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--primary) 32%, transparent);
     }
     .pos-tab-title { text-align: left; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .pos-tab-input {
       width: 100%;
-      border: 1px solid color-mix(in srgb, var(--outline) 50%, transparent);
+      border: 1px solid var(--tc-ghost-border);
       border-radius: .45rem;
       padding: .3rem .45rem;
       font: inherit;
@@ -748,40 +888,26 @@ interface CatalogoPosItem {
     }
     .client-row { display: grid; grid-template-columns: 1fr auto; gap: .6rem; align-items: center; }
     .client-search { grid-column: 1 / 2; }
-    .cart-list { display: grid; gap: .5rem; }
-    .cart-row { display: grid; grid-template-columns: 1fr auto auto auto auto; gap: .5rem; align-items: center; border: 1px solid color-mix(in srgb, var(--outline) 45%, transparent); border-radius: .7rem; padding: .55rem; }
-    .cart-name { margin: 0; font-weight: 600; }
-    .cart-meta { margin: .2rem 0 0; color: var(--muted-foreground); font-size: .85rem; }
-    .cart-actions { display: inline-flex; gap: .2rem; align-items: center; }
-    .desc-field { width: 120px; }
-    .row-total { margin: 0; font-weight: 700; }
-    .totals { display: grid; gap: .5rem; }
-    .totals-grid { border: 1px dashed color-mix(in srgb, var(--outline) 45%, transparent); border-radius: .65rem; padding: .6rem .75rem; display: grid; gap: .25rem; }
-    .totals-grid p { margin: 0; display: flex; justify-content: space-between; }
-    .total-line { font-size: 1.08rem; border-top: 1px dashed color-mix(in srgb, var(--outline) 45%, transparent); padding-top: .25rem; margin-top: .15rem; }
     .payments { display: grid; gap: .5rem; }
     .payments header { display: flex; justify-content: space-between; align-items: center; }
-    .payments h3 { margin: 0; }
-    .payment-row { display: grid; grid-template-columns: 1fr 1fr 1fr auto; gap: .5rem; align-items: center; }
+    .payments h3 { margin: 0; font-family: var(--tc-font-family-heading); font-size: 1rem; }
+    .payment-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, .8fr) auto;
+      gap: .5rem;
+      align-items: center;
+    }
+    .payment-row > mat-form-field:nth-child(1) { grid-column: 1; grid-row: 1; }
+    .payment-row > mat-form-field:nth-child(2) { grid-column: 2; grid-row: 1; }
+    .payment-row > mat-form-field:nth-child(3) { grid-column: 1 / -1; grid-row: 2; }
+    .payment-row > button { grid-column: 3; grid-row: 1; }
     .payments-balance { margin: 0; font-size: .9rem; color: var(--muted-foreground); }
-    .payments-balance.error { color: #b3261e; font-weight: 600; }
+    .payments-balance.error { color: var(--tc-error); font-weight: 600; }
     .cobro-rapido { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
     .recibido-field { width: 160px; }
     .cambio-line { margin: 0; font-size: 1.05rem; }
-    .cambio-line strong { color: #1f7a1f; }
-    .actions { display: flex; justify-content: flex-end; gap: .6rem; }
+    .cambio-line strong { color: var(--tc-success); }
     .empty-label { color: var(--muted-foreground); margin: 0; }
-    @media (max-width: 1180px) {
-      .pos-grid { grid-template-columns: 1fr; }
-      .payment-row { grid-template-columns: 1fr; }
-      .cart-row { grid-template-columns: 1fr auto; }
-      .desc-field { width: 100%; }
-      .productos-table-head, .productos-table-row { grid-template-columns: 1fr; }
-      .products-view-switch { width: 100%; }
-      .products-view-switch button { flex: 1; }
-      .pos-tabs-header { flex-direction: column; align-items: stretch; }
-      .pos-tab { min-width: 100%; }
-    }
   `]
 })
 export class VentasPosComponent {

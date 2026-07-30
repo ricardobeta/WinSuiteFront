@@ -166,6 +166,14 @@ textarea:disabled { opacity: .6; }
 .send-button:disabled { opacity: .4; cursor: default; }
 footer > small { grid-column: 1 / -1; color: var(--muted-foreground); text-align: center; }
 
+/* Importar un documento ocupa la fila completa, encima del compositor. */
+.documento-chip { display: inline-flex; grid-column: 1 / -1; align-items: center; justify-content: center; gap: 6px; min-height: 38px; padding: 0 12px; border: 1px dashed var(--tc-ghost-border); border-radius: 13px; background: transparent; color: var(--primary); font: inherit; font-weight: 600; cursor: pointer; }
+.documento-chip:hover:not(:disabled) { border-style: solid; border-color: var(--primary); background: color-mix(in srgb, var(--primary) 10%, transparent); }
+.documento-chip:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 30%, transparent); outline-offset: 1px; }
+.documento-chip:disabled { opacity: .45; cursor: default; }
+.welcome-card .documento-button { justify-content: center; border-style: dashed; color: var(--primary); font-weight: 600; }
+.documento-chip .material-symbols-outlined, .documento-button .material-symbols-outlined { font-size: 19px; }
+
 @keyframes pulse { to { opacity: .25; transform: translateY(-2px); } }
 
 @media (max-width: 600px) {

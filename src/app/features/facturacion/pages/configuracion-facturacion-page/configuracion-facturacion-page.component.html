@@ -7,20 +7,41 @@
         Define cómo emite facturas tu empresa. Los cambios no se aplican hasta que los guardes.
       </p>
     </div>
-    <div class="header-summary" aria-label="Resumen de configuración">
-      <span>
-        <mat-icon aria-hidden="true">storefront</mat-icon>
-        {{ configuracion().establecimientos.length }} establecimientos
-      </span>
-      <span>
-        <mat-icon aria-hidden="true">point_of_sale</mat-icon>
-        {{ configuracion().puntosEmision.length }} puntos
-      </span>
+    <div class="header-actions">
+      <div class="header-summary" aria-label="Resumen de configuración">
+        <span>
+          <mat-icon aria-hidden="true">storefront</mat-icon>
+          {{ configuracion().establecimientos.length }} establecimientos
+        </span>
+        <span>
+          <mat-icon aria-hidden="true">point_of_sale</mat-icon>
+          {{ configuracion().puntosEmision.length }} puntos
+        </span>
+      </div>
+      <app-config-copilot-panel
+        [context]="copilotContext"
+        [ejemplos]="copilotEjemplos"
+        [documento]="copilotDocumento"
+        (aplicado)="onCopilotAplicado($event)"
+      />
     </div>
   </header>
 
   @if (cargandoConfiguracion() || cargandoCatalogos() || cargandoCorreo()) {
     <mat-progress-bar mode="indeterminate" aria-label="Cargando configuración" />
+  }
+
+  @if (configuracionDesactualizada()) {
+    <p class="config-aviso" role="status">
+      <mat-icon aria-hidden="true">info</mat-icon>
+      <span>
+        La configuración cambió en otro sitio. Tus cambios sin guardar siguen en pantalla, pero
+        para guardar hay que descartarlos y volver a hacerlos sobre la versión actual.
+      </span>
+      <button mat-stroked-button type="button" (click)="descartarMisCambios()">
+        Descartar mis cambios
+      </button>
+    </p>
   }
 
   <div class="config-surface surface-card">
@@ -128,11 +149,39 @@
                 }
               </mat-form-field>
 
-              <mat-form-field appearance="outline" class="span-2">
-                <mat-label>Logo para el RIDE</mat-label>
-                <input matInput formControlName="logoUrl" type="url" placeholder="https://empresa.com/logo.png" />
-                <mat-hint>URL pública en formato PNG o JPG</mat-hint>
-              </mat-form-field>
+              <section class="logo-setting span-2" aria-labelledby="logo-setting-title">
+                <div class="logo-preview" [class.logo-preview-empty]="!fiscalForm.controls.logoUrl.value">
+                  @if (fiscalForm.controls.logoUrl.value) {
+                    <img
+                      [src]="fiscalForm.controls.logoUrl.value"
+                      alt="Vista previa del logo de la empresa"
+                    />
+                  } @else {
+                    <mat-icon aria-hidden="true">image</mat-icon>
+                  }
+                </div>
+
+                <div class="logo-copy">
+                  <strong id="logo-setting-title">Logo de la empresa</strong>
+                  <span>
+                    Se mostrará en el encabezado del RIDE enviado al cliente. Usa PNG o JPG,
+                    preferiblemente con fondo transparente.
+                  </span>
+                  <small>Máximo 2 MB. La imagen se conserva en los archivos de tu empresa.</small>
+                </div>
+
+                <div class="logo-actions">
+                  <button mat-stroked-button type="button" (click)="seleccionarLogo()">
+                    <mat-icon>folder_open</mat-icon>
+                    {{ fiscalForm.controls.logoUrl.value ? 'Cambiar logo' : 'Seleccionar o subir' }}
+                  </button>
+                  @if (fiscalForm.controls.logoUrl.value) {
+                    <button mat-button type="button" class="remove-logo" (click)="quitarLogo()">
+                      Quitar
+                    </button>
+                  }
+                </div>
+              </section>
 
               <div class="toggle-list span-2">
                 <mat-slide-toggle formControlName="obligadoContabilidad">

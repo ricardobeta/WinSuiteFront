@@ -225,7 +225,9 @@ export class RecetasService {
       const movimientosAplicados: Array<{ productoId: string; cantidad: number }> = [];
 
       for (const ingrediente of ingredientes) {
-        const cantidadMovimiento = this.roundToFour(ingrediente.cantidad * input.cantidadRecetas);
+        // resolverIngredientesBase ya aplica cantidadRecetas al resolver la receta.
+        // Multiplicarla nuevamente descontaria la cantidad vendida al cuadrado.
+        const cantidadMovimiento = this.roundToFour(ingrediente.cantidad);
         const delta = this.roundToFour(signo * cantidadMovimiento);
 
         if (delta === 0) {

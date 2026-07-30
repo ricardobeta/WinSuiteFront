@@ -322,6 +322,13 @@ export interface RequisitoNomina {
   item: ItemPreparacionNomina;
   etiqueta: string;
   ok: boolean;
+  /**
+   * Si es false el requisito solo informa y no impide generar el rol. Se usa para lo que puede
+   * resolverse mas tarde, como las cuentas contables: el contador las elige en el dialogo de
+   * revision del asiento, al aprobar, y no tiene por que configurarlas antes de generar.
+   * Ausente equivale a bloqueante.
+   */
+  bloqueante?: boolean;
   detalle: string;
   /** Ruta a la que se envia al contador para resolver el requisito. */
   rutaResolver: string;

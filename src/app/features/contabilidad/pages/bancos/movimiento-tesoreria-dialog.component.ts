@@ -3,12 +3,14 @@ import { Component, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 
+import { dateAIso } from '../../../../shared/utils/fecha-input.util';
 import { CuentaContableAutocompleteComponent } from '../../components/cuenta-contable-autocomplete/cuenta-contable-autocomplete.component';
 import { AsientoContable, CuentaContable } from '../../models/contabilidad.models';
 import { CuentaBancaria } from '../../models/bancos.models';
@@ -37,6 +39,7 @@ const TIPOS: { valor: TipoMovimientoTesoreria; label: string; egreso: boolean }[
     CommonModule,
     ReactiveFormsModule,
     MatButtonModule,
+    MatDatepickerModule,
     MatDialogModule,
     MatFormFieldModule,
     MatIconModule,
@@ -71,7 +74,9 @@ const TIPOS: { valor: TipoMovimientoTesoreria; label: string; egreso: boolean }[
         <div class="row">
           <mat-form-field appearance="outline">
             <mat-label>Fecha</mat-label>
-            <input matInput type="date" formControlName="fecha" />
+            <input matInput [matDatepicker]="pickerFecha" formControlName="fecha" />
+            <mat-datepicker-toggle matSuffix [for]="pickerFecha"></mat-datepicker-toggle>
+            <mat-datepicker #pickerFecha></mat-datepicker>
           </mat-form-field>
 
           <mat-form-field appearance="outline">
@@ -142,7 +147,7 @@ export class MovimientoTesoreriaDialogComponent {
   protected readonly form = this.formBuilder.nonNullable.group({
     tipo: ['CHEQUE' as TipoMovimientoTesoreria, Validators.required],
     cuentaBancariaId: [this.data.cuentaBancariaId ?? '', Validators.required],
-    fecha: [new Date().toISOString().slice(0, 10), Validators.required],
+    fecha: [new Date() as Date | null, Validators.required],
     monto: [0, [Validators.required, Validators.min(0.01)]],
     referencia: [''],
     beneficiario: [''],
@@ -178,6 +183,8 @@ export class MovimientoTesoreriaDialogComponent {
     this.guardando.set(true);
     try {
       const egreso = this.esEgreso();
+      // El datepicker entrega Date; el modelo y el periodo contable trabajan con ISO yyyy-MM-dd.
+      const fechaIso = dateAIso(value.fecha);
       const monto = Math.round(Math.abs(value.monto) * 100) / 100;
       const glosa = `Tesorería: ${value.glosa}`;
       const lineaBanco = {
@@ -199,8 +206,8 @@ export class MovimientoTesoreriaDialogComponent {
         haber: egreso ? 0 : monto
       };
       const asiento: AsientoContable = {
-        fecha: value.fecha,
-        periodo: value.fecha.slice(0, 7),
+        fecha: fechaIso,
+        periodo: fechaIso.slice(0, 7),
         tipo: 'AJUSTE',
         glosa,
         referencia: value.referencia || undefined,
@@ -216,9 +223,9 @@ export class MovimientoTesoreriaDialogComponent {
       const movimiento: Omit<MovimientoTesoreria, 'id' | 'creadoEn'> = {
         tipo: value.tipo,
         cuentaBancariaId: value.cuentaBancariaId,
-        fecha: value.fecha,
-        fechaTs: new Date(`${value.fecha}T00:00:00-05:00`).getTime(),
-        periodo: value.fecha.slice(0, 7),
+        fecha: fechaIso,
+        fechaTs: new Date(`${fechaIso}T00:00:00-05:00`).getTime(),
+        periodo: fechaIso.slice(0, 7),
         monto: egreso ? -monto : monto,
         referencia: value.referencia || '',
         beneficiario: value.beneficiario || '',

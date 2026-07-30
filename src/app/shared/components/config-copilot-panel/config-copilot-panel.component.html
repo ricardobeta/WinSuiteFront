@@ -37,13 +37,19 @@
           <span class="material-symbols-outlined" aria-hidden="true">tune</span>
           <h2>Configuremos esto juntos</h2>
           <p>
-            Cuéntame de qué es tu negocio y te propongo las categorías, unidades y campos que
-            necesitas. Reviso lo que ya tienes y nada se guarda hasta que tú lo confirmes.
+            Cuéntame cómo trabaja tu negocio y te propongo cómo dejar esta pantalla configurada.
+            Reviso lo que ya tienes y nada se guarda hasta que tú lo confirmes.
           </p>
           @for (ejemplo of ejemplos(); track ejemplo) {
             <button type="button" (click)="useExample(ejemplo)">
               <span>{{ ejemplo }}</span>
               <span class="material-symbols-outlined" aria-hidden="true">arrow_forward</span>
+            </button>
+          }
+          @if (documento(); as importable) {
+            <button type="button" class="documento-button" (click)="importarDocumento()">
+              <span class="material-symbols-outlined" aria-hidden="true">upload_file</span>
+              <span>{{ importable.etiqueta }}</span>
             </button>
           }
         </div>
@@ -170,13 +176,24 @@
     </div>
 
     <footer>
+      @if (documento(); as importable) {
+        <button
+          type="button"
+          class="documento-chip"
+          (click)="importarDocumento()"
+          [disabled]="isSending() || isApplying()"
+        >
+          <span class="material-symbols-outlined" aria-hidden="true">upload_file</span>
+          <span>{{ importable.etiqueta }}</span>
+        </button>
+      }
       <textarea
         rows="2"
         [value]="draft()"
         (input)="updateDraft($event)"
         (keydown)="handleKeydown($event)"
         [disabled]="isSending() || isApplying()"
-        placeholder="Ej. Tengo una cafetería, configúrame el inventario"
+        placeholder="Cuéntame qué necesitas configurar"
         aria-label="Mensaje para el copiloto"
       ></textarea>
       <button

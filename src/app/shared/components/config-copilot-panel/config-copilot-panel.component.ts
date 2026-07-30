@@ -9,6 +9,7 @@ import {
   output,
   signal
 } from '@angular/core';
+import { MatDialog } from '@angular/material/dialog';
 import { finalize } from 'rxjs';
 
 import {
@@ -17,14 +18,29 @@ import {
   ConfigApplyResponse,
   ConfigChatTurn,
   ConfigPlanAction,
+  ConfigPlanResponse,
   ConfigScreenContext
 } from '../../../core/services/ai-config-copilot.service';
+import { ArchivoItem } from '../../models/archivos.models';
+import {
+  DocumentoImportDialogComponent,
+  DocumentoImportDialogData
+} from '../documento-import-dialog/documento-import-dialog.component';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;
   sources?: string[];
   avisos?: string[];
+}
+
+/**
+ * Descripcion del documento del que esta pantalla sabe partir. El panel es generico: los
+ * textos concretos los pone la pantalla que lo monta.
+ */
+export interface ConfigDocumentoImportable extends DocumentoImportDialogData {
+  /** Texto del boton, por ejemplo "Importar el PDF del RUC". */
+  etiqueta: string;
 }
 
 const PENSANDO = [
@@ -53,10 +69,13 @@ export class ConfigCopilotPanelComponent {
   readonly context = input.required<ConfigScreenContext>();
   /** Ejemplos que se ofrecen cuando la conversación está vacía. */
   readonly ejemplos = input<string[]>([]);
+  /** Si la pantalla admite partir de un documento, su descripción. Si no, null. */
+  readonly documento = input<ConfigDocumentoImportable | null>(null);
   /** Se emite tras aplicar, para que la pantalla anfitriona reaccione si lo necesita. */
   readonly aplicado = output<ConfigApplyResponse>();
 
   private readonly copilot = inject(AiConfigCopilotService);
+  private readonly dialog = inject(MatDialog);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly isOpen = signal(false);
@@ -129,23 +148,72 @@ export class ConfigCopilotPanelComponent {
         })
       )
       .subscribe({
-        next: (respuesta) => {
-          this.messages.update((items) => [
-            ...items,
-            {
-              role: 'assistant',
-              text: respuesta.text,
-              sources: respuesta.usedSources,
-              avisos: respuesta.avisos
-            }
-          ]);
-          this.plan.set(respuesta.plan);
-        },
+        next: (respuesta) => this.registrarPlan(respuesta),
         error: (error: HttpErrorResponse) =>
           this.messages.update((items) => [
             ...items,
             { role: 'assistant', text: this.mensajeDeError(error) }
           ])
+      });
+  }
+
+  private registrarPlan(respuesta: ConfigPlanResponse): void {
+    this.messages.update((items) => [
+      ...items,
+      {
+        role: 'assistant',
+        text: respuesta.text,
+        sources: respuesta.usedSources,
+        avisos: respuesta.avisos
+      }
+    ]);
+    this.plan.set(respuesta.plan);
+  }
+
+  /**
+   * Importar un documento es otra forma de producir el mismo plan: se renderiza igual y pasa por
+   * la misma confirmacion. Los bytes no se reenvian, solo el archivoId del documento ya subido.
+   */
+  protected importarDocumento(): void {
+    const documento = this.documento();
+    if (!documento || this.isSending() || this.isApplying()) {
+      return;
+    }
+
+    this.dialog
+      .open<DocumentoImportDialogComponent, DocumentoImportDialogData, ArchivoItem>(
+        DocumentoImportDialogComponent,
+        { width: '560px', maxWidth: 'calc(100vw - 32px)', data: documento }
+      )
+      .afterClosed()
+      .subscribe((archivo) => {
+        if (!archivo) {
+          return;
+        }
+        this.messages.update((items) => [
+          ...items,
+          { role: 'user', text: `${documento.etiqueta}: ${archivo.name}` }
+        ]);
+        this.limpiarPlan();
+        this.isSending.set(true);
+        this.iniciarRotacion();
+
+        this.copilot
+          .importarDocumento(this.context(), archivo.id)
+          .pipe(
+            finalize(() => {
+              this.isSending.set(false);
+              this.detenerRotacion();
+            })
+          )
+          .subscribe({
+            next: (respuesta) => this.registrarPlan(respuesta),
+            error: (error: HttpErrorResponse) =>
+              this.messages.update((items) => [
+                ...items,
+                { role: 'assistant', text: this.mensajeDeError(error) }
+              ])
+          });
       });
   }
 

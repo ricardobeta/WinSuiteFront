@@ -16,7 +16,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { AuthService } from '../../../../core/services/auth.service';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { dateAIso } from '../../../../shared/utils/fecha-input.util';
-import { PreparacionNomina, RolPago } from '../../models/nomina.models';
+import { PreparacionNomina, RequisitoNomina, RolPago } from '../../models/nomina.models';
 import { NominaService } from '../../services/nomina.service';
 
 @Component({
@@ -129,15 +129,20 @@ import { NominaService } from '../../services/nomina.service';
           } @else if (preparacion(); as estado) {
             <ul class="checklist-items">
               @for (requisito of estado.requisitos; track requisito.item) {
-                <li [class.ok]="requisito.ok">
-                  <mat-icon>{{ requisito.ok ? 'check_circle' : 'error_outline' }}</mat-icon>
+                <li [class.ok]="requisito.ok" [class.opcional]="!requisito.ok && requisito.bloqueante === false">
+                  <mat-icon>{{ iconoRequisito(requisito) }}</mat-icon>
                   <div>
-                    <strong>{{ requisito.etiqueta }}</strong>
+                    <strong>
+                      {{ requisito.etiqueta }}
+                      @if (!requisito.ok && requisito.bloqueante === false) {
+                        <span class="tag">Opcional</span>
+                      }
+                    </strong>
                     <span class="muted">{{ requisito.detalle }}</span>
                   </div>
                   @if (!requisito.ok) {
                     <a mat-stroked-button [routerLink]="requisito.rutaResolver" [queryParams]="requisito.queryParams">
-                      Resolver
+                      {{ requisito.bloqueante === false ? 'Configurar' : 'Resolver' }}
                     </a>
                   }
                 </li>
@@ -231,8 +236,12 @@ import { NominaService } from '../../services/nomina.service';
     .checklist-items { list-style: none; margin: 0; padding: 0; display: grid; gap: .4rem; }
     .checklist-items li { display: grid; grid-template-columns: auto 1fr auto; gap: .65rem; align-items: center; padding: .5rem .75rem; border-radius: .5rem; background: color-mix(in srgb, #f59e0b 10%, transparent); }
     .checklist-items li.ok { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+    .checklist-items li.opcional { background: color-mix(in srgb, var(--muted-foreground) 10%, transparent); }
     .checklist-items li mat-icon { color: #f59e0b; }
     .checklist-items li.ok mat-icon { color: var(--primary); }
+    .checklist-items li.opcional mat-icon { color: var(--muted-foreground); }
+    /* Gana a la regla que pone en bloque los span del checklist, para que quede junto al titulo. */
+    .checklist-items .tag { display: inline-block; margin-left: .45rem; padding: .05rem .4rem; border-radius: 999px; font-size: .68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; background: color-mix(in srgb, var(--muted-foreground) 20%, transparent); color: var(--muted-foreground); }
     .checklist-items strong, .checklist-items span { display: block; }
     .checklist-items span { font-size: .85rem; }
     .table-wrap { overflow: auto; }
@@ -265,8 +274,9 @@ export class NominaRolesComponent implements OnInit {
   protected readonly tipoRol = signal<'MENSUAL' | 'DECIMO_TERCERO' | 'DECIMO_CUARTO'>('MENSUAL');
   protected readonly preparacion = signal<PreparacionNomina | null>(null);
   protected readonly revisando = signal(false);
+  /** Solo lo que realmente impide generar: los avisos opcionales no cuentan como pendientes. */
   protected readonly pendientes = computed(
-    () => this.preparacion()?.requisitos.filter((requisito) => !requisito.ok).length ?? 0
+    () => this.preparacion()?.requisitos.filter((requisito) => !requisito.ok && requisito.bloqueante !== false).length ?? 0
   );
 
   /**
@@ -334,6 +344,13 @@ export class NominaRolesComponent implements OnInit {
     } finally {
       this.procesando.set(false);
     }
+  }
+
+  protected iconoRequisito(requisito: RequisitoNomina): string {
+    if (requisito.ok) {
+      return 'check_circle';
+    }
+    return requisito.bloqueante === false ? 'info' : 'error_outline';
   }
 
   protected etiquetaTipo(rol: RolPago): string {

@@ -11,6 +11,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
@@ -30,10 +31,34 @@ import {
   RubroNomina
 } from '../../../contabilidad/models/nomina.models';
 import { AnticiposNominaService } from '../../../contabilidad/services/anticipos-nomina.service';
+import { calcularDiasFondosReservaPeriodo } from '../../../contabilidad/services/nomina-calculos.util';
 import { IntegracionContableService } from '../../../contabilidad/services/integracion-contable.service';
 import { NominaPdfApiService } from '../../../contabilidad/services/nomina-pdf-api.service';
 import { NominaService } from '../../../contabilidad/services/nomina.service';
 import { PlanCuentasService } from '../../../contabilidad/services/plan-cuentas.service';
+import {
+  FilaDesglose,
+  baseAportesIess,
+  desgloseIngresos,
+  desgloseOtrosDescuentos
+} from './rol-detalle-desglose.util';
+
+type NombreSeccion = 'INGRESOS' | 'DESCUENTOS' | 'PROVISIONES';
+
+/**
+ * Vista de un desglose del resumen. Las tres secciones comparten la misma tabla, asi que se
+ * describen con esta forma y se pintan con una sola plantilla.
+ */
+interface SeccionDesglose {
+  titulo: string;
+  filas: FilaDesglose[];
+  totalEtiqueta: string;
+  total: number;
+  /** Fila destacada bajo el total (la base de aportes IESS). */
+  cierre?: FilaDesglose;
+  nota?: string;
+  enlace?: { texto: string; icono: string; ruta: string };
+}
 
 interface EmpleadoEdit {
   id: string;
@@ -76,6 +101,7 @@ interface EmpleadoEdit {
     MatInputModule,
     MatSelectModule,
     MatSnackBarModule,
+    MatTooltipModule,
     TwoDecimalInputDirective
   ],
   template: `
@@ -220,22 +246,56 @@ interface EmpleadoEdit {
               }
 
               <dl class="resumen">
-                <div><dt>Total ingresos</dt><dd>{{ item.resumen.totalIngresos | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
+                <div class="fila-expandible">
+                  <dt>Total ingresos</dt>
+                  <dd>
+                    {{ item.resumen.totalIngresos | currency:'USD':'symbol-narrow':'1.2-2' }}
+                    <button mat-icon-button type="button" (click)="alternarSeccion(item.id, 'INGRESOS')"
+                      [attr.aria-expanded]="estaAbierta(item.id, 'INGRESOS')"
+                      [attr.aria-label]="'Ver desglose de ingresos de ' + item.empleadoNombre">
+                      <mat-icon>{{ estaAbierta(item.id, 'INGRESOS') ? 'expand_less' : 'expand_more' }}</mat-icon>
+                    </button>
+                  </dd>
+                </div>
+                @if (estaAbierta(item.id, 'INGRESOS')) {
+                  <ng-container *ngTemplateOutlet="desglose; context: { $implicit: seccionIngresos(item) }" />
+                }
+
                 <div><dt>Aporte personal IESS</dt><dd>- {{ item.resumen.aportePersonalIess | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
                 @if (item.resumen.anticipos > 0) {
                   <div><dt>Anticipos</dt><dd>- {{ item.resumen.anticipos | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
                 }
-                <div><dt>Otros descuentos</dt><dd>- {{ item.resumen.otrosDescuentos | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
-                <div class="provisiones-row">
-                  <dt>Provisiones (patronal)</dt>
+
+                <div class="fila-expandible">
+                  <dt>Otros descuentos</dt>
                   <dd>
-                    {{ item.resumen.totalBeneficios | currency:'USD':'symbol-narrow':'1.2-2' }}
-                    <button mat-icon-button type="button" (click)="alternarProvisiones(item.id)"
-                      [attr.aria-label]="'Ver desglose de provisiones de ' + item.empleadoNombre">
-                      <mat-icon>{{ provisionesAbiertas() === item.id ? 'expand_less' : 'expand_more' }}</mat-icon>
+                    - {{ item.resumen.otrosDescuentos | currency:'USD':'symbol-narrow':'1.2-2' }}
+                    <button mat-icon-button type="button" (click)="alternarSeccion(item.id, 'DESCUENTOS')"
+                      [disabled]="item.resumen.otrosDescuentos === 0"
+                      [attr.aria-expanded]="estaAbierta(item.id, 'DESCUENTOS')"
+                      [attr.aria-label]="'Ver desglose de otros descuentos de ' + item.empleadoNombre">
+                      <mat-icon>{{ estaAbierta(item.id, 'DESCUENTOS') ? 'expand_less' : 'expand_more' }}</mat-icon>
                     </button>
                   </dd>
                 </div>
+                @if (estaAbierta(item.id, 'DESCUENTOS')) {
+                  <ng-container *ngTemplateOutlet="desglose; context: { $implicit: seccionOtrosDescuentos(item) }" />
+                }
+
+                <div class="fila-expandible">
+                  <dt>Provisiones (patronal)</dt>
+                  <dd>
+                    {{ item.resumen.totalBeneficios | currency:'USD':'symbol-narrow':'1.2-2' }}
+                    <button mat-icon-button type="button" (click)="alternarSeccion(item.id, 'PROVISIONES')"
+                      [attr.aria-expanded]="estaAbierta(item.id, 'PROVISIONES')"
+                      [attr.aria-label]="'Ver desglose de provisiones de ' + item.empleadoNombre">
+                      <mat-icon>{{ estaAbierta(item.id, 'PROVISIONES') ? 'expand_less' : 'expand_more' }}</mat-icon>
+                    </button>
+                  </dd>
+                </div>
+                @if (estaAbierta(item.id, 'PROVISIONES')) {
+                  <ng-container *ngTemplateOutlet="desglose; context: { $implicit: seccionProvisiones(item) }" />
+                }
                 <div class="neto" [class.negativo]="item.resumen.netoPagar < 0"><dt>Neto a pagar</dt><dd>{{ item.resumen.netoPagar | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
                 @if (item.resumen.netoPagar < 0) {
                   <p class="neto-aviso">
@@ -245,49 +305,72 @@ interface EmpleadoEdit {
                 }
               </dl>
 
-              @if (provisionesAbiertas() === item.id) {
-                <div class="provisiones-detalle">
-                  <header>
-                    <strong>Desglose de lo provisionado este periodo</strong>
-                    <a mat-button routerLink="/workspace/contabilidad/nomina/provisiones">
-                      <mat-icon>savings</mat-icon>
-                      Ver acumulado del anio
-                    </a>
-                  </header>
-                  <table>
-                    <tbody>
-                      @for (fila of desgloseProvisiones(item); track fila.concepto) {
-                        <tr [class.cero]="fila.monto === 0 && !fila.nota">
-                          <td>{{ fila.etiqueta }}</td>
-                          <td class="base">
-                            {{ fila.base }}
-                            @if (fila.nota) { <em>· {{ fila.nota }}</em> }
-                          </td>
-                          <td class="num">{{ fila.monto | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
-                        </tr>
-                      }
-                      <tr class="total">
-                        <td colspan="2">Total provisionado</td>
-                        <td class="num">{{ item.resumen.totalBeneficios | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                  <p class="nota">
-                    Las provisiones no se descuentan al empleado: son costo patronal que se acumula
-                    hasta pagarse en su rol de decimos o en la liquidacion.
-                  </p>
-                </div>
-              }
             </div>
           </mat-expansion-panel>
         }
       </section>
+
+      <!-- Tabla comun de los tres desgloses del resumen: ingresos, otros descuentos y provisiones. -->
+      <ng-template #desglose let-seccion>
+        <div class="desglose-detalle">
+          <header>
+            <strong>{{ seccion.titulo }}</strong>
+            @if (seccion.enlace) {
+              <a mat-button [routerLink]="seccion.enlace.ruta">
+                <mat-icon>{{ seccion.enlace.icono }}</mat-icon>
+                {{ seccion.enlace.texto }}
+              </a>
+            }
+          </header>
+
+          @if (seccion.filas.length === 0) {
+            <p class="nota">Sin movimientos que desglosar en este periodo.</p>
+          } @else {
+            <table>
+              <tbody>
+                @for (fila of seccion.filas; track fila.clave) {
+                  <tr [class.cero]="fila.atenuada">
+                    <td>{{ fila.etiqueta }}</td>
+                    <td class="base">{{ fila.nota }}</td>
+                    <td class="num">{{ fila.monto | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
+                  </tr>
+                }
+                <tr class="total">
+                  <td colspan="2">{{ seccion.totalEtiqueta }}</td>
+                  <td class="num">{{ seccion.total | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
+                </tr>
+                @if (seccion.cierre) {
+                  <tr class="cierre">
+                    <td>{{ seccion.cierre.etiqueta }}</td>
+                    <td class="base">{{ seccion.cierre.nota }}</td>
+                    <td class="num">{{ seccion.cierre.monto | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
+                  </tr>
+                }
+              </tbody>
+            </table>
+          }
+
+          @if (seccion.nota) {
+            <p class="nota">{{ seccion.nota }}</p>
+          }
+        </div>
+      </ng-template>
 
       <footer class="surface-card actions-bar">
         @if (editable()) {
           <button mat-raised-button color="primary" type="button" (click)="guardar()" [disabled]="procesando()">
             <mat-icon>save</mat-icon>
             Guardar borrador
+          </button>
+          <button
+            mat-stroked-button
+            type="button"
+            (click)="recalcular()"
+            [disabled]="procesando()"
+            matTooltip="Reaplica la configuracion de nomina y la eleccion de decimos de cada trabajador. No cambia sueldos ni dias trabajados."
+          >
+            <mat-icon>calculate</mat-icon>
+            Recalcular
           </button>
           <button mat-raised-button type="button" class="approve" (click)="aprobar()" [disabled]="procesando()">
             <mat-icon>task_alt</mat-icon>
@@ -347,17 +430,20 @@ interface EmpleadoEdit {
     .resumen div { display: flex; justify-content: space-between; }
     .resumen dt, .resumen dd { margin: 0; }
     .resumen .neto { border-top: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent); padding-top: .35rem; font-weight: 700; font-size: 1.05rem; }
-    .provisiones-row dd { display: flex; align-items: center; gap: .25rem; }
-    .provisiones-row button { width: 32px; height: 32px; line-height: 32px; }
-    .provisiones-detalle { margin-top: -.4rem; padding: .85rem 1rem; border-radius: .6rem; background: color-mix(in srgb, var(--primary) 7%, transparent); display: grid; gap: .5rem; }
-    .provisiones-detalle header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
-    .provisiones-detalle table { width: 100%; border-collapse: collapse; }
-    .provisiones-detalle td { padding: .3rem 0; border-bottom: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent); }
-    .provisiones-detalle tr.cero { opacity: .5; }
-    .provisiones-detalle tr.total td { font-weight: 700; border-bottom: none; }
-    .provisiones-detalle .base { color: var(--muted-foreground); font-size: .82rem; }
-    .provisiones-detalle .num { text-align: right; }
-    .provisiones-detalle .nota { margin: 0; font-size: .82rem; color: var(--muted-foreground); }
+    .fila-expandible dd { display: flex; align-items: center; gap: .25rem; }
+    .fila-expandible button { width: 32px; height: 32px; line-height: 32px; }
+    /* Anidado dentro del dl: hay que ganarle a '.resumen div { display: flex }', que lo aplastaria. */
+    .resumen .desglose-detalle { display: grid; gap: .5rem; margin: .1rem 0 .35rem; padding: .85rem 1rem; border-radius: .6rem; background: color-mix(in srgb, var(--primary) 7%, transparent); }
+    .desglose-detalle header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .desglose-detalle table { width: 100%; border-collapse: collapse; }
+    .desglose-detalle td { padding: .3rem 0; border-bottom: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent); }
+    .desglose-detalle tr.cero { opacity: .5; }
+    .desglose-detalle tr.total td { font-weight: 700; border-bottom: none; }
+    /* La base de aportes va bajo el total y separada: no suma, explica el descuento de abajo. */
+    .desglose-detalle tr.cierre td { border-top: 1px solid color-mix(in srgb, var(--foreground) 18%, transparent); border-bottom: none; padding-top: .45rem; color: var(--primary); font-weight: 600; }
+    .desglose-detalle .base { color: var(--muted-foreground); font-size: .82rem; }
+    .desglose-detalle .num { text-align: right; }
+    .desglose-detalle .nota { margin: 0; font-size: .82rem; color: var(--muted-foreground); }
     .actions-bar { padding: 1rem 1.25rem; display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
     .approve { background: var(--primary); color: var(--tc-on-primary, #fff); }
     .error-box { padding: .8rem 1rem; border-radius: .5rem; background: color-mix(in srgb, #b3261e 12%, transparent); color: #b3261e; }
@@ -388,8 +474,11 @@ export class NominaRolDetalleComponent implements OnInit {
   protected readonly etiquetaTipo = computed(
     () => this.nominaService.etiquetasTipoRol[this.rol()?.tipo ?? 'MENSUAL']
   );
-  /** Id del empleado cuyo desglose de provisiones esta abierto, o null si no hay ninguno. */
-  protected readonly provisionesAbiertas = signal<string | null>(null);
+  /**
+   * Desglose abierto, como `${idDetalle}|${seccion}`. Al ser uno solo, abrir el de ingresos cierra
+   * el de provisiones y el panel del empleado no crece sin control.
+   */
+  private readonly seccionAbierta = signal<string | null>(null);
   protected readonly descargando = signal(false);
   /** Anticipos del periodo pendientes por empleado, para ofrecer traerlos al borrador. */
   private readonly anticiposPendientes = signal<Map<string, number>>(new Map());
@@ -398,12 +487,13 @@ export class NominaRolDetalleComponent implements OnInit {
   private rolId = '';
 
   protected readonly totales = computed(() => {
-    const acc = { totalIngresos: 0, aportePersonal: 0, totalDescuentos: 0, netoPagar: 0 };
+    const acc = { totalIngresos: 0, aportePersonal: 0, totalDescuentos: 0, totalBeneficios: 0, netoPagar: 0 };
     for (const item of this.empleados()) {
       const r = item.resumen;
       acc.totalIngresos += r.totalIngresos;
       acc.aportePersonal += r.aportePersonalIess;
       acc.totalDescuentos += r.totalDescuentos;
+      acc.totalBeneficios += r.totalBeneficios;
       acc.netoPagar += r.netoPagar;
     }
     return acc;
@@ -481,8 +571,45 @@ export class NominaRolDetalleComponent implements OnInit {
     return error instanceof Error ? error.message : 'No se pudieron descargar los comprobantes.';
   }
 
-  protected alternarProvisiones(empleadoDetalleId: string): void {
-    this.provisionesAbiertas.update((actual) => actual === empleadoDetalleId ? null : empleadoDetalleId);
+  protected alternarSeccion(empleadoDetalleId: string, seccion: NombreSeccion): void {
+    const clave = `${empleadoDetalleId}|${seccion}`;
+    this.seccionAbierta.update((actual) => actual === clave ? null : clave);
+  }
+
+  protected estaAbierta(empleadoDetalleId: string, seccion: NombreSeccion): boolean {
+    return this.seccionAbierta() === `${empleadoDetalleId}|${seccion}`;
+  }
+
+  /**
+   * De donde sale el total de ingresos: sueldo del periodo, rubros y lo mensualizado. Cierra con la
+   * base de aportes, que explica por que el IESS no es el porcentaje del total.
+   */
+  protected seccionIngresos(item: EmpleadoEdit): SeccionDesglose {
+    return {
+      titulo: 'Desglose de los ingresos del periodo',
+      filas: desgloseIngresos(item.resumen),
+      totalEtiqueta: 'Total ingresos',
+      total: item.resumen.totalIngresos,
+      cierre: {
+        clave: 'BASE_IESS',
+        etiqueta: 'Base de aportes IESS',
+        nota: 'Solo los ingresos que afectan IESS',
+        monto: baseAportesIess(item.resumen)
+      },
+      nota: 'Los decimos y fondos mensualizados se pagan con el sueldo pero no forman parte de la '
+        + 'base de aportes, por eso el IESS no se calcula sobre el total de ingresos.'
+    };
+  }
+
+  /** Rubros que el resumen agrupa bajo "Otros descuentos"; el IESS y el anticipo van aparte. */
+  protected seccionOtrosDescuentos(item: EmpleadoEdit): SeccionDesglose {
+    return {
+      titulo: 'Desglose de otros descuentos',
+      filas: desgloseOtrosDescuentos(item.resumen),
+      totalEtiqueta: 'Total otros descuentos',
+      total: item.resumen.otrosDescuentos,
+      nota: 'El aporte al IESS y los anticipos no aparecen aqui: cada uno tiene su propia fila en el resumen.'
+    };
   }
 
   /**
@@ -490,9 +617,7 @@ export class NominaRolDetalleComponent implements OnInit {
    * rol y lo acumulado queda provisionado. Asi la cifra deja de ser opaca y se ve por que un
    * empleado provisiona y otro no.
    */
-  protected desgloseProvisiones(item: EmpleadoEdit): Array<{
-    concepto: ConceptoProvision; etiqueta: string; base: string; monto: number; nota: string;
-  }> {
+  protected seccionProvisiones(item: EmpleadoEdit): SeccionDesglose {
     const resumen = item.resumen;
     const provisionado: Record<ConceptoProvision, number> = {
       DECIMO_TERCERO: resumen.decimoTerceroProvision,
@@ -507,13 +632,25 @@ export class NominaRolDetalleComponent implements OnInit {
       VACACIONES: 0
     };
 
-    return this.nominaService.conceptosProvision.map((concepto) => ({
-      concepto,
-      etiqueta: this.nominaService.etiquetasConcepto[concepto],
-      base: this.nominaService.basesCalculoProvision[concepto],
-      monto: provisionado[concepto],
-      nota: this.notaProvision(concepto, resumen, mensualizado[concepto])
-    }));
+    return {
+      titulo: 'Desglose de lo provisionado este periodo',
+      filas: this.nominaService.conceptosProvision.map((concepto) => {
+        const nota = this.notaProvision(concepto, resumen, mensualizado[concepto]);
+        return {
+          clave: concepto,
+          etiqueta: this.nominaService.etiquetasConcepto[concepto],
+          // La base de calculo y la nota se muestran juntas, igual que antes de unificar la tabla.
+          nota: [this.nominaService.basesCalculoProvision[concepto], nota].filter(Boolean).join(' · '),
+          monto: provisionado[concepto],
+          atenuada: provisionado[concepto] === 0 && !nota
+        };
+      }),
+      totalEtiqueta: 'Total provisionado',
+      total: resumen.totalBeneficios,
+      enlace: { texto: 'Ver acumulado del anio', icono: 'savings', ruta: '/workspace/contabilidad/nomina/provisiones' },
+      nota: 'Las provisiones no se descuentan al empleado: son costo patronal que se acumula '
+        + 'hasta pagarse en su rol de decimos o en la liquidacion.'
+    };
   }
 
   private notaProvision(concepto: ConceptoProvision, resumen: RolPagoDetalle, mensualizado: number): string {
@@ -603,6 +740,46 @@ export class NominaRolDetalleComponent implements OnInit {
       await this.cargar(this.rolId);
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : 'No se pudo guardar el borrador.');
+    } finally {
+      this.procesando.set(false);
+    }
+  }
+
+  /**
+   * Vuelve a aplicar al borrador la configuracion de nomina y la eleccion de decimos de cada
+   * trabajador. Sirve cuando el rol se genero con algo mal configurado —el salario basico sin
+   * definir, o un empleado marcado como acumulado cuando debia mensualizar— y se corrige despues:
+   * sin esto habria que anular el rol y generarlo de nuevo.
+   *
+   * Refresca solo *elecciones* (modo de decimos, regimen de fondos y los dias que estos causan),
+   * nunca importes: el sueldo y los dias trabajados siguen congelados para no pisar los ajustes
+   * que el contador haya hecho a mano en el borrador.
+   */
+  protected async recalcular(): Promise<void> {
+    if (!this.editable()) {
+      return;
+    }
+    this.error.set(null);
+    this.procesando.set(true);
+    try {
+      const antes = this.totales();
+      await this.refrescarReglasEmpleados();
+      // actualizarDetallesRol relee la configuracion y recalcula cada detalle antes de escribir.
+      await this.nominaService.actualizarDetallesRol(this.rolId, this.empleados().map((item) => this.aDetalle(item)));
+      await this.cargar(this.rolId);
+
+      const despues = this.totales();
+      const sinCambios = antes.totalIngresos === despues.totalIngresos
+        && antes.totalDescuentos === despues.totalDescuentos
+        && antes.totalBeneficios === despues.totalBeneficios;
+      this.toast(
+        sinCambios
+          ? 'El rol ya estaba al dia con la configuracion actual.'
+          : `Rol recalculado. Provisiones ${antes.totalBeneficios.toFixed(2)} → ${despues.totalBeneficios.toFixed(2)}.`,
+        sinCambios ? 'info' : 'calculate'
+      );
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : 'No se pudo recalcular el rol.');
     } finally {
       this.procesando.set(false);
     }
@@ -802,6 +979,38 @@ export class NominaRolDetalleComponent implements OnInit {
       return;
     }
     this.toast(`Anticipos agregados a ${actualizados} empleado(s). Guarda el borrador.`, 'account_balance_wallet');
+  }
+
+  /**
+   * Trae del maestro de empleados la eleccion de decimos y el regimen de fondos, y recalcula los
+   * dias con derecho a fondos, que dependen del regimen. Un empleado retirado del maestro conserva
+   * lo que tenia congelado: el rol no puede quedarse sin sus reglas.
+   */
+  private async refrescarReglasEmpleados(): Promise<void> {
+    const periodo = this.rol()?.periodo;
+    if (!periodo) {
+      return;
+    }
+    const empleados = new Map((await firstValueFrom(this.nominaService.getEmpleados()))
+      .map((empleado) => [empleado.id ?? '', empleado]));
+
+    for (const item of this.empleados()) {
+      const ficha = empleados.get(item.empleadoId);
+      if (!ficha) {
+        continue;
+      }
+      const regimen = ficha.regimenFondosReserva ?? item.reglas.regimenFondosReserva ?? 'GENERAL';
+      const diasFondos = calcularDiasFondosReservaPeriodo(ficha.fechaIngreso, periodo, regimen);
+      item.reglas = {
+        ...item.reglas,
+        modoDecimoTercero: ficha.modoDecimoTercero ?? item.reglas.modoDecimoTercero,
+        modoDecimoCuarto: ficha.modoDecimoCuarto ?? item.reglas.modoDecimoCuarto,
+        modoFondosReserva: ficha.modoFondosReserva ?? item.reglas.modoFondosReserva,
+        regimenFondosReserva: regimen,
+        diasFondosReservaPeriodo: diasFondos,
+        aplicaFondosReserva: diasFondos > 0
+      };
+    }
   }
 
   private anticipoEnLineas(item: EmpleadoEdit): number {

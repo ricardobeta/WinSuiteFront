@@ -94,6 +94,20 @@ export class AiConfigCopilotService {
       .pipe(map((response) => this.sanearPlan(response)));
   }
 
+  /**
+   * Produce un plan a partir de un documento que el usuario ya subio con el modulo Archivos.
+   * Solo viaja el archivoId: los bytes ya estan en Storage y el backend extrae el texto ahi,
+   * asi que el documento no se reenvia ni sale del servidor.
+   */
+  importarDocumento(
+    context: ConfigScreenContext,
+    archivoId: string
+  ): Observable<ConfigPlanResponse> {
+    return this.http
+      .post<ConfigPlanResponse>(`${this.baseEndpoint}/documento`, { context, archivoId })
+      .pipe(map((response) => this.sanearPlan(response)));
+  }
+
   apply(
     context: ConfigScreenContext,
     acciones: ConfigApprovedAction[]

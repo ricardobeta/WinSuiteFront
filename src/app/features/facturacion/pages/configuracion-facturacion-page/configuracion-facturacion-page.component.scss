@@ -48,11 +48,19 @@
   margin: 0.35rem 0 0;
 }
 
+.header-actions,
 .header-summary {
   display: flex;
   gap: 0.6rem;
   flex-shrink: 0;
 }
+
+.header-actions {
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+/* .config-aviso vive en styles.scss: lo comparten todas las pantallas de configuracion. */
 
 .header-summary span,
 .count-label,
@@ -350,6 +358,84 @@
   align-items: center;
 }
 
+.logo-setting {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  min-height: 112px;
+  padding: 1rem;
+  border-radius: 14px;
+  background: var(--tc-surface-container-low);
+}
+
+.logo-preview {
+  display: grid;
+  width: 88px;
+  height: 80px;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 10px;
+  background: var(--tc-surface-container-lowest);
+}
+
+.logo-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  padding: 0.5rem;
+  object-fit: contain;
+}
+
+.logo-preview-empty {
+  color: var(--muted-foreground);
+}
+
+.logo-preview-empty mat-icon {
+  width: 32px;
+  height: 32px;
+  font-size: 32px;
+}
+
+.logo-copy {
+  display: grid;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.logo-copy strong {
+  color: var(--foreground);
+  font-size: 0.94rem;
+}
+
+.logo-copy span,
+.logo-copy small {
+  color: var(--muted-foreground);
+  line-height: 1.4;
+}
+
+.logo-copy span {
+  font-size: 0.84rem;
+}
+
+.logo-copy small {
+  font-size: 0.75rem;
+}
+
+.logo-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.logo-actions button {
+  min-height: 44px;
+}
+
+.remove-logo {
+  color: var(--tc-error);
+}
+
 .create-block {
   padding: 1.1rem;
   border: 1px solid var(--border);
@@ -628,6 +714,23 @@
   .form-grid,
   .form-grid-wide {
     grid-template-columns: 1fr;
+  }
+
+  .logo-setting {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+
+  .logo-preview {
+    width: 72px;
+    height: 68px;
+  }
+
+  .logo-actions {
+    grid-column: 1 / -1;
+  }
+
+  .logo-actions button:first-child {
+    flex: 1;
   }
 
   .span-2 {

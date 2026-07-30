@@ -49,6 +49,19 @@ export class ConfiguracionClientesService {
     await this.guardarConfiguracion({ camposPersonalizados });
   }
 
+  /**
+   * Reemplaza un campo por su idCampo, nunca por posicion: el copiloto puede haber reordenado
+   * la lista entre que se abrio el dialogo y se guardo.
+   */
+  async actualizarCampo(campo: CampoPersonalizado): Promise<void> {
+    const config = await this.getConfiguracionOnce();
+    const camposPersonalizados = config.camposPersonalizados
+      .map((existente) => (existente.idCampo === campo.idCampo ? campo : existente))
+      .sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0));
+
+    await this.guardarConfiguracion({ camposPersonalizados });
+  }
+
   async eliminarCampo(idCampo: string): Promise<void> {
     const config = await this.getConfiguracionOnce();
     const camposPersonalizados = config.camposPersonalizados.filter((campo) => campo.idCampo !== idCampo);
@@ -86,6 +99,16 @@ export class ConfiguracionClientesService {
 
         if (campo.orden !== undefined) {
           campoNormalizado.orden = campo.orden;
+        }
+
+        // Sin estas dos, cada lectura descartaba lo que se hubiera guardado y la siguiente
+        // escritura lo borraba del nodo: un campo desactivado volvia a estar activo.
+        if (campo.visibleEnLista !== undefined) {
+          campoNormalizado.visibleEnLista = campo.visibleEnLista;
+        }
+
+        if (campo.activo !== undefined) {
+          campoNormalizado.activo = campo.activo;
         }
 
         if (Array.isArray(campo.opciones)) {

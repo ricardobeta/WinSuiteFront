@@ -45,6 +45,9 @@ import { CatalogoOpcionesComponent } from '../catalogo-opciones/catalogo-opcione
               <mat-option [value]="tipo">{{ tipo }}</mat-option>
             }
           </mat-select>
+          @if (data) {
+            <mat-hint>El tipo no se puede cambiar: los valores ya guardados dependen de él.</mat-hint>
+          }
         </mat-form-field>
 
         <mat-checkbox formControlName="requerido">Requerido</mat-checkbox>
@@ -87,6 +90,12 @@ export class AgregarCampoDialogComponent implements OnInit {
     this.form.patchValue(campo);
     this.actualizarOpcionesSegunTipo(campo.tipo);
 
+    // El tipo es inmutable una vez creado el campo: los valores ya capturados en cada registro
+    // dependen de el. El backend lo rechaza; aqui se evita que el usuario llegue a intentarlo.
+    if (this.data) {
+      this.form.controls.tipo.disable({ emitEvent: false });
+    }
+
     this.form.controls.tipo.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((tipo) => {
       this.actualizarOpcionesSegunTipo(tipo);
     });
@@ -102,6 +111,7 @@ export class AgregarCampoDialogComponent implements OnInit {
       return;
     }
 
+    // getRawValue incluye 'tipo' aunque este deshabilitado al editar.
     const value = this.form.getRawValue();
     const campo: CampoPersonalizado = {
       idCampo: value.idCampo || this.generarIdCampo(),
@@ -111,6 +121,15 @@ export class AgregarCampoDialogComponent implements OnInit {
       opciones: this.tieneOpciones() ? (value.opciones ?? []) : undefined,
       orden: value.orden ?? 0
     };
+
+    // Este dialogo no edita visibleEnLista ni activo, asi que al editar hay que arrastrarlos:
+    // el llamador reemplaza el campo entero y perderlos volveria a activar lo desactivado.
+    if (this.data?.visibleEnLista !== undefined) {
+      campo.visibleEnLista = this.data.visibleEnLista;
+    }
+    if (this.data?.activo !== undefined) {
+      campo.activo = this.data.activo;
+    }
 
     this.dialogRef.close(campo);
   }

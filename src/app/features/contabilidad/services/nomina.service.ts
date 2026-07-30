@@ -246,27 +246,40 @@ export class NominaService {
     const rutaConfiguracion = '/workspace/contabilidad/configuracion';
     const paramsConfiguracion = { tab: 'integraciones', panel: 'nomina' };
 
+    // El SBU es la base del decimo cuarto: hace falta tanto si la empresa lo provisiona como si
+    // algun trabajador lo mensualiza, porque en ambos casos hay que devengarlo.
+    const mensualizanDecimoCuarto = activos.filter(
+      (empleado) => (empleado.modoDecimoCuarto ?? config.modoDecimos) === 'MENSUALIZADO'
+    ).length;
+    const requiereSbu = config.provisionarDecimoCuarto || mensualizanDecimoCuarto > 0;
+    const iessDefinido = config.porcentajeAportePersonalIess > 0 && config.porcentajeAportePatronalIess > 0;
+    const faltaSbu = requiereSbu && config.salarioBasicoUnificado <= 0;
+
     const requisitos: RequisitoNomina[] = [
       {
         item: 'CUENTAS',
         etiqueta: 'Cuentas contables de nomina',
         ok: cuentasFaltantes.length === 0,
+        // Informativo: configurarlas de antemano ahorra trabajo, pero el rol se genera igual y las
+        // cuentas que falten se eligen en el dialogo de revision del asiento al aprobar.
+        bloqueante: false,
         detalle: cuentasFaltantes.length === 0
           ? 'Las 10 cuentas estan configuradas y permiten movimiento.'
-          : `Falta configurar: ${cuentasFaltantes.join(', ')}.`,
+          : `Sin configurar: ${cuentasFaltantes.join(', ')}. Puedes generar el rol igual y elegirlas al revisar el asiento.`,
         rutaResolver: rutaConfiguracion,
         queryParams: paramsConfiguracion
       },
       {
         item: 'REGLAS',
         etiqueta: 'Porcentajes IESS y provisiones',
-        ok: config.porcentajeAportePersonalIess > 0 && config.porcentajeAportePatronalIess > 0
-          && (!config.provisionarDecimoCuarto || config.salarioBasicoUnificado > 0),
-        detalle: config.porcentajeAportePersonalIess > 0 && config.porcentajeAportePatronalIess > 0
-          ? (config.provisionarDecimoCuarto && config.salarioBasicoUnificado <= 0
-            ? 'Provisionas decimo cuarto pero falta el salario basico unificado.'
-            : `Aporte personal ${config.porcentajeAportePersonalIess}% y patronal ${config.porcentajeAportePatronalIess}%.`)
-          : 'Define los porcentajes de aporte personal y patronal del IESS.',
+        ok: iessDefinido && !faltaSbu,
+        detalle: !iessDefinido
+          ? 'Define los porcentajes de aporte personal y patronal del IESS.'
+          : faltaSbu
+            ? (config.provisionarDecimoCuarto
+              ? 'Provisionas decimo cuarto pero falta el salario basico unificado.'
+              : `${mensualizanDecimoCuarto} empleado(s) mensualizan el decimo cuarto y falta el salario basico unificado: se les pagaria cero.`)
+            : `Aporte personal ${config.porcentajeAportePersonalIess}% y patronal ${config.porcentajeAportePatronalIess}%.`,
         rutaResolver: rutaConfiguracion,
         queryParams: paramsConfiguracion
       },
@@ -291,7 +304,11 @@ export class NominaService {
       await this.evaluarPeriodo(periodo)
     ];
 
-    return { listo: requisitos.every((requisito) => requisito.ok), requisitos };
+    // Solo los requisitos bloqueantes deciden si se puede generar; el resto queda como aviso.
+    return {
+      listo: requisitos.every((requisito) => requisito.ok || requisito.bloqueante === false),
+      requisitos
+    };
   }
 
   private async evaluarPeriodo(periodo: string): Promise<RequisitoNomina> {
@@ -1593,22 +1610,29 @@ export class NominaService {
         detalle.diasFondosReservaPeriodo ?? (detalle.aplicaFondosReserva ? diasTrabajados : 0)
       )
     );
+    const modoD13 = detalle.modoDecimoTercero ?? config.modoDecimos;
+    const modoD14 = detalle.modoDecimoCuarto ?? config.modoDecimos;
+    const modoFondos = detalle.modoFondosReserva ?? config.modoDecimos;
+
+    /*
+     * Mensualizar y provisionar son dos destinos del MISMO devengado, no dos calculos distintos:
+     * el flag `provisionar*` de la empresa decide que hacer con lo acumulado, pero si el trabajador
+     * eligio mensualizar hay que devengarlo igual o su rol saldria sin ese rubro. Antes el flag
+     * apagaba el calculo entero y un empleado que mensualizaba el decimo cuarto cobraba cero.
+     */
     const devengado = calcularDevengadosLegales({
       baseRemuneracion,
       salarioBasicoUnificado: config.salarioBasicoUnificado,
       diasTrabajados,
       diasFondosReserva: diasFondos,
-      calcularDecimoTercero: config.provisionarDecimoTercero,
-      calcularDecimoCuarto: config.provisionarDecimoCuarto,
+      calcularDecimoTercero: config.provisionarDecimoTercero || modoD13 === 'MENSUALIZADO',
+      calcularDecimoCuarto: config.provisionarDecimoCuarto || modoD14 === 'MENSUALIZADO',
       calcularFondosReserva: config.provisionarFondosReserva
+        || modoFondos === 'MENSUALIZADO'
         || detalle.regimenFondosReserva === 'CONSTRUCCION'
         || detalle.regimenFondosReserva === 'SERVICIOS_COMPLEMENTARIOS',
       calcularVacaciones: config.provisionarVacaciones
     });
-
-    const modoD13 = detalle.modoDecimoTercero ?? config.modoDecimos;
-    const modoD14 = detalle.modoDecimoCuarto ?? config.modoDecimos;
-    const modoFondos = detalle.modoFondosReserva ?? config.modoDecimos;
 
     const decimoTerceroMensualizado = modoD13 === 'MENSUALIZADO' ? devengado.decimoTercero : 0;
     const decimoCuartoMensualizado = modoD14 === 'MENSUALIZADO' ? devengado.decimoCuarto : 0;

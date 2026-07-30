@@ -17,7 +17,17 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { MatTabsModule } from '@angular/material/tabs';
 
+import { ConfigApplyResponse, ConfigScreenContext } from '../../../../core/services/ai-config-copilot.service';
 import { FacturacionConfigService } from '../../../../core/services/facturacion-config.service';
+import {
+  ConfigCopilotPanelComponent,
+  ConfigDocumentoImportable
+} from '../../../../shared/components/config-copilot-panel/config-copilot-panel.component';
+import {
+  ArchivoSelectorDialogComponent,
+  ArchivoSelectorDialogData,
+  ArchivoSelectorDialogResult
+} from '../../../../shared/components/archivo-selector-dialog/archivo-selector-dialog.component';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import {
@@ -55,7 +65,8 @@ type CampoCatalogoMultiple =
     MatSlideToggleModule,
     MatSnackBarModule,
     MatTableModule,
-    MatTabsModule
+    MatTabsModule,
+    ConfigCopilotPanelComponent
   ],
   templateUrl: './configuracion-facturacion-page.component.html',
   styleUrl: './configuracion-facturacion-page.component.scss'
@@ -82,6 +93,32 @@ export class ConfiguracionFacturacionPageComponent {
   protected readonly mainDirty = signal(false);
   protected readonly correoDirty = signal(false);
   protected readonly passwordConfigured = signal(false);
+  /**
+   * La configuracion cambio en otro sitio (el copiloto, u otra pestana) mientras habia
+   * ediciones sin guardar. Se avisa en vez de pisar lo que el usuario tenia escrito.
+   */
+  protected readonly configuracionDesactualizada = signal(false);
+
+  /** screenKey debe coincidir con el ConfigToolSet del backend. */
+  protected readonly copilotContext: ConfigScreenContext = {
+    route: '/workspace/facturacion/configuracion',
+    module: 'Facturacion',
+    page: 'Configuracion',
+    screenKey: 'facturacion.configuracion'
+  };
+  protected readonly copilotEjemplos = [
+    'Tengo un local en el centro y quiero facturar desde ahí',
+    '¿Qué me falta para pasar a producción?',
+    'Solo cobro en efectivo y transferencia'
+  ];
+  protected readonly copilotDocumento: ConfigDocumentoImportable = {
+    etiqueta: 'Importar el PDF del RUC',
+    titulo: 'Importar el PDF del RUC',
+    ayuda: 'Sube el certificado de RUC que descargas del portal del SRI. De ahí salen la '
+      + 'dirección de la matriz, el régimen y tus establecimientos, que podrás revisar antes '
+      + 'de aplicar nada.',
+    sourceModule: 'facturacion'
+  };
 
   protected readonly catalogos = signal<CatalogosFacturacion>({
     formaPago: [],
@@ -172,17 +209,19 @@ export class ConfiguracionFacturacionPageComponent {
 
     this.facturacionService.getConfiguracion().pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
       next: (configuracion) => {
-        this.configuracion.set(configuracion);
-        this.fiscalForm.patchValue({
-          direccionMatriz: configuracion.direccionMatriz,
-          obligadoContabilidad: configuracion.obligadoContabilidad,
-          contribuyenteEspecial: configuracion.contribuyenteEspecial ?? '',
-          agenteRetencion: configuracion.agenteRetencion ?? '',
-          contribuyenteRimpe: configuracion.contribuyenteRimpe,
-          logoUrl: configuracion.logoUrl ?? ''
-        }, { emitEvent: false });
         this.cargandoConfiguracion.set(false);
-        this.mainDirty.set(false);
+        // Es nuestra propia escritura volviendo: el estado local ya es el correcto.
+        if (this.guardando()) {
+          return;
+        }
+        // La suscripcion es en vivo. El estado sucio de esta pantalla vive tanto en la senal
+        // 'configuracion' (catalogos, establecimientos, puntos) como en fiscalForm, y refrescar
+        // aqui borraria sin aviso lo que el usuario tuviera a medias en cualquiera de los dos.
+        if (this.mainDirty()) {
+          this.configuracionDesactualizada.set(true);
+          return;
+        }
+        this.aplicarConfiguracion(configuracion);
       },
       error: () => {
         this.cargandoConfiguracion.set(false);
@@ -208,6 +247,38 @@ export class ConfiguracionFacturacionPageComponent {
         this.mostrarMensaje('No se pudo cargar la configuración de correo.', 'error');
       }
     });
+  }
+
+  private aplicarConfiguracion(configuracion: ConfiguracionFacturacion): void {
+    this.configuracion.set(configuracion);
+    this.fiscalForm.patchValue({
+      direccionMatriz: configuracion.direccionMatriz,
+      obligadoContabilidad: configuracion.obligadoContabilidad,
+      contribuyenteEspecial: configuracion.contribuyenteEspecial ?? '',
+      agenteRetencion: configuracion.agenteRetencion ?? '',
+      contribuyenteRimpe: configuracion.contribuyenteRimpe,
+      logoUrl: configuracion.logoUrl ?? ''
+    }, { emitEvent: false });
+    this.mainDirty.set(false);
+    this.configuracionDesactualizada.set(false);
+  }
+
+  /**
+   * El copiloto acaba de escribir. Si el usuario tenia ediciones sin guardar, el aviso se
+   * enciende ya: sin esto no lo sabria hasta intentar guardar. Si no las tenia, la suscripcion
+   * en vivo refresca la pantalla sola y un aviso solo confundiria.
+   */
+  protected onCopilotAplicado(respuesta: ConfigApplyResponse): void {
+    if (respuesta.aplicadas > 0 && this.mainDirty()) {
+      this.configuracionDesactualizada.set(true);
+    }
+  }
+
+  /** Descarta las ediciones locales y vuelve a leer lo que hay guardado. */
+  protected descartarMisCambios(): void {
+    void this.facturacionService.getConfiguracionOnce()
+      .then((configuracion) => this.aplicarConfiguracion(configuracion))
+      .catch(() => this.mostrarMensaje('No se pudo recargar la configuración guardada.', 'error'));
   }
 
   protected isActivoMultiple(campo: CampoCatalogoMultiple, codigo: string): boolean {
@@ -393,7 +464,48 @@ export class ConfiguracionFacturacionPageComponent {
     return `${firma.nombreArchivo}${ruc}${razonSocial}`;
   }
 
+  protected seleccionarLogo(): void {
+    this.dialog.open<
+      ArchivoSelectorDialogComponent,
+      ArchivoSelectorDialogData,
+      ArchivoSelectorDialogResult | null
+    >(ArchivoSelectorDialogComponent, {
+      data: {
+        title: 'Logo de la empresa',
+        subtitle: 'Selecciona una imagen ya cargada o sube el logo que aparecerá en el RIDE.',
+        sourceModule: 'facturacion',
+        extensions: ['png', 'jpg', 'jpeg']
+      },
+      width: '960px',
+      maxWidth: '95vw',
+      maxHeight: '92vh',
+      autoFocus: false
+    }).afterClosed().subscribe((resultado) => {
+      const url = resultado?.archivo.downloadUrl?.trim();
+      if (!url) {
+        return;
+      }
+      this.fiscalForm.controls.logoUrl.setValue(url);
+      this.fiscalForm.controls.logoUrl.markAsDirty();
+      this.mostrarMensaje('Logo seleccionado. Guarda los cambios para aplicarlo al RIDE.', 'image');
+    });
+  }
+
+  protected quitarLogo(): void {
+    this.fiscalForm.controls.logoUrl.setValue('');
+    this.fiscalForm.controls.logoUrl.markAsDirty();
+  }
+
   protected async guardarConfiguracion(): Promise<void> {
+    // Guardar ahora escribiria el nodo completo con un estado que ya no incluye lo que se
+    // cambio por otro lado: perderia esos cambios en silencio.
+    if (this.configuracionDesactualizada()) {
+      this.mostrarMensaje(
+        'La configuración cambió en otro sitio. Descarta tus cambios para ver la versión actual.',
+        'warning'
+      );
+      return;
+    }
     if (this.fiscalForm.invalid) {
       this.fiscalForm.markAllAsTouched();
       this.selectedTabIndex.set(0);
