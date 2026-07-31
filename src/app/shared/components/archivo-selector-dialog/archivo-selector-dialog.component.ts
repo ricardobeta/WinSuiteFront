@@ -219,15 +219,24 @@ export interface ArchivoSelectorDialogResult {
     `
       :host {
         display: block;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+      }
+
+      :host,
+      :host * {
+        box-sizing: border-box;
       }
 
       .selector-shell {
         display: grid;
         gap: 1rem;
-        width: min(1120px, calc(100vw - 1.5rem));
-        max-width: calc(100vw - 1.5rem);
+        width: 100%;
+        max-width: 1120px;
+        min-width: 0;
         max-height: 92vh;
-        overflow: auto;
+        overflow-y: auto;
         overflow-x: hidden;
         padding: 0.25rem;
         margin: 0 auto;
@@ -247,6 +256,7 @@ export interface ArchivoSelectorDialogResult {
       .hero-copy {
         display: grid;
         gap: 0.4rem;
+        min-width: 0;
       }
 
       .hero-actions {
@@ -254,9 +264,12 @@ export interface ArchivoSelectorDialogResult {
         align-items: center;
         gap: 0.75rem;
         flex-shrink: 0;
+        min-width: 0;
       }
 
       .hero-actions mat-button-toggle-group {
+        max-width: 100%;
+        min-width: 0;
         border-radius: 999px;
         overflow: hidden;
         background: color-mix(in srgb, var(--primary) 4%, var(--tc-surface-container-low));
@@ -318,10 +331,12 @@ export interface ArchivoSelectorDialogResult {
       .upload-header p {
         margin: 0;
         color: var(--muted-foreground);
+        overflow-wrap: anywhere;
       }
 
       .hero-pills {
         margin-top: 0.35rem;
+        max-width: 100%;
       }
 
       .eyebrow {
@@ -345,10 +360,13 @@ export interface ArchivoSelectorDialogResult {
       .search-workflow {
         display: grid;
         gap: 1rem;
+        min-width: 0;
       }
 
+      .search-bar,
       .results-panel,
       .upload-panel {
+        min-width: 0;
         padding: 1.25rem;
       }
 
@@ -389,6 +407,7 @@ export interface ArchivoSelectorDialogResult {
       .files-list {
         display: grid;
         gap: 0.75rem;
+        min-width: 0;
       }
 
       .load-more {
@@ -406,6 +425,10 @@ export interface ArchivoSelectorDialogResult {
         border: 1px dashed color-mix(in srgb, var(--primary) 35%, var(--tc-ghost-border));
         border-radius: 1rem;
         background: color-mix(in srgb, var(--primary) 5%, var(--card));
+      }
+
+      .sites-upload > div {
+        min-width: 0;
       }
 
       .sites-upload h4,
@@ -465,6 +488,7 @@ export interface ArchivoSelectorDialogResult {
 
       .file-info {
         min-width: 0;
+        overflow: hidden;
       }
 
       .file-title-line {
@@ -476,17 +500,27 @@ export interface ArchivoSelectorDialogResult {
 
       .file-title-line h4 {
         margin: 0;
+        min-width: 0;
         font-size: 1rem;
+        overflow-wrap: anywhere;
       }
 
       .file-info p {
         margin: 0.35rem 0 0;
         color: var(--muted-foreground);
+        overflow-wrap: anywhere;
       }
 
       .upload-panel {
         display: grid;
         gap: 1rem;
+      }
+
+      .upload-panel app-archivo-uploader {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
       }
 
       .upload-header {
@@ -525,6 +559,7 @@ export interface ArchivoSelectorDialogResult {
 
         .hero-actions mat-button-toggle {
           flex: 1 1 0;
+          min-width: 0;
         }
 
         .sites-upload {
@@ -537,8 +572,44 @@ export interface ArchivoSelectorDialogResult {
         }
       }
 
+      @media (max-width: 560px) {
+        .selector-shell {
+          gap: 0.75rem;
+          padding: 0;
+        }
+
+        .selector-hero,
+        .results-panel,
+        .upload-panel {
+          padding: 0.9rem;
+        }
+
+        .hero-actions {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          flex-wrap: initial;
+        }
+
+        .hero-actions mat-button-toggle-group {
+          width: auto;
+        }
+
+        :host ::ng-deep .hero-actions .mat-button-toggle-button {
+          padding-inline: 0.5rem;
+        }
+
+        .file-row {
+          padding: 0.8rem;
+        }
+
+        .file-icon {
+          width: 42px;
+          height: 42px;
+        }
+      }
+
       :host-context(html.theme-dark) .selector-shell {
-        max-width: calc(100vw - 1.5rem);
+        max-width: 1120px;
       }
 
       :host-context(html.theme-dark) .hero-actions mat-button-toggle-group {

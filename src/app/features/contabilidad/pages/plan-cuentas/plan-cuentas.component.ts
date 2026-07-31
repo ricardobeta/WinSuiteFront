@@ -766,7 +766,7 @@ export class PlanCuentasComponent implements OnInit {
         return;
       }
       if (!data || data.formato !== 'winsuite-plan-cuentas' || !Array.isArray(data.cuentas)) {
-        this.mostrarMensaje('El archivo no es un plan de cuentas de WinSuite.', 'error');
+        this.mostrarMensaje('El archivo no es un plan de cuentas de WinSuit.', 'error');
         return;
       }
       this.confirmarImport(data);

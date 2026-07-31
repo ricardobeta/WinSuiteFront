@@ -29,7 +29,7 @@ const PUSH_ERRORS: Record<string, string> = {
       <div class="heading"><span class="icon"><mat-icon>notifications_active</mat-icon></span><div><p class="eyebrow">Avisos por empresa</p><h2>Mis notificaciones</h2><p>Elige que novedades quieres recibir mientras trabajas y en tus dispositivos.</p></div></div>
       @if (loading()) { <mat-spinner diameter="36" /> } @else {
         <form [formGroup]="form" (ngSubmit)="save()">
-          <div class="channel"><div><strong>Notificaciones push</strong><p>Recibe alertas aun cuando no tengas WinSuite abierto.</p></div><mat-slide-toggle formControlName="pushEnabled" /></div>
+          <div class="channel"><div><strong>Notificaciones push</strong><p>Recibe alertas aun cuando no tengas WinSuit abierto.</p></div><mat-slide-toggle formControlName="pushEnabled" /></div>
           <div class="topics">
             <h3>Temas de esta empresa</h3>
             <div class="topic"><mat-icon>point_of_sale</mat-icon><div><strong>Ventas</strong><p>Ventas completadas y novedades comerciales.</p></div><mat-slide-toggle formControlName="sales" /></div>

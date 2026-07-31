@@ -519,7 +519,7 @@ export class AuthService {
   private toReadableBootstrapError(error: unknown): string {
     if (error instanceof HttpErrorResponse) {
       if (error.status === 0) {
-        return 'No pudimos conectar con WinSuite. Revisa tu conexión e intenta nuevamente.';
+        return 'No pudimos conectar con WinSuit. Revisa tu conexión e intenta nuevamente.';
       }
       if (error.status === 401 || error.status === 403) {
         return 'No pudimos validar tu empresa y permisos. Reintenta o vuelve a iniciar sesión.';

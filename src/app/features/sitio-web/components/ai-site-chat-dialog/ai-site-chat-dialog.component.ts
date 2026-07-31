@@ -99,7 +99,7 @@ const CATALOGO_SECCIONES = Object.entries(SECCIONES_INFO)
           <span class="antena"></span><mat-icon>smart_toy</mat-icon><span class="brillo"></span>
         </div>
         <div>
-          <span class="eyebrow">Diseñador IA de WinSuite</span>
+          <span class="eyebrow">Diseñador IA de WinSuit</span>
           <h2>{{ headerTitle() }}</h2>
           <p>Conversemos: te preguntaré lo necesario y diseñaré tu sitio completo.</p>
         </div>

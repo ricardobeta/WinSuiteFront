@@ -246,7 +246,7 @@ export class ColaboradorFormComponent implements OnInit {
   protected emailStatusTitle(): string {
     switch (this.emailStatus()) {
       case 'checking': return 'Verificando correo…';
-      case 'existing': return 'Esta persona ya tiene una cuenta WinSuite';
+      case 'existing': return 'Esta persona ya tiene una cuenta WinSuit';
       case 'new': return 'Se creará una cuenta nueva';
       case 'member': return 'Esta persona ya pertenece a la empresa';
       case 'error': return 'No se pudo verificar el correo';

@@ -1,0 +1,173 @@
+<app-legal-layout
+  titulo="Términos y Condiciones"
+  subtitulo="Condiciones bajo las que ponemos WinSuit a tu disposición y compromisos que asumen ambas partes."
+>
+  <app-indice-legal indice [secciones]="secciones" />
+
+  <div class="legal-prosa">
+    <h2 id="objeto">Objeto y aceptación</h2>
+    <p>
+      Estos términos regulan el acceso y uso de la plataforma <strong>WinSuit</strong>, titularidad
+      de
+      @if (empresa.razonSocial) {
+        <strong>{{ empresa.razonSocial }}</strong>
+      } @else {
+        la compañía identificada en la página de Representante Legal
+      }
+      (en adelante, «WinSuit» o «nosotros»). Al crear una cuenta o utilizar el servicio aceptas
+      estos términos en su totalidad. Si no estás de acuerdo con ellos, no debes usar la
+      plataforma. Los datos completos del titular están publicados en la página de
+      <a routerLink="/legal/representante-legal">Representante Legal</a>.
+    </p>
+
+    <h2 id="servicio">Descripción del servicio</h2>
+    <p>
+      WinSuit es una plataforma en la nube de gestión empresarial que incluye, según el plan
+      contratado, módulos de contabilidad, facturación electrónica, inventario, clientes,
+      proveedores, nómina, conciliación bancaria, constructor de sitios web y un asistente
+      comercial sobre WhatsApp. El servicio se presta «tal como está» y evoluciona de forma
+      continua: podemos añadir, modificar o retirar funcionalidades, avisando con antelación
+      razonable cuando el cambio afecte de forma sustancial al uso que haces del servicio.
+    </p>
+
+    <h2 id="cuenta">Cuenta y credenciales</h2>
+    <ul>
+      <li>Debes proporcionar información veraz y mantenerla actualizada.</li>
+      <li>
+        Eres responsable de la confidencialidad de tus credenciales y de toda actividad realizada
+        con ellas. Avísanos de inmediato si detectas un acceso no autorizado.
+      </li>
+      <li>
+        El administrador de cada empresa es responsable de los permisos que concede a los demás
+        usuarios y de las acciones que estos realicen dentro de la plataforma.
+      </li>
+      <li>Una cuenta es personal e intransferible; no puede compartirse entre varias personas.</li>
+    </ul>
+
+    <h2 id="uso">Uso aceptable</h2>
+    <p>No está permitido:</p>
+    <ul>
+      <li>Usar la plataforma para actividades ilícitas o para registrar operaciones simuladas.</li>
+      <li>
+        Intentar vulnerar la seguridad del servicio, acceder a datos de otras empresas o realizar
+        ingeniería inversa sobre el software.
+      </li>
+      <li>
+        Enviar mensajes masivos no solicitados a través del módulo de WhatsApp, ni contactar a
+        personas que no hayan dado su consentimiento. El incumplimiento de las políticas de Meta
+        puede provocar el bloqueo de la línea, sin que ello sea imputable a WinSuit.
+      </li>
+      <li>Revender, sublicenciar o ceder el acceso al servicio sin autorización escrita.</li>
+      <li>
+        Cargar contenido que infrinja derechos de terceros o que contenga código malicioso.
+      </li>
+    </ul>
+
+    <h2 id="datos-cliente">Titularidad de tus datos</h2>
+    <p>
+      La información que cargas en la plataforma —tu contabilidad, tus clientes, tus productos, tus
+      comprobantes— es y sigue siendo tuya. WinSuit la trata únicamente para prestarte el servicio,
+      conforme a la <a routerLink="/legal/privacidad">Política de Privacidad</a>. Puedes exportarla
+      en los formatos que ofrece la plataforma mientras tu cuenta esté activa.
+    </p>
+    <p>
+      El software, la marca, el diseño y el código de WinSuit son de nuestra titularidad. El
+      contrato te otorga un derecho de uso no exclusivo, revocable e intransferible, limitado al
+      plazo de la suscripción.
+    </p>
+
+    <h2 id="proteccion-datos">Protección de datos personales</h2>
+    <p>
+      Ambas partes se obligan a cumplir la <strong>Ley Orgánica de Protección de Datos
+      Personales</strong> de la República del Ecuador y su Reglamento General.
+    </p>
+    <ul>
+      <li>
+        WinSuit actúa como <strong>encargado del tratamiento</strong> de los datos personales que
+        el usuario carga en la plataforma (clientes, proveedores, empleados) y los trata
+        únicamente siguiendo sus instrucciones y para prestar el servicio. El usuario es el
+        <strong>responsable del tratamiento</strong> de esa información y garantiza contar con
+        base legal suficiente para haberla recogido.
+      </li>
+      <li>
+        Respecto de los datos de la cuenta y de facturación del propio usuario, WinSuit actúa como
+        responsable del tratamiento, conforme a la
+        <a routerLink="/legal/privacidad">Política de Privacidad</a>.
+      </li>
+      <li>
+        WinSuit mantiene medidas técnicas y organizativas de seguridad proporcionales al riesgo y
+        obliga a la confidencialidad a su personal y a sus proveedores.
+      </li>
+      <li>
+        Si se produce una vulneración de seguridad que afecte a datos personales, WinSuit lo
+        notificará al usuario sin dilación indebida y colaborará en la comunicación a la
+        Superintendencia de Protección de Datos Personales cuando corresponda.
+      </li>
+      <li>
+        Terminado el contrato, WinSuit eliminará o devolverá los datos personales tratados por
+        cuenta del usuario en los plazos indicados en la Política de Privacidad, salvo aquellos
+        que deba conservar por obligación legal.
+      </li>
+    </ul>
+
+    <h2 id="facturacion">Facturación electrónica</h2>
+    <p>
+      WinSuit genera, firma y transmite comprobantes electrónicos al Servicio de Rentas Internas
+      del Ecuador. Es responsabilidad del usuario:
+    </p>
+    <ul>
+      <li>Mantener vigente su firma electrónica y sus autorizaciones ante el SRI.</li>
+      <li>Verificar la exactitud de los datos tributarios antes de emitir cada comprobante.</li>
+      <li>Conservar los comprobantes conforme a la normativa tributaria vigente.</li>
+    </ul>
+    <p>
+      WinSuit no responde por rechazos, contingencias o sanciones derivadas de información
+      incorrecta ingresada por el usuario, de la caducidad de su firma electrónica ni de la
+      indisponibilidad de los servicios del SRI.
+    </p>
+
+    <h2 id="planes">Planes y pagos</h2>
+    <p>
+      El precio, el ciclo de facturación y los límites de cada plan son los vigentes al momento de
+      la contratación y se comunican antes del pago. Las suscripciones se renuevan automáticamente
+      salvo cancelación previa al cierre del período. La falta de pago habilita la suspensión del
+      acceso, previo aviso, sin perjuicio de la conservación de tus datos durante el plazo indicado
+      en la Política de Privacidad. Los cambios de precio se notifican con al menos treinta (30)
+      días de antelación y solo aplican al período siguiente.
+    </p>
+
+    <h2 id="disponibilidad">Disponibilidad y soporte</h2>
+    <p>
+      Trabajamos para mantener el servicio disponible de forma continua, pero no garantizamos una
+      operación ininterrumpida. Las ventanas de mantenimiento programado se anuncian con antelación
+      y se procuran fuera del horario laboral. El soporte se presta por los canales publicados al
+      final de esta página, dentro del horario de atención indicado.
+    </p>
+
+    <h2 id="responsabilidad">Límite de responsabilidad</h2>
+    <p>
+      En la máxima medida permitida por la ley, la responsabilidad de WinSuit frente al usuario por
+      cualquier reclamación relacionada con el servicio se limita al importe efectivamente pagado
+      por dicho usuario durante los doce (12) meses anteriores al hecho que originó la reclamación.
+      No respondemos por lucro cesante, pérdida de oportunidades comerciales ni daños indirectos.
+      Nada en esta cláusula excluye la responsabilidad por dolo o culpa grave.
+    </p>
+
+    <h2 id="terminacion">Terminación</h2>
+    <p>
+      Puedes cancelar tu suscripción en cualquier momento desde la plataforma o solicitándolo por
+      los canales de contacto. Nosotros podemos suspender o terminar el servicio en caso de
+      incumplimiento grave de estos términos, de falta de pago sostenida o de una orden de autoridad
+      competente, previo aviso cuando la ley lo permita. Tras la terminación dispondrás de treinta
+      (30) días para exportar tu información.
+    </p>
+
+    <h2 id="ley">Ley aplicable</h2>
+    <p>
+      Estos términos se rigen por las leyes de la República del Ecuador. Cualquier controversia se
+      someterá a los jueces competentes del domicilio de la compañía, salvo que la normativa de
+      protección al consumidor disponga otro fuero. Si alguna cláusula fuera declarada nula, el
+      resto conservará plena validez.
+    </p>
+  </div>
+</app-legal-layout>

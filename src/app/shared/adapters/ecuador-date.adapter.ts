@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { NativeDateAdapter } from '@angular/material/core';
 
 /**
- * Adaptador de fechas de WinSuite (dd/MM/yyyy, Ecuador).
+ * Adaptador de fechas de WinSuit (dd/MM/yyyy, Ecuador).
  *
  * El adaptador nativo delega el texto a Date.parse(), que interpreta entradas parciales de forma
  * distinta entre navegadores. Aqui se aceptan solo formas completas y sin ambiguedad, pero

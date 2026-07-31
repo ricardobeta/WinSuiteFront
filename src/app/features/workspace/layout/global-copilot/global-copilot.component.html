@@ -1,11 +1,11 @@
 @if (isOpen()) {
   <button type="button" class="copilot-backdrop" aria-label="Cerrar copiloto" (click)="toggle()"></button>
-  <aside id="global-copilot-panel" class="copilot-panel" aria-label="Copiloto global de WinSuite">
+  <aside id="global-copilot-panel" class="copilot-panel" aria-label="Copiloto global de WinSuit">
     <header>
       <div class="copilot-brand">
         <span class="material-symbols-outlined">auto_awesome</span>
         <div>
-          <strong>Copiloto WinSuite</strong>
+          <strong>Copiloto WinSuit</strong>
           <small>{{ context.module }} · {{ context.page }}</small>
         </div>
       </div>
@@ -19,7 +19,7 @@
         <div class="welcome-card">
           <span class="material-symbols-outlined">neurology</span>
           <h2>¿En que te ayudo?</h2>
-          <p>Puedo explicarte esta pantalla y guiarte por los procesos de WinSuite.</p>
+          <p>Puedo explicarte esta pantalla y guiarte por los procesos de WinSuit.</p>
           <button type="button" (click)="useExample('Explicame como funciona esta pantalla')">
             Explicame esta pantalla
           </button>
@@ -50,7 +50,7 @@
         </article>
       }
       @if (isSending()) {
-        <div class="thinking"><span></span><span></span><span></span> Consultando WinSuite...</div>
+        <div class="thinking"><span></span><span></span><span></span> Consultando WinSuit...</div>
       }
     </section>
 
@@ -59,7 +59,7 @@
         rows="2"
         maxlength="4000"
         aria-label="Pregunta para el copiloto"
-        placeholder="Pregunta sobre WinSuite..."
+        placeholder="Pregunta sobre WinSuit..."
         [value]="draft()"
         (input)="updateDraft($event)"
         (keydown)="handleKeydown($event)"
@@ -75,7 +75,7 @@
 <button
   type="button"
   class="copilot-trigger"
-  [attr.aria-label]="isOpen() ? 'Cerrar Copiloto WinSuite' : 'Abrir Copiloto WinSuite'"
+  [attr.aria-label]="isOpen() ? 'Cerrar Copiloto WinSuit' : 'Abrir Copiloto WinSuit'"
   [attr.aria-expanded]="isOpen()"
   aria-controls="global-copilot-panel"
   (click)="toggle()"

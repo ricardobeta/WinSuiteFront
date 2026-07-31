@@ -281,7 +281,7 @@ export class PlanCuentasService {
    */
   async importarPlanCuentas(data: PlanCuentasExport): Promise<ResultadoAplicarPlantilla> {
     if (!data || data.formato !== 'winsuite-plan-cuentas' || !Array.isArray(data.cuentas)) {
-      throw new Error('El archivo no es un plan de cuentas válido de WinSuite.');
+      throw new Error('El archivo no es un plan de cuentas válido de WinSuit.');
     }
 
     const existentes = await this.getCuentasOnce();

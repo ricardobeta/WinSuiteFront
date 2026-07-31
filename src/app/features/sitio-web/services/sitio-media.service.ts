@@ -50,7 +50,7 @@ export class SitioMediaService {
       cacheControl: 'public,max-age=31536000,immutable',
       customMetadata: {
         tenantId,
-        uploadedBy: usuario?.displayName || usuario?.email || 'WinSuite',
+        uploadedBy: usuario?.displayName || usuario?.email || 'WinSuit',
         uploadedById: usuario?.uid ?? '',
         sourceModule: 'sitio_web',
       },

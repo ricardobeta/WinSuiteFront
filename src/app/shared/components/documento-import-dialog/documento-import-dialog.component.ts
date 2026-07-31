@@ -99,7 +99,7 @@ export interface DocumentoImportDialogData {
 
       <p class="privacidad">
         <mat-icon>lock</mat-icon>
-        El PDF se queda en WinSuite. Para leerlo se extrae su texto en el servidor y solo ese
+        El PDF se queda en WinSuit. Para leerlo se extrae su texto en el servidor y solo ese
         texto se envía al proveedor de IA.
       </p>
     </mat-dialog-content>

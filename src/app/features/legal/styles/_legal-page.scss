@@ -1,0 +1,601 @@
+// Paginas publicas de /legal (representante legal, privacidad, terminos).
+//
+// Extienden Tactile Clarity sin bordes de 1px: la jerarquia se construye por capas
+// tonales (surface -> surface-container-low -> surface-container-lowest) y una unica
+// sombra ambiental. Escala tipografica fija en rem, no fluida: es una superficie de
+// lectura, no una landing.
+
+:where(app-representante-legal, app-politica-privacidad, app-terminos-condiciones) {
+  display: block;
+  min-width: 0;
+}
+
+:where(app-legal-layout) {
+  display: block;
+  min-width: 0;
+
+  --legal-ancho: 74rem;
+  --legal-medida: 68ch;
+  --legal-paso: 1.5rem;
+  --legal-radio: 20px;
+
+  --legal-h1: 2.5rem;
+  --legal-h2: 1.375rem;
+  --legal-cuerpo: 1rem;
+  --legal-dato: 1.0625rem;
+  --legal-etiqueta: 0.75rem;
+
+  --legal-tenue: color-mix(in srgb, var(--tc-on-surface) 62%, transparent);
+
+.legal-page {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--tc-surface);
+  color: var(--tc-on-surface);
+  font-family: var(--tc-font-family-body);
+  font-size: var(--legal-cuerpo);
+}
+
+// Enlace de salto: fuera de pantalla hasta que recibe foco de teclado.
+.legal-saltar {
+  position: absolute;
+  left: -9999px;
+  z-index: 10;
+
+  &:focus-visible {
+    left: 1rem;
+    top: 1rem;
+    padding: 0.65rem 1.1rem;
+    border-radius: var(--tc-radius-sm);
+    background: var(--tc-primary);
+    color: var(--tc-on-primary);
+    font-weight: 600;
+    text-decoration: none;
+  }
+}
+
+/* --- Cabecera ------------------------------------------------------------ */
+
+.legal-hero {
+  background: var(--tc-hero-background);
+}
+
+.legal-hero__inner {
+  width: min(100%, var(--legal-ancho));
+  margin: 0 auto;
+  padding: clamp(2rem, 5vw, 3.75rem) clamp(1.25rem, 5vw, 3rem) clamp(2.75rem, 6vw, 4.25rem);
+}
+
+.legal-hero__marca {
+  display: inline-block;
+  margin-bottom: clamp(2rem, 5vw, 3.25rem);
+  border-radius: 12px;
+
+  img {
+    display: block;
+    width: 150px;
+    height: auto;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tc-primary);
+    outline-offset: 6px;
+  }
+}
+
+// Kicker unico de la superficie: nombra la familia de documentos, no cada seccion.
+.legal-kicker {
+  margin: 0 0 0.85rem;
+  color: var(--tc-tertiary);
+  font-size: var(--legal-etiqueta);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.legal-hero__titulo {
+  max-width: 18ch;
+  margin: 0;
+  font-family: var(--tc-font-family-heading);
+  font-size: var(--legal-h1);
+  font-weight: 600;
+  line-height: 1.08;
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.legal-hero__bajada {
+  max-width: 62ch;
+  margin: 1.15rem 0 0;
+  color: var(--legal-tenue);
+  font-size: 1.0625rem;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+/* --- Cuerpo -------------------------------------------------------------- */
+
+.legal-cuerpo {
+  flex: 1;
+  padding: clamp(2.5rem, 6vw, 4.5rem) clamp(1.25rem, 5vw, 3rem);
+}
+
+.legal-cuerpo__inner {
+  width: min(100%, var(--legal-ancho));
+  margin: 0 auto;
+  display: grid;
+  gap: clamp(2rem, 4vw, 3.5rem);
+  align-items: start;
+}
+
+.legal-documento {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.75rem, 3.5vw, 2.75rem);
+}
+
+/* --- Indice pegajoso ----------------------------------------------------- */
+
+.legal-indice {
+  min-width: 0;
+}
+
+.legal-indice__caja {
+  border-radius: var(--tc-radius-md);
+  background: var(--tc-surface-container-low);
+}
+
+.legal-indice__resumen {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.95rem 1.15rem;
+  color: var(--tc-on-surface);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  list-style: none;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  mat-icon {
+    flex: none;
+    color: var(--legal-tenue);
+    transition: transform 180ms ease;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tc-primary);
+    outline-offset: 2px;
+    border-radius: var(--tc-radius-md);
+  }
+}
+
+.legal-indice__caja[open] .legal-indice__resumen mat-icon {
+  transform: rotate(180deg);
+}
+
+.legal-indice__lista {
+  margin: 0;
+  padding: 0 0.6rem 0.85rem;
+  list-style: none;
+
+  a {
+    display: block;
+    padding: 0.5rem 0.75rem;
+    border-radius: 10px;
+    color: var(--legal-tenue);
+    font-size: 0.875rem;
+    line-height: 1.4;
+    text-decoration: none;
+    transition:
+      background-color 160ms ease,
+      color 160ms ease;
+
+    &:hover {
+      background: color-mix(in srgb, var(--tc-on-surface) 5%, transparent);
+      color: var(--tc-on-surface);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--tc-primary);
+      outline-offset: 1px;
+    }
+
+    &.is-activa {
+      background: var(--tc-primary-container);
+      color: var(--tc-on-primary-container);
+      font-weight: 600;
+    }
+  }
+}
+
+/* --- Ficha de identidad -------------------------------------------------- */
+
+.legal-ficha {
+  position: relative;
+  padding: clamp(1.75rem, 3.6vw, 2.5rem);
+  border-radius: var(--legal-radio);
+  background: var(--tc-surface-container-lowest);
+  box-shadow: var(--tc-elevation-1);
+  overflow: hidden;
+
+  // Unico acento saturado de la pagina.
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto;
+    height: 3px;
+    background: var(--tc-gradient-primary);
+  }
+}
+
+.legal-ficha__titulo {
+  margin: 0 0 1.5rem;
+  font-family: var(--tc-font-family-heading);
+  font-size: var(--legal-h2);
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+.legal-ficha__datos {
+  margin: 0;
+}
+
+.legal-ficha__fila {
+  display: grid;
+  grid-template-columns: minmax(0, 13rem) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: baseline;
+  padding: 0.85rem 1rem;
+  border-radius: 12px;
+
+  // Separacion por alternancia tonal, nunca por linea.
+  &:nth-child(odd) {
+    background: color-mix(in srgb, var(--tc-surface-container-highest) 42%, transparent);
+  }
+
+  dt {
+    margin: 0;
+    color: var(--legal-tenue);
+    font-size: 0.875rem;
+    font-weight: 500;
+  }
+
+  dd {
+    margin: 0;
+    font-size: var(--legal-dato);
+    font-weight: 600;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+  }
+}
+
+.legal-dato--numerico {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+}
+
+.legal-dato--pendiente {
+  color: var(--tc-warning);
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* --- Prosa --------------------------------------------------------------- */
+
+.legal-prosa {
+  max-width: var(--legal-medida);
+  color: color-mix(in srgb, var(--tc-on-surface) 86%, transparent);
+  line-height: 1.72;
+
+  h2 {
+    // Mas aire encima que debajo: el titulo pertenece a lo que sigue.
+    margin: calc(var(--legal-paso) * 2) 0 0.85rem;
+    scroll-margin-top: 2rem;
+    color: var(--tc-on-surface);
+    font-family: var(--tc-font-family-heading);
+    font-size: var(--legal-h2);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    line-height: 1.25;
+    text-wrap: balance;
+
+    &:first-child {
+      margin-top: 0;
+    }
+  }
+
+  p {
+    margin: 0 0 var(--legal-paso);
+  }
+
+  ul {
+    margin: 0 0 var(--legal-paso);
+    padding-left: 1.15rem;
+  }
+
+  li {
+    margin-bottom: 0.6rem;
+    padding-left: 0.25rem;
+
+    &::marker {
+      color: var(--tc-primary);
+    }
+  }
+
+  strong {
+    color: var(--tc-on-surface);
+    font-weight: 600;
+  }
+
+  a {
+    color: var(--tc-primary);
+    text-decoration: underline;
+    text-decoration-thickness: 1px;
+    text-underline-offset: 3px;
+    transition: text-decoration-color 160ms ease;
+
+    &:hover {
+      text-decoration-color: transparent;
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--tc-primary);
+      outline-offset: 3px;
+      border-radius: 3px;
+    }
+  }
+}
+
+/* --- Franja de contacto -------------------------------------------------- */
+
+.legal-contacto {
+  background: var(--tc-surface-container-low);
+}
+
+.legal-contacto__inner {
+  width: min(100%, var(--legal-ancho));
+  margin: 0 auto;
+  padding: clamp(2.5rem, 5vw, 3.75rem) clamp(1.25rem, 5vw, 3rem);
+}
+
+.legal-contacto__intro {
+  max-width: 58ch;
+
+  h2 {
+    margin: 0 0 0.6rem;
+    font-family: var(--tc-font-family-heading);
+    font-size: var(--legal-h2);
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  p {
+    margin: 0;
+    color: var(--legal-tenue);
+    line-height: 1.6;
+  }
+}
+
+.legal-contacto__lista {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  gap: clamp(1.25rem, 3vw, 2.5rem);
+  margin: clamp(1.75rem, 4vw, 2.5rem) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legal-contacto__item {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: 0.9rem;
+  align-items: center;
+
+  mat-icon {
+    grid-row: span 2;
+    width: 2.5rem;
+    height: 2.5rem;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--tc-primary-container);
+    color: var(--tc-on-primary-container);
+    font-size: 1.25rem;
+  }
+}
+
+.legal-contacto__etiqueta {
+  color: var(--legal-tenue);
+  font-size: var(--legal-etiqueta);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.legal-contacto__valor {
+  min-height: 1.75rem;
+  display: flex;
+  align-items: center;
+  color: var(--tc-on-surface);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+
+  &:hover {
+    color: var(--tc-primary);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--tc-primary);
+    outline-offset: 3px;
+    border-radius: 4px;
+  }
+}
+
+.legal-contacto__horario {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: clamp(1.5rem, 3vw, 2rem) 0 0;
+  color: var(--legal-tenue);
+  font-size: 0.9rem;
+
+  mat-icon {
+    width: 1.15rem;
+    height: 1.15rem;
+    font-size: 1.15rem;
+  }
+}
+
+/* --- Pie ----------------------------------------------------------------- */
+
+.legal-pie {
+  background: var(--tc-surface-container-low);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--tc-on-surface) 8%, transparent);
+}
+
+.legal-pie__inner {
+  width: min(100%, var(--legal-ancho));
+  margin: 0 auto;
+  padding: 1.5rem clamp(1.25rem, 5vw, 3rem);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 2rem;
+  justify-content: space-between;
+  color: var(--legal-tenue);
+  font-size: 0.8125rem;
+
+  p {
+    margin: 0;
+  }
+}
+
+/* --- Composicion en escritorio ------------------------------------------- */
+
+@media (min-width: 64rem) {
+  --legal-h1: 3rem;
+  --legal-h2: 1.5rem;
+
+  .legal-cuerpo__inner:has(> .legal-indice) {
+    grid-template-columns: minmax(0, 16rem) minmax(0, 1fr);
+  }
+
+  .legal-indice {
+    position: sticky;
+    top: 2rem;
+  }
+
+  .legal-indice__resumen {
+    display: none;
+  }
+
+  .legal-indice__lista {
+    padding: 0.85rem 0.6rem;
+  }
+
+  .legal-prosa h2 {
+    scroll-margin-top: 3rem;
+  }
+}
+
+/* --- Composicion estrecha ------------------------------------------------ */
+
+@media (max-width: 45rem) {
+  --legal-h1: 2rem;
+
+  .legal-ficha__fila {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.3rem;
+    padding: 0.8rem 0.85rem;
+
+    // La etiqueta pasa a rotulo de su valor.
+    dt {
+      font-size: var(--legal-etiqueta);
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+  }
+
+  .legal-contacto__item {
+    grid-template-columns: 2.25rem minmax(0, 1fr);
+  }
+}
+
+/* --- Impresion ------------------------------------------------------------
+   Un revisor que verifica una empresa suele guardar la pagina como PDF. */
+
+@media print {
+  .legal-page {
+    background: #fff;
+    color: #000;
+  }
+
+  .legal-hero {
+    background: none;
+  }
+
+  .legal-hero__inner,
+  .legal-cuerpo,
+  .legal-contacto__inner,
+  .legal-pie__inner {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .legal-indice,
+  .legal-saltar {
+    display: none;
+  }
+
+  .legal-cuerpo__inner:has(> .legal-indice) {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .legal-ficha,
+  .legal-contacto {
+    background: none;
+    box-shadow: none;
+  }
+
+  .legal-ficha {
+    padding: 0;
+    break-inside: avoid;
+  }
+
+  .legal-ficha__fila:nth-child(odd) {
+    background: none;
+  }
+
+  .legal-prosa h2 {
+    break-after: avoid;
+  }
+
+  // Las URLs deben sobrevivir al papel.
+  .legal-prosa a[href]::after {
+    content: ' (' attr(href) ')';
+    font-size: 0.85em;
+    word-break: break-all;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .legal-indice__resumen::after,
+  .legal-indice__lista a,
+  .legal-contacto__valor,
+  .legal-prosa a {
+    transition: none;
+  }
+}
+
+}

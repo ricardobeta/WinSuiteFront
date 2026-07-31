@@ -1,0 +1,183 @@
+<app-legal-layout
+  titulo="Política de Privacidad"
+  subtitulo="Qué datos personales tratamos, con qué finalidad, con quién los compartimos y cómo puedes ejercer tus derechos sobre ellos."
+>
+  <app-indice-legal indice [secciones]="secciones" />
+
+  <div class="legal-prosa">
+    <h2 id="responsable">Responsable del tratamiento</h2>
+    <p>
+      El responsable del tratamiento de los datos personales recogidos a través de WinSuit es
+      @if (empresa.razonSocial) {
+        <strong>{{ empresa.razonSocial }}</strong>
+      } @else {
+        la compañía titular de WinSuit
+      }
+      @if (empresa.ruc) {
+        , con RUC <span class="legal-dato--numerico">{{ empresa.ruc }}</span>
+      }
+      @if (empresa.direccion) {
+        y domicilio en {{ empresa.direccion }}
+      }
+      . Los datos de identificación completos y del representante legal están publicados en la
+      página de <a routerLink="/legal/representante-legal">Representante Legal</a>.
+    </p>
+
+    <h2 id="datos">Datos que tratamos</h2>
+    <p>Recogemos únicamente los datos necesarios para prestar el servicio contratado:</p>
+    <ul>
+      <li>
+        <strong>Datos de cuenta.</strong> Nombre, correo electrónico, contraseña cifrada y, cuando
+        inicias sesión con Google, el identificador que nos devuelve ese proveedor.
+      </li>
+      <li>
+        <strong>Datos de la empresa usuaria.</strong> Razón social, RUC, dirección, actividad
+        económica y datos de establecimientos y puntos de emisión, necesarios para emitir
+        comprobantes electrónicos ante el Servicio de Rentas Internas.
+      </li>
+      <li>
+        <strong>Datos cargados por ti.</strong> Clientes, proveedores, empleados, productos,
+        movimientos contables, extractos bancarios y documentos que subes a la plataforma. Estos
+        datos son tuyos; nosotros actuamos como encargados de su tratamiento.
+      </li>
+      <li>
+        <strong>Datos de conversaciones de WhatsApp.</strong> Si activas el asistente de ventas,
+        tratamos el número de teléfono y el contenido de los mensajes intercambiados con tus
+        contactos, con la única finalidad de responderlos y registrar la gestión comercial.
+      </li>
+      <li>
+        <strong>Datos técnicos.</strong> Dirección IP, tipo de dispositivo y navegador, registros
+        de acceso y de errores, y el identificador de dispositivo si autorizas notificaciones push.
+      </li>
+    </ul>
+
+    <h2 id="finalidades">Para qué usamos los datos</h2>
+    <ul>
+      <li>Prestar, mantener y facturar los servicios de la plataforma.</li>
+      <li>Emitir, firmar y transmitir comprobantes electrónicos al Servicio de Rentas Internas.</li>
+      <li>Autenticar tu acceso y proteger las cuentas frente a usos no autorizados.</li>
+      <li>Enviar avisos operativos: vencimientos, errores de autorización, alertas de inventario.</li>
+      <li>Atender tus consultas y solicitudes de soporte.</li>
+      <li>Mejorar la plataforma a partir de métricas de uso agregadas y no identificables.</li>
+    </ul>
+    <p>
+      No vendemos datos personales, no los cedemos a terceros con fines publicitarios y no los
+      usamos para elaborar perfiles con efectos jurídicos sobre las personas.
+    </p>
+
+    <h2 id="base-legal">Base legal</h2>
+    <p>
+      Tratamos tus datos al amparo de la Ley Orgánica de Protección de Datos Personales del Ecuador
+      y su reglamento, sobre las siguientes bases:
+    </p>
+    <ul>
+      <li><strong>Ejecución del contrato</strong>, para prestar los servicios que contrataste.</li>
+      <li>
+        <strong>Cumplimiento de obligaciones legales</strong>, en particular las tributarias,
+        societarias y de conservación de comprobantes electrónicos.
+      </li>
+      <li>
+        <strong>Consentimiento</strong>, para las notificaciones push y para el tratamiento de
+        conversaciones de WhatsApp a través del asistente de ventas.
+      </li>
+      <li>
+        <strong>Interés legítimo</strong>, para la seguridad de la plataforma y la prevención del
+        fraude.
+      </li>
+    </ul>
+
+    <h2 id="whatsapp">WhatsApp Business y Meta</h2>
+    <p>
+      El módulo de asistente de ventas de WinSuit se integra con la <strong>WhatsApp Business
+      Platform</strong> de Meta Platforms, Inc. Cuando lo activas:
+    </p>
+    <ul>
+      <li>
+        Los mensajes se transmiten a través de la infraestructura de Meta y quedan sujetos también
+        a las políticas de privacidad de WhatsApp.
+      </li>
+      <li>
+        WinSuit almacena el historial de la conversación para dar continuidad a la atención y para
+        que puedas auditar lo que respondió el asistente.
+      </li>
+      <li>
+        No usamos el contenido de las conversaciones para entrenar modelos de terceros ni lo
+        compartimos con anunciantes.
+      </li>
+      <li>
+        Puedes desactivar la integración en cualquier momento desde la configuración del módulo, lo
+        que detiene el envío y la recepción de mensajes.
+      </li>
+    </ul>
+
+    <h2 id="proveedores">Proveedores y transferencias</h2>
+    <p>
+      Para operar la plataforma nos apoyamos en proveedores que pueden tratar datos por cuenta
+      nuestra, bajo contrato y con obligación de confidencialidad:
+    </p>
+    <ul>
+      <li>
+        <strong>Google LLC (Firebase y Google Cloud).</strong> Autenticación, base de datos,
+        almacenamiento de archivos y notificaciones push.
+      </li>
+      <li>
+        <strong>Meta Platforms, Inc.</strong> Transporte de los mensajes de WhatsApp Business.
+      </li>
+      <li>
+        <strong>Servicio de Rentas Internas del Ecuador.</strong> Recepción y autorización de
+        comprobantes electrónicos, en cumplimiento de una obligación legal.
+      </li>
+    </ul>
+    <p>
+      Algunos de estos proveedores procesan información en servidores ubicados fuera del Ecuador.
+      Estas transferencias internacionales se realizan bajo cláusulas contractuales que garantizan
+      un nivel de protección equivalente al exigido por la legislación ecuatoriana.
+    </p>
+
+    <h2 id="conservacion">Plazo de conservación</h2>
+    <p>
+      Conservamos los datos mientras la cuenta esté activa. Al cancelarla, los eliminamos dentro de
+      los noventa (90) días siguientes, salvo la información que estamos obligados a conservar por
+      un plazo mayor: los comprobantes electrónicos y sus respaldos contables se mantienen durante
+      siete (7) años, conforme a la normativa tributaria ecuatoriana.
+    </p>
+
+    <h2 id="derechos">Tus derechos</h2>
+    <p>
+      Puedes ejercer en cualquier momento tus derechos de <strong>acceso, rectificación,
+      eliminación, oposición, portabilidad</strong> y a no ser objeto de decisiones automatizadas,
+      así como revocar el consentimiento que hayas otorgado.
+    </p>
+    <p>
+      Para hacerlo, escríbenos por cualquiera de los canales de contacto que aparecen al final de
+      esta página, indicando tu nombre, el correo con el que te registraste y la solicitud
+      concreta. Respondemos dentro de los quince (15) días hábiles siguientes. Si consideras que no
+      atendimos correctamente tu solicitud, puedes presentar un reclamo ante la Superintendencia de
+      Protección de Datos Personales del Ecuador.
+    </p>
+
+    <h2 id="seguridad">Seguridad de la información</h2>
+    <p>
+      Aplicamos medidas técnicas y organizativas proporcionales al riesgo: cifrado en tránsito
+      mediante TLS, cifrado en reposo, contraseñas almacenadas con funciones de derivación de
+      clave, control de acceso por roles y permisos dentro de cada empresa, registro de auditoría
+      de las operaciones sensibles y respaldos periódicos. Ningún sistema es infalible; si se
+      produjera una vulneración que afecte tus datos, te lo notificaremos y lo informaremos a la
+      autoridad de control conforme a la ley.
+    </p>
+
+    <h2 id="menores">Menores de edad</h2>
+    <p>
+      WinSuit es una herramienta de gestión empresarial dirigida a personas mayores de dieciocho
+      (18) años. No recogemos de forma consciente datos de menores de edad. Si detectamos que una
+      cuenta fue creada por un menor, la eliminaremos.
+    </p>
+
+    <h2 id="cambios">Cambios en esta política</h2>
+    <p>
+      Podemos actualizar esta política para reflejar cambios legales o del servicio. Publicaremos
+      la nueva versión en esta misma dirección y actualizaremos la fecha que aparece al pie. Si el
+      cambio es sustancial, te avisaremos dentro de la plataforma antes de que entre en vigor.
+    </p>
+  </div>
+</app-legal-layout>

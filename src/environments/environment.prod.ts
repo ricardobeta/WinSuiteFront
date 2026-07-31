@@ -5,7 +5,7 @@ export const environment = {
   sriWorkerMinVersion: '1.0.020',
   support: {
     whatsappPhone: '+593963879697',
-    whatsappMessage: 'Hola, necesito ayuda con Winsuite.'
+    whatsappMessage: 'Hola, necesito ayuda con WinSuit.'
   },
   facturacion: {
     soloGenerarEnPruebas: false

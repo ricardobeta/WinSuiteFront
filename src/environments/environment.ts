@@ -27,7 +27,7 @@ export const environment: AppEnvironment = {
   sriWorkerMinVersion: '1.0.020',
   support: {
     whatsappPhone: '',
-    whatsappMessage: 'Hola, necesito ayuda con Winsuite.'
+    whatsappMessage: 'Hola, necesito ayuda con WinSuit.'
   },
   facturacion: {
     // Si está en true, el flujo de facturación se corta después de GENERADO.

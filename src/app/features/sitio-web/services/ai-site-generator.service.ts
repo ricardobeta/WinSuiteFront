@@ -220,7 +220,7 @@ export class AiSiteGeneratorService {
 
     if (!blueprint) {
       console.error('[AI][sites-generador][INVALID_BLUEPRINT]', parsed);
-      throw new Error('WinSuite recibio una respuesta de IA con un formato incompatible. Intenta nuevamente.');
+      throw new Error('WinSuit recibio una respuesta de IA con un formato incompatible. Intenta nuevamente.');
     }
     return blueprint as unknown as AiSiteBlueprint;
   }

@@ -331,7 +331,7 @@ export class VentaDetalleComponent {
 
   protected etiquetaCorreo(emision: FacturaEmisionEstado): string {
     if (emision.emailEstado === 'SENT') {
-      return `Enviado por ${emision.emailCanal === 'TENANT_SMTP' ? 'correo de la empresa' : 'WinSuite'}${emision.emailFallbackAplicado ? ' (respaldo)' : ''}`;
+      return `Enviado por ${emision.emailCanal === 'TENANT_SMTP' ? 'correo de la empresa' : 'WinSuit'}${emision.emailFallbackAplicado ? ' (respaldo)' : ''}`;
     }
     if (emision.emailEstado === 'SKIPPED_NO_RECIPIENT') return 'Sin destinatario; documentos disponibles';
     if (emision.emailEstado === 'FAILED') return `Fallido: ${emision.emailError || 'revisa la configuración'}`;

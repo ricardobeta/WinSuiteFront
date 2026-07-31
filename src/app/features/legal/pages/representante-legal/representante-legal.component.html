@@ -1,0 +1,115 @@
+<app-legal-layout
+  titulo="Representante Legal"
+  subtitulo="Publicamos la identificación de la compañía y de su representante legal para efectos de transparencia y de verificación de identidad comercial."
+>
+  <section class="legal-ficha" aria-labelledby="ficha-identidad">
+    <h2 id="ficha-identidad" class="legal-ficha__titulo">Identificación de la compañía</h2>
+
+    <dl class="legal-ficha__datos">
+      @for (fila of identidad(); track fila.etiqueta) {
+        <div class="legal-ficha__fila">
+          <dt>{{ fila.etiqueta }}</dt>
+          @if (fila.valor) {
+            <dd [class.legal-dato--numerico]="fila.numerico">{{ fila.valor }}</dd>
+          } @else {
+            <dd class="legal-dato--pendiente">Pendiente de completar</dd>
+          }
+        </div>
+      }
+    </dl>
+  </section>
+
+  <section class="legal-ficha" aria-labelledby="ficha-representante">
+    <h2 id="ficha-representante" class="legal-ficha__titulo">Representante legal</h2>
+
+    <dl class="legal-ficha__datos">
+      @for (fila of representacion(); track fila.etiqueta) {
+        <div class="legal-ficha__fila">
+          <dt>{{ fila.etiqueta }}</dt>
+          @if (fila.valor) {
+            <dd [class.legal-dato--numerico]="fila.numerico">{{ fila.valor }}</dd>
+          } @else {
+            <dd class="legal-dato--pendiente">Pendiente de completar</dd>
+          }
+        </div>
+      }
+    </dl>
+  </section>
+
+  <div class="legal-prosa">
+    <h2 id="sobre-la-declaracion">Sobre esta declaración</h2>
+
+    <p>
+      <strong>WinSuit</strong> es el nombre comercial bajo el que
+      @if (empresa.razonSocial) {
+        <strong>{{ empresa.razonSocial }}</strong>
+      } @else {
+        la compañía titular
+      }
+      presta servicios de software de gestión empresarial en Ecuador: contabilidad, facturación
+      electrónica autorizada por el Servicio de Rentas Internas, inventario, nómina, conciliación
+      bancaria y atención comercial asistida por WhatsApp.
+    </p>
+
+    <p>
+      La persona identificada en esta página ejerce la representación legal de la compañía ante
+      terceros, entidades de control y proveedores de servicios tecnológicos, y es quien suscribe
+      los acuerdos comerciales y las solicitudes de verificación de identidad de negocio que la
+      compañía presenta ante plataformas externas.
+    </p>
+
+    <p>
+      Los datos publicados en esta página corresponden a los que constan en el Registro Único de
+      Contribuyentes emitido por el Servicio de Rentas Internas del Ecuador. Cualquier consulta
+      sobre su exactitud puede dirigirse a los canales de contacto que aparecen al final.
+    </p>
+
+    <h2 id="proteccion-datos">Protección de datos personales</h2>
+
+    <p>
+      @if (empresa.razonSocial) {
+        <strong>{{ empresa.razonSocial }}</strong>
+      } @else {
+        La compañía titular de WinSuit
+      }
+      declara que trata los datos personales conforme a la <strong>Ley Orgánica de Protección de
+      Datos Personales</strong> de la República del Ecuador y a su Reglamento General, así como a
+      la demás normativa ecuatoriana aplicable en la materia.
+    </p>
+
+    <ul>
+      <li>
+        Actuamos como <strong>responsables del tratamiento</strong> respecto de los datos de
+        nuestros usuarios registrados, y como <strong>encargados del tratamiento</strong> respecto
+        de la información que cada empresa cliente carga en la plataforma, que sigue siendo de su
+        titularidad.
+      </li>
+      <li>
+        Recogemos únicamente los datos necesarios para prestar el servicio contratado y para
+        cumplir las obligaciones tributarias y societarias exigidas por la ley ecuatoriana.
+      </li>
+      <li>
+        Hemos adoptado medidas técnicas y organizativas de seguridad proporcionales al riesgo:
+        cifrado en tránsito y en reposo, control de acceso por roles, registro de auditoría y
+        respaldos periódicos.
+      </li>
+      <li>
+        Los titulares pueden ejercer sus derechos de <strong>acceso, rectificación, eliminación,
+        oposición, portabilidad</strong> y a no ser objeto de decisiones automatizadas, así como
+        revocar su consentimiento, escribiendo a los canales de contacto publicados al final de
+        esta página. Respondemos dentro de los quince (15) días hábiles siguientes.
+      </li>
+      <li>
+        La autoridad de control competente es la <strong>Superintendencia de Protección de Datos
+        Personales</strong> del Ecuador, ante la cual todo titular puede presentar un reclamo.
+      </li>
+    </ul>
+
+    <p>
+      El detalle de qué datos tratamos, con qué finalidad, durante cuánto tiempo y con qué
+      proveedores los compartimos está en nuestra
+      <a routerLink="/legal/privacidad">Política de Privacidad</a>. Las condiciones de uso del
+      servicio están en los <a routerLink="/legal/terminos">Términos y Condiciones</a>.
+    </p>
+  </div>
+</app-legal-layout>

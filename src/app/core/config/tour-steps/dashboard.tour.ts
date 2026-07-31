@@ -22,7 +22,7 @@ export const DASHBOARD_TOUR_STEPS: DriveStep[] = [
   {
     element: '.copilot-trigger',
     popover: {
-      title: 'Tu asistente de WinSuite',
+      title: 'Tu asistente de WinSuit',
       description: 'Usa el asistente global cuando necesites ayuda o contexto sobre el negocio.',
       side: 'left',
       align: 'end'

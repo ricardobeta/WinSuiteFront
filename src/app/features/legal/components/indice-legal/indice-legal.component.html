@@ -1,0 +1,25 @@
+<nav class="legal-indice" aria-label="Contenido del documento">
+  <details class="legal-indice__caja" [open]="esEscritorio()">
+    <summary class="legal-indice__resumen">
+      <span>Contenido del documento</span>
+      <mat-icon aria-hidden="true">expand_more</mat-icon>
+    </summary>
+
+    <ol class="legal-indice__lista">
+      @for (seccion of secciones(); track seccion.id) {
+        <li>
+          <!-- routerLink en vez de href="#id": con <base href="/"> un fragmento suelto
+               se resuelve contra la base y acaba navegando a la raiz. -->
+          <a
+            [routerLink]="[]"
+            [fragment]="seccion.id"
+            [class.is-activa]="seccionActiva() === seccion.id"
+            [attr.aria-current]="seccionActiva() === seccion.id ? 'true' : null"
+          >
+            {{ seccion.titulo }}
+          </a>
+        </li>
+      }
+    </ol>
+  </details>
+</nav>

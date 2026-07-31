@@ -27,7 +27,7 @@ interface WizardData { type: TipoSitio }
           <span class="antena"></span><mat-icon>smart_toy</mat-icon><span class="brillo"></span>
         </div>
         <div>
-          <span class="eyebrow">Diseñador IA de WinSuite</span>
+          <span class="eyebrow">Diseñador IA de WinSuit</span>
           <h2>{{ generating() ? 'Estoy diseñando tu sitio…' : question() }}</h2>
           <p>{{ helper() }}</p>
         </div>

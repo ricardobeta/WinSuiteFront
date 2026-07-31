@@ -1,4 +1,4 @@
-# Winsuite Frontend Architecture
+# WinSuit Frontend Architecture
 
 ## Stack
 - Angular 21 standalone API.

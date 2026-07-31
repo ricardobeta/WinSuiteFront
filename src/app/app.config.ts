@@ -7,7 +7,12 @@ import { provideDatabase, getDatabase } from '@angular/fire/database';
 import { provideFirestore, getFirestore } from '@angular/fire/firestore';
 import { provideStorage, getStorage } from '@angular/fire/storage';
 import { provideHttpClient, withInterceptorsFromDi, HTTP_INTERCEPTORS } from '@angular/common/http';
-import { provideRouter, withComponentInputBinding, withRouterConfig } from '@angular/router';
+import {
+  provideRouter,
+  withComponentInputBinding,
+  withInMemoryScrolling,
+  withRouterConfig,
+} from '@angular/router';
 import { provideAnimationsAsync } from '@angular/platform-browser/animations/async';
 import { MAT_ICON_DEFAULT_OPTIONS } from '@angular/material/icon';
 import {
@@ -47,6 +52,10 @@ export const appConfig: ApplicationConfig = {
       routes,
       withComponentInputBinding(),
       withRouterConfig({ paramsInheritanceStrategy: 'always' }),
+      // El indice de las paginas legales navega por fragmento. Sin esto el router
+      // cambia la URL pero no desplaza. Solo actua cuando la URL trae fragmento, y
+      // ninguna otra ruta de la app usa fragmentos.
+      withInMemoryScrolling({ anchorScrolling: 'enabled' }),
     ),
     provideHttpClient(withInterceptorsFromDi()),
     { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },

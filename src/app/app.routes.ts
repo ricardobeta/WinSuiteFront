@@ -19,6 +19,39 @@ export const routes: Routes = [
     path: 'auth/register',
     component: RegisterPageComponent,
   },
+  // Paginas legales publicas. Se entregan a Meta para la verificacion de negocio,
+  // por lo que van sin guard y antes del comodin que redirige a login.
+  {
+    path: 'legal',
+    children: [
+      {
+        path: '',
+        pathMatch: 'full',
+        redirectTo: 'representante-legal',
+      },
+      {
+        path: 'representante-legal',
+        loadComponent: () =>
+          import('./features/legal/pages/representante-legal/representante-legal.component').then(
+            (m) => m.RepresentanteLegalComponent,
+          ),
+      },
+      {
+        path: 'privacidad',
+        loadComponent: () =>
+          import('./features/legal/pages/politica-privacidad/politica-privacidad.component').then(
+            (m) => m.PoliticaPrivacidadComponent,
+          ),
+      },
+      {
+        path: 'terminos',
+        loadComponent: () =>
+          import(
+            './features/legal/pages/terminos-condiciones/terminos-condiciones.component'
+          ).then((m) => m.TerminosCondicionesComponent),
+      },
+    ],
+  },
   {
     path: 'workspace',
     component: WorkspaceShellComponent,

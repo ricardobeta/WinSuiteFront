@@ -1,0 +1,34 @@
+<div class="legal-page">
+  <a class="legal-saltar" [routerLink]="[]" fragment="legal-documento">Saltar al contenido</a>
+
+  <header class="legal-hero">
+    <div class="legal-hero__inner">
+      <a class="legal-hero__marca" routerLink="/" aria-label="Ir al inicio de WinSuit">
+        <img src="/images/winsuite-logo.png" alt="WinSuit" width="150" height="36" />
+      </a>
+
+      <p class="legal-kicker">Documentos legales</p>
+      <h1 class="legal-hero__titulo">{{ titulo() }}</h1>
+      <p class="legal-hero__bajada">{{ subtitulo() }}</p>
+    </div>
+  </header>
+
+  <div class="legal-cuerpo">
+    <div class="legal-cuerpo__inner">
+      <ng-content select="[indice]" />
+
+      <main class="legal-documento" id="legal-documento">
+        <ng-content />
+      </main>
+    </div>
+  </div>
+
+  <app-bloque-contacto />
+
+  <footer class="legal-pie">
+    <div class="legal-pie__inner">
+      <p class="legal-pie__vigencia">Última actualización: {{ vigenciaLegible() }}</p>
+      <p class="legal-pie__titular">&copy; {{ anio }} {{ titularLegal() }}</p>
+    </div>
+  </footer>
+</div>

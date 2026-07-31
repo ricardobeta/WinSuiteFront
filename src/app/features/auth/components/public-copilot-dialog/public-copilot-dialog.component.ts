@@ -13,11 +13,11 @@ import { environment } from '../../../../../environments/environment';
   selector: 'app-public-copilot-dialog',
   imports: [ReactiveFormsModule, MatButtonModule, MatDialogModule, MatFormFieldModule, MatIconModule, MatInputModule, MatProgressSpinnerModule],
   template: `
-    <div class="heading"><span><mat-icon>auto_awesome</mat-icon></span><div><p>Asistente WinSuite</p><h2 mat-dialog-title>Te ayudo a comenzar</h2></div><button mat-icon-button mat-dialog-close aria-label="Cerrar"><mat-icon>close</mat-icon></button></div>
+    <div class="heading"><span><mat-icon>auto_awesome</mat-icon></span><div><p>Asistente WinSuit</p><h2 mat-dialog-title>Te ayudo a comenzar</h2></div><button mat-icon-button mat-dialog-close aria-label="Cerrar"><mat-icon>close</mat-icon></button></div>
     <mat-dialog-content>
-      <div class="privacy"><mat-icon>shield</mat-icon><span>Este asistente solo usa informacion publica de WinSuite. No puede ver datos de empresas.</span></div>
+      <div class="privacy"><mat-icon>shield</mat-icon><span>Este asistente solo usa informacion publica de WinSuit. No puede ver datos de empresas.</span></div>
       <div class="messages" aria-live="polite">
-        <div class="assistant">Hola. Puedo explicarte que es WinSuite, como crear tu cuenta o como funciona el acceso con Google.</div>
+        <div class="assistant">Hola. Puedo explicarte que es WinSuit, como crear tu cuenta o como funciona el acceso con Google.</div>
         @for (message of messages(); track $index) {<div [class]="message.role">{{ message.text }}</div>}
         @if (loading()) {<div class="assistant typing"><mat-spinner diameter="18" /> Buscando una respuesta...</div>}
       </div>
@@ -38,7 +38,7 @@ export class PublicCopilotDialogComponent {
   protected readonly question = new FormControl('', { nonNullable: true, validators: Validators.required });
   protected readonly messages = signal<Array<{ role: 'user' | 'assistant'; text: string }>>([]);
   protected readonly loading = signal(false);
-  protected readonly prompts = ['Que es WinSuite?', 'Como me registro con Google?', 'Puedo manejar varias empresas?'];
+  protected readonly prompts = ['Que es WinSuit?', 'Como me registro con Google?', 'Puedo manejar varias empresas?'];
 
   protected ask(text: string): void {
     const value = text.trim(); if (!value || this.loading()) return;

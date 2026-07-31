@@ -1,0 +1,7 @@
+// Estilos de todas las paginas de /legal.
+//
+// Se cargan desde aqui (con ViewEncapsulation.None) en vez de desde styles.scss para
+// que viajen en el chunk lazy de /legal y no engorden el bundle inicial, que ya esta
+// al limite del presupuesto. Todas las reglas del partial estan acotadas a los
+// selectores de host de la feature, asi que no se filtran al resto de la app.
+@use '../../styles/legal-page';

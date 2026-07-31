@@ -1,0 +1,51 @@
+<section class="legal-contacto" aria-labelledby="legal-contacto-titulo">
+  <div class="legal-contacto__inner">
+    <div class="legal-contacto__intro">
+      <h2 id="legal-contacto-titulo">Canales de contacto</h2>
+      <p>
+        Atendemos consultas legales, solicitudes sobre datos personales y soporte comercial por
+        cualquiera de estas vías.
+      </p>
+    </div>
+
+    <ul class="legal-contacto__lista">
+      <li class="legal-contacto__item">
+        <mat-icon aria-hidden="true">call</mat-icon>
+        <span class="legal-contacto__etiqueta">Teléfono</span>
+        <a class="legal-contacto__valor legal-dato--numerico" [href]="'tel:' + empresa.telefono.tel">
+          {{ empresa.telefono.display }}
+        </a>
+      </li>
+
+      <li class="legal-contacto__item">
+        <mat-icon aria-hidden="true">chat</mat-icon>
+        <span class="legal-contacto__etiqueta">WhatsApp</span>
+        <a
+          class="legal-contacto__valor legal-dato--numerico"
+          [href]="'https://wa.me/' + empresa.telefono.whatsapp"
+          target="_blank"
+          rel="noopener"
+        >
+          {{ empresa.telefono.display }}
+        </a>
+      </li>
+
+      <li class="legal-contacto__item">
+        <mat-icon aria-hidden="true">mail</mat-icon>
+        <span class="legal-contacto__etiqueta">Correo electrónico</span>
+        @if (empresa.email) {
+          <a class="legal-contacto__valor" [href]="'mailto:' + empresa.email">{{ empresa.email }}</a>
+        } @else {
+          <span class="legal-contacto__valor legal-dato--pendiente">Pendiente de completar</span>
+        }
+      </li>
+    </ul>
+
+    @if (empresa.horario) {
+      <p class="legal-contacto__horario">
+        <mat-icon aria-hidden="true">schedule</mat-icon>
+        <span>Horario de atención: {{ empresa.horario }}</span>
+      </p>
+    }
+  </div>
+</section>

@@ -1,6 +1,6 @@
 # Guía corta de RBAC para nuevos módulos
 
-Para agregar un módulo nuevo en WinSuite:
+Para agregar un módulo nuevo en WinSuit:
 
 1. Define el módulo y sus acciones mínimas: `create`, `read`, `update`, `delete`.
 2. Registra la ruta lazy en `app.routes.ts` con `canMatch` o `canActivate` usando `moduleAccessGuard`.

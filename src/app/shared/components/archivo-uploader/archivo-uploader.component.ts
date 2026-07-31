@@ -129,12 +129,23 @@ interface UploadView {
     `
       :host {
         display: block;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+      }
+
+      :host,
+      :host * {
+        box-sizing: border-box;
       }
 
       .uploader-card {
         position: relative;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
         overflow: hidden;
-        padding: 1.5rem;
+        padding: clamp(0.9rem, 3vw, 1.5rem);
         display: grid;
         gap: 1.25rem;
         background:
@@ -153,8 +164,16 @@ interface UploadView {
       .uploader-header {
         display: grid;
         gap: 1rem;
-        grid-template-columns: minmax(0, 1fr) minmax(220px, 320px);
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
         align-items: end;
+      }
+
+      .uploader-header > *,
+      .dropzone,
+      .dropzone-content > *,
+      .uploads,
+      .upload-info > div {
+        min-width: 0;
       }
 
       .title h3 {
@@ -185,7 +204,8 @@ interface UploadView {
       .dropzone {
         border: 2px dashed color-mix(in srgb, var(--primary) 40%, var(--tc-ghost-border));
         border-radius: 1.25rem;
-        padding: 1.5rem;
+        min-width: 0;
+        padding: clamp(1rem, 3vw, 1.5rem);
         display: grid;
         gap: 1rem;
         cursor: pointer;
@@ -250,6 +270,12 @@ interface UploadView {
         flex-wrap: wrap;
         gap: 0.75rem;
         align-items: center;
+        min-width: 0;
+      }
+
+      :host ::ng-deep .dropzone-footer .mdc-evolution-chip-set__chips {
+        min-width: 0;
+        flex-wrap: wrap;
       }
 
       .hint {
@@ -296,12 +322,14 @@ interface UploadView {
       .file-name {
         margin: 0;
         font-weight: 600;
+        overflow-wrap: anywhere;
       }
 
       .file-meta {
         margin: 0.2rem 0 0;
         color: var(--muted-foreground);
         font-size: 0.85rem;
+        overflow-wrap: anywhere;
       }
 
       .success-icon {

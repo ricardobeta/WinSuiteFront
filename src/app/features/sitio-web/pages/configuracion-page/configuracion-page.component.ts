@@ -87,7 +87,7 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
               </button>
             </div>
             <p class="nota">
-              Si no tienes dominio propio, tu sitio funciona con el subdominio de winsuite.
+              Si no tienes dominio propio, tu sitio funciona con el subdominio de WinSuit.
             </p>
           }
         </section>
