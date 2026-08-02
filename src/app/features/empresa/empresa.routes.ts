@@ -9,6 +9,7 @@ import { RolesColaboradoresComponent } from '../colaboradores/pages/roles-colabo
 import { ModulosSettingsPageComponent } from '../settings/pages/modulos-settings-page/modulos-settings-page.component';
 import { EmpresaCalendarComponent } from './pages/empresa-calendar/empresa-calendar.component';
 import { EmpresaGeneralComponent } from './pages/empresa-general/empresa-general.component';
+import { EmpresaIaComponent } from './pages/empresa-ia/empresa-ia.component';
 import { EmpresaNotificationsComponent } from './pages/empresa-notifications/empresa-notifications.component';
 import { EmpresaShellComponent } from './pages/empresa-shell/empresa-shell.component';
 
@@ -19,6 +20,7 @@ export const EMPRESA_ROUTES: Routes = [{
     { path: '', pathMatch: 'full', redirectTo: 'general' },
     { path: 'general', component: EmpresaGeneralComponent, data: { module: 'Empresa', page: 'Informacion general' } },
     { path: 'calendario', canMatch: [moduleAccessGuard('empresa_calendario', 'read')], component: EmpresaCalendarComponent, data: { module: 'Empresa', page: 'Calendario y eventos' } },
+    { path: 'ia', canMatch: [moduleAccessGuard('empresa_ia', 'read')], component: EmpresaIaComponent, data: { module: 'Empresa', page: 'Conector de IA' } },
     { path: 'modulos', canMatch: [moduleAccessGuard('empresa_modulos', 'read')], component: ModulosSettingsPageComponent, data: { module: 'Empresa', page: 'Modulos' } },
     { path: 'colaboradores', canMatch: [moduleAccessGuard('empresa_colaboradores', 'read')], component: ListaColaboradoresComponent, data: { module: 'Empresa', page: 'Colaboradores' } },
     { path: 'colaboradores/nuevo', canMatch: [moduleAccessGuard('empresa_colaboradores', 'create')], component: ColaboradorFormComponent, data: { module: 'Empresa', page: 'Nuevo colaborador' } },

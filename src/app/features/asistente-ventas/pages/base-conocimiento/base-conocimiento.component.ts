@@ -10,6 +10,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 
+import { RouterLink } from '@angular/router';
 import { AiAnswer, AiConfigView, KnowledgeItem } from '../../models/asistente-ventas.models';
 import { AsistenteVentasApiService } from '../../services/asistente-ventas-api.service';
 
@@ -41,7 +42,8 @@ const OTHER_TYPE: SourceType = { value: 'otros', label: 'Otros', icon: 'folder',
     MatInputModule,
     MatSelectModule,
     MatTabsModule,
-    MatTooltipModule
+    MatTooltipModule,
+    RouterLink
   ],
   templateUrl: './base-conocimiento.component.html',
   styleUrl: './base-conocimiento.component.scss'
@@ -83,40 +85,13 @@ export class BaseConocimientoComponent {
   });
 
   // form config
-  protected provider = 'gemini';
-  protected model = '';
   protected systemPrompt = '';
-  protected apiKey = '';
   protected enabled = false;
 
   /** Modelos seleccionables por integracion (los mas economicos de cada proveedor). */
-  protected readonly modelsByProvider: Record<string, { value: string; label: string; hint: string }[]> = {
-    anthropic: [
-      { value: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', hint: 'El mas economico - $1 / $5 por 1M tokens' },
-      { value: 'claude-sonnet-5', label: 'Claude Sonnet 5', hint: 'Mayor calidad - $3 / $15 por 1M tokens' }
-    ],
-    gemini: [
-      { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash Lite', hint: 'Rapido y de bajo coste' },
-      { value: 'gemini-2.5-flash', label: 'Gemini 2.5 Flash', hint: 'Modelo estable de uso general' },
-      { value: 'gemma-4-31b-it', label: 'Gemma 4 31B IT', hint: 'Modelo abierto de Google para la clave propia de la empresa' }
-    ]
-  };
 
-  protected get availableModels(): { value: string; label: string; hint: string }[] {
-    return this.modelsByProvider[this.provider] ?? [];
-  }
 
-  protected get selectedModelHint(): string {
-    return this.availableModels.find((m) => m.value === this.model)?.hint ?? '';
-  }
 
-  /** Al cambiar de proveedor, selecciona por defecto su primer modelo. */
-  protected onProviderChange(): void {
-    const models = this.availableModels;
-    if (!models.some((m) => m.value === this.model)) {
-      this.model = models[0]?.value ?? '';
-    }
-  }
 
   // form conocimiento
   protected kbSourceType = this.sourceTypes()[0]?.value ?? '';
@@ -152,14 +127,9 @@ export class BaseConocimientoComponent {
       this.config.set(config);
       this.knowledge.set(knowledge ?? []);
       this.customTypes.set(sourceTypes ?? []);
-      this.provider = config.provider || 'gemini';
-      this.model = config.model || '';
       this.systemPrompt = config.systemPrompt || '';
       this.enabled = config.enabled;
       // Corrige configuraciones antiguas que ya no aparecen en el catalogo actual.
-      if (!this.availableModels.some((candidate) => candidate.value === this.model)) {
-        this.onProviderChange();
-      }
     } catch (error) {
       console.error(error);
       this.showError('No se pudo cargar la base de conocimiento.');
@@ -282,15 +252,11 @@ export class BaseConocimientoComponent {
     try {
       const saved = await firstValueFrom(
         this.api.saveAiConfig({
-          provider: this.provider,
-          model: this.model,
-          apiKey: this.apiKey || undefined,
           systemPrompt: this.systemPrompt,
           enabled: this.enabled
         })
       );
       this.config.set(saved);
-      this.apiKey = '';
       this.showSuccess('Configuracion guardada.');
     } catch (error) {
       console.error(error);

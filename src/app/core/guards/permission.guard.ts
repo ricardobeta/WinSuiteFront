@@ -24,3 +24,25 @@ export function moduleAccessGuard(moduleKey: string, action: PermissionAction = 
     return true;
   };
 }
+
+/**
+ * Protege el panel de super administracion. El guard solo evita mostrar la interfaz: la
+ * autorizacion real la impone el backend, que rechaza /api/platform/** para cualquier correo
+ * que no este en su lista.
+ */
+export const platformAdminGuard: CanMatchFn = async () => {
+  const authService = inject(AuthService);
+  const router = inject(Router);
+
+  await authService.waitForInitialBootstrap();
+
+  if (!authService.isAuthenticated()) {
+    return router.parseUrl('/auth/login');
+  }
+
+  if (!authService.isPlatformAdmin()) {
+    return router.parseUrl('/workspace/dashboard');
+  }
+
+  return true;
+};

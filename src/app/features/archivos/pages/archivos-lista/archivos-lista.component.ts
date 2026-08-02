@@ -25,6 +25,7 @@ import { ArchivoUploaderComponent } from '../../../../shared/components/archivo-
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { ARCHIVO_MAX_TOTAL_BYTES, ArchivoItem, ArchivosUsage } from '../../../../shared/models/archivos.models';
+import { PlanService } from '../../../../core/services/plan.service';
 import { SitioMediaService } from '../../../sitio-web/services/sitio-media.service';
 
 
@@ -64,7 +65,7 @@ import { SitioMediaService } from '../../../sitio-web/services/sitio-media.servi
             <article class="metric-card">
               <p>Total cargado</p>
               <h3>{{ formatBytes(usage().totalBytes) }}</h3>
-              <span>{{ usagePercent() }}% de {{ formatBytes(maxTotalBytes) }}</span>
+              <span>{{ usagePercent() }}% de {{ formatBytes(maxTotalBytes()) }}</span>
               <mat-progress-bar mode="determinate" [value]="usagePercent()"></mat-progress-bar>
             </article>
             <article class="metric-card">
@@ -489,10 +490,19 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
   private readonly sitesInitialized = signal(false);
   protected readonly filteredCount = signal(0);
 
-  protected readonly maxTotalBytes = ARCHIVO_MAX_TOTAL_BYTES;
+  private readonly planService = inject(PlanService);
+
+  /**
+   * Tope de espacio del plan de la empresa. La constante solo se usa mientras el plan carga
+   * o si el plan no define limite de espacio.
+   */
+  protected readonly maxTotalBytes = computed(() => {
+    const limite = this.planService.estado('storageBytes')?.limite;
+    return typeof limite === 'number' && limite > 0 ? limite : ARCHIVO_MAX_TOTAL_BYTES;
+  });
   protected readonly usagePercent = computed(() => {
     const total = this.usage().totalBytes;
-    return Math.min(100, Math.round((total / this.maxTotalBytes) * 100));
+    return Math.min(100, Math.round((total / this.maxTotalBytes()) * 100));
   });
 
   protected readonly canCreate = computed(() => this.authorization.canAccess('archivos', 'create'));

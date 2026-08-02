@@ -17,6 +17,8 @@ import { TwoDecimalInputDirective } from '../../../../shared/directives/two-deci
 import { CampoPersonalizado } from '../../../../shared/models/clientes.models';
 import { dateAIso, isoADate } from '../../../../shared/utils/fecha-input.util';
 import {
+  CargoNomina,
+  DepartamentoNomina,
   EmpleadoNomina,
   ModoDecimos,
   RegimenFondosReserva
@@ -89,15 +91,44 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
 
         <section class="form-section">
           <h3>Informacion laboral</h3>
+          @if (cargosSeleccionables().length === 0) {
+            <div class="catalog-warning" role="alert">
+              <mat-icon>badge</mat-icon>
+              <p><strong>Configura al menos un cargo.</strong> Los cargos definen cómo se agrupan los sueldos en el asiento contable.</p>
+              <a mat-stroked-button routerLink="/workspace/contabilidad/nomina/configuracion">Ir a configuración</a>
+            </div>
+          }
+          @if (cargoLegacy() && !form.controls.cargoId.value) {
+            <div class="catalog-warning legacy" role="status">
+              <mat-icon>sync_problem</mat-icon>
+              <p>El cargo anterior, <strong>{{ cargoLegacy() }}</strong>, no está parametrizado. Impórtalo o selecciona uno del catálogo para guardar.</p>
+            </div>
+          }
+          @if (departamentoLegacy() && !form.controls.departamentoId.value) {
+            <div class="catalog-warning legacy" role="status">
+              <mat-icon>sync_problem</mat-icon>
+              <p>El departamento anterior, <strong>{{ departamentoLegacy() }}</strong>, no está parametrizado. Puedes importarlo o seleccionar otro.</p>
+            </div>
+          }
           <div class="grid-4">
             <mat-form-field appearance="outline">
               <mat-label>Cargo</mat-label>
-              <input matInput formControlName="cargo" />
+              <mat-select formControlName="cargoId">
+                @for (cargo of cargosSeleccionables(); track cargo.id) {
+                  <mat-option [value]="cargo.id">{{ cargo.nombre }}{{ cargo.activo ? '' : ' · Inactivo' }}</mat-option>
+                }
+              </mat-select>
+              @if (form.controls.cargoId.hasError('required')) { <mat-error>Selecciona un cargo parametrizado.</mat-error> }
             </mat-form-field>
 
             <mat-form-field appearance="outline">
               <mat-label>Departamento</mat-label>
-              <input matInput formControlName="departamento" />
+              <mat-select formControlName="departamentoId">
+                <mat-option value="">Sin departamento</mat-option>
+                @for (departamento of departamentosSeleccionables(); track departamento.id) {
+                  <mat-option [value]="departamento.id">{{ departamento.nombre }}{{ departamento.activo ? '' : ' · Inactivo' }}</mat-option>
+                }
+              </mat-select>
             </mat-form-field>
 
             <mat-form-field appearance="outline">
@@ -241,6 +272,18 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
     }
     .construction-note mat-icon { flex: 0 0 auto; color: var(--primary); }
     .construction-note p { max-width: 72ch; line-height: 1.5; }
+    .catalog-warning {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      padding: .8rem 1rem;
+      border-radius: .85rem;
+      background: color-mix(in srgb, #f59e0b 12%, var(--tc-surface-container-lowest));
+      color: var(--foreground);
+    }
+    .catalog-warning.legacy { align-items: flex-start; }
+    .catalog-warning mat-icon { flex: 0 0 auto; color: #9a5b00; }
+    .catalog-warning p { flex: 1 1 auto; line-height: 1.45; }
     .custom-section { border-top: 1px solid color-mix(in srgb, var(--foreground) 10%, transparent); padding-top: 1rem; }
     .actions-row { display: flex; justify-content: flex-end; gap: .75rem; align-items: center; flex-wrap: wrap; }
     .error-box { padding: .8rem 1rem; border-radius: .5rem; background: color-mix(in srgb, #b3261e 12%, transparent); color: #b3261e; }
@@ -260,6 +303,10 @@ export class NominaEmpleadoFormComponent implements OnInit {
 
   protected readonly empleadoId = signal<string | null>(null);
   protected readonly camposPersonalizados = signal<CampoPersonalizado[]>([]);
+  protected readonly cargos = signal<CargoNomina[]>([]);
+  protected readonly departamentos = signal<DepartamentoNomina[]>([]);
+  protected readonly cargoLegacy = signal('');
+  protected readonly departamentoLegacy = signal('');
   protected readonly guardando = signal(false);
   protected readonly error = signal<string | null>(null);
   private empleadoActual: EmpleadoNomina | null = null;
@@ -270,8 +317,8 @@ export class NominaEmpleadoFormComponent implements OnInit {
     apellidos: ['', [Validators.required]],
     email: [''],
     telefono: [''],
-    cargo: ['', [Validators.required]],
-    departamento: [''],
+    cargoId: ['', [Validators.required]],
+    departamentoId: [''],
     fechaIngreso: [new Date() as Date | null, [Validators.required]],
     sueldoBase: [0, [Validators.required, Validators.min(0.01)]],
     estado: ['ACTIVO' as EmpleadoNomina['estado'], [Validators.required]],
@@ -309,6 +356,15 @@ export class NominaEmpleadoFormComponent implements OnInit {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((config) => this.camposPersonalizados.set(config.camposPersonalizados ?? []));
 
+    this.nominaService.getCargos().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((cargos) => {
+      this.cargos.set(cargos);
+      this.resolverCatalogosLegacy();
+    });
+    this.nominaService.getDepartamentos().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((departamentos) => {
+      this.departamentos.set(departamentos);
+      this.resolverCatalogosLegacy();
+    });
+
     this.route.paramMap
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((params) => {
@@ -338,8 +394,10 @@ export class NominaEmpleadoFormComponent implements OnInit {
         apellidos: raw.apellidos ?? '',
         email: raw.email ?? '',
         telefono: raw.telefono ?? '',
-        cargo: raw.cargo ?? '',
-        departamento: raw.departamento ?? '',
+        cargoId: raw.cargoId ?? '',
+        cargo: this.cargos().find((item) => item.id === raw.cargoId)?.nombre ?? '',
+        departamentoId: raw.departamentoId ?? '',
+        departamento: this.departamentos().find((item) => item.id === raw.departamentoId)?.nombre ?? '',
         fechaIngreso: dateAIso(raw.fechaIngreso),
         sueldoBase: Number(raw.sueldoBase ?? 0),
         estado: raw.estado ?? 'ACTIVO',
@@ -373,8 +431,8 @@ export class NominaEmpleadoFormComponent implements OnInit {
       apellidos: empleado.apellidos,
       email: empleado.email ?? '',
       telefono: empleado.telefono ?? '',
-      cargo: empleado.cargo,
-      departamento: empleado.departamento ?? '',
+      cargoId: empleado.cargoId ?? '',
+      departamentoId: empleado.departamentoId ?? '',
       fechaIngreso: isoADate(empleado.fechaIngreso),
       sueldoBase: empleado.sueldoBase,
       estado: empleado.estado,
@@ -385,6 +443,43 @@ export class NominaEmpleadoFormComponent implements OnInit {
       cargasFamiliares: empleado.cargasFamiliares ?? 0,
       camposPersonalizados: empleado.camposPersonalizados ?? {}
     });
+    this.cargoLegacy.set(empleado.cargoId ? '' : empleado.cargo);
+    this.departamentoLegacy.set(empleado.departamentoId ? '' : empleado.departamento ?? '');
+    this.resolverCatalogosLegacy();
+  }
+
+  protected cargosSeleccionables(): CargoNomina[] {
+    const actual = this.form.controls.cargoId.value;
+    return this.cargos().filter((item) => item.activo || item.id === actual);
+  }
+
+  protected departamentosSeleccionables(): DepartamentoNomina[] {
+    const actual = this.form.controls.departamentoId.value;
+    return this.departamentos().filter((item) => item.activo || item.id === actual);
+  }
+
+  private resolverCatalogosLegacy(): void {
+    if (!this.empleadoActual) {
+      return;
+    }
+    if (!this.form.controls.cargoId.value && this.empleadoActual.cargo) {
+      const cargo = this.cargos().find((item) => this.normalizarNombre(item.nombre) === this.normalizarNombre(this.empleadoActual!.cargo));
+      if (cargo?.id) {
+        this.form.controls.cargoId.setValue(cargo.id);
+        this.cargoLegacy.set('');
+      }
+    }
+    if (!this.form.controls.departamentoId.value && this.empleadoActual.departamento) {
+      const departamento = this.departamentos().find((item) => this.normalizarNombre(item.nombre) === this.normalizarNombre(this.empleadoActual!.departamento ?? ''));
+      if (departamento?.id) {
+        this.form.controls.departamentoId.setValue(departamento.id);
+        this.departamentoLegacy.set('');
+      }
+    }
+  }
+
+  private normalizarNombre(value: string): string {
+    return value.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').toLocaleLowerCase('es');
   }
 
   private toast(message: string, icon: string): void {

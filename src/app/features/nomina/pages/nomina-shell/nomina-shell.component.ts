@@ -29,8 +29,8 @@ export class NominaShellComponent {
 
   /**
    * La configuración contable de nómina (cuentas, IESS, provisiones) vive en la página de
-   * Configuración de Contabilidad, no aquí: este ítem enlaza directo a ese panel. El ítem local
-   * cubre solo los campos personalizados del empleado, y se nombra como tal para no confundirlos.
+   * Configuración de Contabilidad, no aquí: este ítem enlaza directo a ese panel. La configuración
+   * local cubre campos personalizados, cargos y departamentos de la empresa.
    */
   protected readonly navigationItems: readonly ModuleNavItem[] = [
     { label: 'Roles de pago', icon: 'receipt_long', route: `${this.baseRoute}/roles` },
@@ -39,7 +39,7 @@ export class NominaShellComponent {
     { label: 'Provisiones', icon: 'savings', route: `${this.baseRoute}/provisiones` },
     { label: 'Utilidades', icon: 'groups', route: `${this.baseRoute}/utilidades` },
     { label: 'Rubros', icon: 'category', route: `${this.baseRoute}/rubros` },
-    { label: 'Campos de empleado', icon: 'list_alt', route: `${this.baseRoute}/configuracion` },
+    { label: 'Configuración', icon: 'settings', route: `${this.baseRoute}/configuracion` },
     {
       label: 'Configuración contable',
       icon: 'tune',

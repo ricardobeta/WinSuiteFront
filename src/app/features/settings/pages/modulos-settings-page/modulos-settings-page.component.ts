@@ -6,6 +6,8 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 import { MANDATORY_MODULES, MODULE_CATALOG } from '../../../../core/config/module-catalog';
+import { PlanService } from '../../../../core/services/plan.service';
+import { Router } from '@angular/router';
 import { TenantApiService } from '../../../../core/services/tenant-api.service';
 import { ModuleCardComponent } from '../../../../shared/components/module-card/module-card.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
@@ -21,6 +23,8 @@ export class ModulosSettingsPageComponent {
   private readonly destroyRef = inject(DestroyRef);
   private readonly snackBar = inject(MatSnackBar);
   private readonly tenantApi = inject(TenantApiService);
+  private readonly planService = inject(PlanService);
+  private readonly router = inject(Router);
 
   protected readonly moduleCatalog = MODULE_CATALOG;
   protected readonly mandatoryModules = MANDATORY_MODULES;
@@ -52,8 +56,22 @@ export class ModulosSettingsPageComponent {
     return this.mandatoryModules.includes(moduleId);
   }
 
+  /** El modulo existe en el catalogo pero el plan contratado no lo incluye. */
+  protected isModuleFueraDelPlan(moduleId: string): boolean {
+    return !this.planService.incluyeModulo(moduleId);
+  }
+
+  protected verPlanes(): void {
+    void this.router.navigate(['/workspace/planes']);
+  }
+
   protected toggleModule(moduleId: string): void {
     if (this.isModuleLocked(moduleId)) {
+      return;
+    }
+    // El backend rechaza los modulos fuera del plan; aqui se evita el viaje en balde.
+    if (this.isModuleFueraDelPlan(moduleId) && !this.isModuleSelected(moduleId)) {
+      this.verPlanes();
       return;
     }
 

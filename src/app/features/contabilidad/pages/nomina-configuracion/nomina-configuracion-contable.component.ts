@@ -80,13 +80,19 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
           </mat-form-field>
 
           <mat-form-field appearance="outline">
-            <mat-label>Base décimo cuarto (SBU)</mat-label>
-            <input matInput type="text" inputmode="decimal" appTwoDecimalInput [(ngModel)]="form.salarioBasicoUnificado" name="sbu" [disabled]="!canUpdate()" />
-            <mat-hint>Valor vigente para el período que procesarás</mat-hint>
+            <mat-label>Contribución CCC %</mat-label>
+            <input matInput type="text" inputmode="decimal" appTwoDecimalInput="4" [(ngModel)]="form.porcentajeContribucionCcc" name="ccc" [disabled]="!canUpdate()" />
+            <mat-hint>Costo del empleador, no se descuenta al trabajador</mat-hint>
           </mat-form-field>
         </div>
 
         <div class="grid-4">
+          <mat-form-field appearance="outline">
+            <mat-label>Base décimo cuarto (SBU)</mat-label>
+            <input matInput type="text" inputmode="decimal" appTwoDecimalInput [(ngModel)]="form.salarioBasicoUnificado" name="sbu" [disabled]="!canUpdate()" />
+            <mat-hint>Valor vigente para el período que procesarás</mat-hint>
+          </mat-form-field>
+
           <mat-form-field appearance="outline">
             <mat-label>Region</mat-label>
             <mat-select [(ngModel)]="form.region" name="region" [disabled]="!canUpdate()">
@@ -181,7 +187,7 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
         <div class="section-head">
           <div>
             <h3>Cuentas contables de nómina</h3>
-            <p>Estas cuentas se usan al aprobar el rol y generar el asiento contable. Puedes guardar avance parcial.</p>
+            <p>Estas cuentas se usan al aprobar el rol. La cuenta principal de sueldos se asigna en cada cargo desde Nómina &gt; Configuración.</p>
           </div>
           <button
             mat-stroked-button
@@ -340,14 +346,20 @@ export class NominaConfiguracionContableComponent {
   protected readonly canUpdate = computed(() => this.authorization.canAccess('contabilidad', 'update'));
   protected readonly form: ConfiguracionNominaContable = this.nominaService.getDefaultConfiguracion();
   protected readonly camposCuentas: Array<{ key: CuentaNominaKey; label: string }> = [
-    { key: 'cuentaGastoSueldosId', label: 'Gasto sueldos' },
-    { key: 'cuentaGastoBeneficiosSocialesId', label: 'Gasto beneficios sociales' },
+    { key: 'cuentaGastoSueldosId', label: 'Otros ingresos sin cuenta' },
+    { key: 'cuentaGastoBeneficiosSocialesId', label: 'Liquidaciones y otros beneficios' },
+    { key: 'cuentaGastoDecimoTerceroId', label: 'Gasto decimo tercero' },
+    { key: 'cuentaGastoDecimoCuartoId', label: 'Gasto decimo cuarto' },
+    { key: 'cuentaGastoFondosReservaId', label: 'Gasto fondos de reserva' },
+    { key: 'cuentaGastoVacacionesId', label: 'Gasto vacaciones' },
     { key: 'cuentaGastoAportePatronalId', label: 'Gasto aporte patronal' },
     { key: 'cuentaSueldosPorPagarId', label: 'Sueldos por pagar' },
     { key: 'cuentaIessPorPagarId', label: 'IESS por pagar' },
+    { key: 'cuentaBeneficiosSocialesPorPagarId', label: 'Beneficios sociales por pagar' },
     { key: 'cuentaAnticiposEmpleadosId', label: 'Anticipos empleados' },
     { key: 'cuentaPrestamosEmpleadosId', label: 'Prestamos empleados' },
-    { key: 'cuentaDecimosPorPagarId', label: 'Decimos por pagar' },
+    { key: 'cuentaDecimoTerceroPorPagarId', label: 'Decimo tercero por pagar' },
+    { key: 'cuentaDecimoCuartoPorPagarId', label: 'Decimo cuarto por pagar' },
     { key: 'cuentaFondosReservaPorPagarId', label: 'Fondos reserva por pagar' },
     { key: 'cuentaVacacionesPorPagarId', label: 'Vacaciones por pagar' },
     { key: 'cuentaUtilidadesPorPagarId', label: 'Utilidades por pagar' }

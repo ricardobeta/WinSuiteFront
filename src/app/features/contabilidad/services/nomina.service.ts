@@ -8,9 +8,11 @@ import { AsientoContable, AsientoContableLinea, CuentaContable, TipoCuenta } fro
 import {
   AcumuladoEmpleado,
   AporteAcumuladoNomina,
+  CargoNomina,
   ConceptoProvision,
   ConfiguracionNominaContable,
   CuentaNominaKey,
+  DepartamentoNomina,
   DesgloseProvisiones,
   DesgloseProvisionesEmpleado,
   EmpleadoNomina,
@@ -22,25 +24,36 @@ import {
   SaldoProvisionEmpleado,
   PreparacionNomina,
   RequisitoNomina,
+  ResultadoImportacionCatalogosNomina,
   ResumenRolPago,
   RolPago,
   RolPagoDetalle,
   RegionNomina,
   RolPagoLinea,
   RubroNomina,
-  TipoRolNomina
+  TipoRolNomina,
+  VistaPreviaImportacionCatalogosNomina
 } from '../models/nomina.models';
 import { AnticiposNominaService } from './anticipos-nomina.service';
 import { AsientosContablesService } from './asientos-contables.service';
 import { ConfiguracionContableService } from './configuracion-contable.service';
 import { IntegracionContableService } from './integracion-contable.service';
 import {
+  PORCENTAJE_CCC_DEFECTO,
+  TasasIess,
+  calcularAportesIess,
   calcularDiasFondosReservaPeriodo,
   calcularDiasTrabajadosPeriodo,
   calcularDevengadosLegales,
   calcularProporcionalMensual
 } from './nomina-calculos.util';
 import { PlanCuentasService } from './plan-cuentas.service';
+import { construirPartidasRolMensual } from './nomina-asiento.util';
+import {
+  normalizarNombreCatalogoNomina,
+  prepararVistaPreviaCatalogosNomina,
+  valoresUnicosCatalogoNomina
+} from './nomina-catalogos.util';
 
 @Injectable({
   providedIn: 'root'
@@ -64,12 +77,19 @@ export class NominaService {
   private readonly patronesCuentas: Array<{ key: CuentaNominaKey; tipos: TipoCuenta[]; patrones: string[][] }> = [
     { key: 'cuentaGastoSueldosId', tipos: ['GASTO', 'COSTO'], patrones: [['sueldo', 'administrativ'], ['gasto', 'sueldo'], ['mano de obra'], ['remuneracion'], ['sueldo']] },
     { key: 'cuentaGastoBeneficiosSocialesId', tipos: ['GASTO', 'COSTO'], patrones: [['beneficio', 'social'], ['provision'], ['decimo']] },
+    { key: 'cuentaGastoDecimoTerceroId', tipos: ['GASTO', 'COSTO'], patrones: [['decimo', 'tercer'], ['decimo', 'tercero'], ['beneficio', 'social']] },
+    { key: 'cuentaGastoDecimoCuartoId', tipos: ['GASTO', 'COSTO'], patrones: [['decimo', 'cuart'], ['decimo', 'cuarto'], ['beneficio', 'social']] },
+    { key: 'cuentaGastoFondosReservaId', tipos: ['GASTO', 'COSTO'], patrones: [['fondo', 'reserva'], ['beneficio', 'social']] },
+    { key: 'cuentaGastoVacacionesId', tipos: ['GASTO', 'COSTO'], patrones: [['vacacion'], ['beneficio', 'social']] },
     { key: 'cuentaGastoAportePatronalId', tipos: ['GASTO', 'COSTO'], patrones: [['aporte', 'patronal'], ['iess'], ['seguridad', 'social'], ['beneficio', 'social']] },
     { key: 'cuentaSueldosPorPagarId', tipos: ['PASIVO'], patrones: [['sueldo', 'por pagar'], ['remuneracion', 'por pagar'], ['nomina', 'por pagar']] },
     { key: 'cuentaIessPorPagarId', tipos: ['PASIVO'], patrones: [['iess', 'por pagar'], ['iess'], ['seguridad', 'social']] },
+    { key: 'cuentaBeneficiosSocialesPorPagarId', tipos: ['PASIVO'], patrones: [['beneficio', 'social', 'por pagar'], ['beneficio', 'por pagar']] },
     { key: 'cuentaAnticiposEmpleadosId', tipos: ['ACTIVO'], patrones: [['anticipo', 'empleado'], ['anticipo', 'personal'], ['anticipo', 'sueldo'], ['anticipo']] },
     { key: 'cuentaPrestamosEmpleadosId', tipos: ['ACTIVO'], patrones: [['prestamo', 'empleado'], ['prestamo', 'personal'], ['prestamo']] },
     { key: 'cuentaDecimosPorPagarId', tipos: ['PASIVO'], patrones: [['decimo', 'por pagar'], ['decimo'], ['beneficio', 'social']] },
+    { key: 'cuentaDecimoTerceroPorPagarId', tipos: ['PASIVO'], patrones: [['decimo', 'tercer', 'por pagar'], ['decimo', 'tercero']] },
+    { key: 'cuentaDecimoCuartoPorPagarId', tipos: ['PASIVO'], patrones: [['decimo', 'cuart', 'por pagar'], ['decimo', 'cuarto']] },
     { key: 'cuentaFondosReservaPorPagarId', tipos: ['PASIVO'], patrones: [['fondo', 'reserva'], ['beneficio', 'social']] },
     { key: 'cuentaVacacionesPorPagarId', tipos: ['PASIVO'], patrones: [['vacacion'], ['beneficio', 'social']] },
     { key: 'cuentaUtilidadesPorPagarId', tipos: ['PASIVO'], patrones: [['utilidad', 'por pagar'], ['participacion', 'trabajador'], ['utilidad'], ['beneficio', 'social']] }
@@ -81,6 +101,169 @@ export class NominaService {
 
   private getNominaPath(): string {
     return `nomina/${this.authService.getTenantId()}`;
+  }
+
+  getCargos(): Observable<CargoNomina[]> {
+    return this.observarCatalogo<CargoNomina>('cargos');
+  }
+
+  getDepartamentos(): Observable<DepartamentoNomina[]> {
+    return this.observarCatalogo<DepartamentoNomina>('departamentos');
+  }
+
+  async getCargosOnce(): Promise<CargoNomina[]> {
+    return this.leerCatalogo<CargoNomina>('cargos');
+  }
+
+  async getDepartamentosOnce(): Promise<DepartamentoNomina[]> {
+    return this.leerCatalogo<DepartamentoNomina>('departamentos');
+  }
+
+  async guardarCargo(cargo: CargoNomina): Promise<string> {
+    const nombre = cargo.nombre.trim();
+    if (!nombre) {
+      throw new Error('Ingresa el nombre del cargo.');
+    }
+    await this.validarNombreCatalogoUnico('cargos', nombre, cargo.id);
+    if (cargo.cuentaGastoSueldosId) {
+      const cuenta = (await this.planCuentasService.getCuentasOnce())
+        .find((item) => item.id === cargo.cuentaGastoSueldosId);
+      if (!cuenta) {
+        throw new Error('La cuenta de sueldos seleccionada ya no existe.');
+      }
+      this.validarCuentaMovimiento(cuenta, `sueldos del cargo ${nombre}`);
+    }
+
+    const timestamp = Date.now();
+    const id = cargo.id ?? push(ref(this.database, `${this.getNominaPath()}/cargos`)).key!;
+    await set(ref(this.database, `${this.getNominaPath()}/cargos/${id}`), {
+      nombre,
+      cuentaGastoSueldosId: cargo.cuentaGastoSueldosId || '',
+      activo: cargo.activo ?? true,
+      creadoEn: cargo.creadoEn ?? timestamp,
+      actualizadoEn: timestamp
+    });
+    await this.sincronizarNombreCatalogoEnEmpleados('cargoId', id, 'cargo', nombre);
+    return id;
+  }
+
+  async guardarDepartamento(departamento: DepartamentoNomina): Promise<string> {
+    const nombre = departamento.nombre.trim();
+    if (!nombre) {
+      throw new Error('Ingresa el nombre del departamento.');
+    }
+    await this.validarNombreCatalogoUnico('departamentos', nombre, departamento.id);
+    const timestamp = Date.now();
+    const id = departamento.id ?? push(ref(this.database, `${this.getNominaPath()}/departamentos`)).key!;
+    await set(ref(this.database, `${this.getNominaPath()}/departamentos/${id}`), {
+      nombre,
+      activo: departamento.activo ?? true,
+      creadoEn: departamento.creadoEn ?? timestamp,
+      actualizadoEn: timestamp
+    });
+    await this.sincronizarNombreCatalogoEnEmpleados('departamentoId', id, 'departamento', nombre);
+    return id;
+  }
+
+  async cambiarEstadoCargo(cargoId: string, activo: boolean): Promise<void> {
+    await update(ref(this.database, `${this.getNominaPath()}/cargos/${cargoId}`), {
+      activo,
+      actualizadoEn: Date.now()
+    });
+  }
+
+  async cambiarEstadoDepartamento(departamentoId: string, activo: boolean): Promise<void> {
+    await update(ref(this.database, `${this.getNominaPath()}/departamentos/${departamentoId}`), {
+      activo,
+      actualizadoEn: Date.now()
+    });
+  }
+
+  async prepararImportacionCatalogos(): Promise<VistaPreviaImportacionCatalogosNomina> {
+    const [empleados, cargos, departamentos] = await Promise.all([
+      this.getEmpleadosOnce(),
+      this.getCargosOnce(),
+      this.getDepartamentosOnce()
+    ]);
+    return prepararVistaPreviaCatalogosNomina(empleados, cargos, departamentos);
+  }
+
+  async importarCatalogosExistentes(): Promise<ResultadoImportacionCatalogosNomina> {
+    const [empleados, cargos, departamentos] = await Promise.all([
+      this.getEmpleadosOnce(),
+      this.getCargosOnce(),
+      this.getDepartamentosOnce()
+    ]);
+    const timestamp = Date.now();
+    const updates: Record<string, unknown> = {};
+    const cargosPorNombre = new Map(cargos.map((item) => [normalizarNombreCatalogoNomina(item.nombre), item.id!]));
+    const departamentosPorNombre = new Map(departamentos.map((item) => [normalizarNombreCatalogoNomina(item.nombre), item.id!]));
+    let cargosCreados = 0;
+    let departamentosCreados = 0;
+
+    for (const nombre of valoresUnicosCatalogoNomina(empleados.map((item) => item.cargo))) {
+      const clave = normalizarNombreCatalogoNomina(nombre);
+      if (cargosPorNombre.has(clave)) {
+        continue;
+      }
+      const id = push(ref(this.database, `${this.getNominaPath()}/cargos`)).key!;
+      cargosPorNombre.set(clave, id);
+      updates[`${this.getNominaPath()}/cargos/${id}`] = {
+        nombre,
+        cuentaGastoSueldosId: '',
+        activo: true,
+        creadoEn: timestamp,
+        actualizadoEn: timestamp
+      };
+      cargosCreados += 1;
+    }
+
+    for (const nombre of valoresUnicosCatalogoNomina(empleados.map((item) => item.departamento ?? ''))) {
+      const clave = normalizarNombreCatalogoNomina(nombre);
+      if (departamentosPorNombre.has(clave)) {
+        continue;
+      }
+      const id = push(ref(this.database, `${this.getNominaPath()}/departamentos`)).key!;
+      departamentosPorNombre.set(clave, id);
+      updates[`${this.getNominaPath()}/departamentos/${id}`] = {
+        nombre,
+        activo: true,
+        creadoEn: timestamp,
+        actualizadoEn: timestamp
+      };
+      departamentosCreados += 1;
+    }
+
+    let empleadosVinculados = 0;
+    for (const empleado of empleados) {
+      if (!empleado.id) {
+        continue;
+      }
+      let vinculado = false;
+      if (!empleado.cargoId && empleado.cargo?.trim()) {
+        const cargoId = cargosPorNombre.get(normalizarNombreCatalogoNomina(empleado.cargo));
+        if (cargoId) {
+          updates[`${this.getNominaPath()}/empleados/${empleado.id}/cargoId`] = cargoId;
+          vinculado = true;
+        }
+      }
+      if (!empleado.departamentoId && empleado.departamento?.trim()) {
+        const departamentoId = departamentosPorNombre.get(normalizarNombreCatalogoNomina(empleado.departamento));
+        if (departamentoId) {
+          updates[`${this.getNominaPath()}/empleados/${empleado.id}/departamentoId`] = departamentoId;
+          vinculado = true;
+        }
+      }
+      if (vinculado) {
+        updates[`${this.getNominaPath()}/empleados/${empleado.id}/actualizadoEn`] = timestamp;
+        empleadosVinculados += 1;
+      }
+    }
+
+    if (Object.keys(updates).length > 0) {
+      await update(ref(this.database), updates);
+    }
+    return { cargosCreados, departamentosCreados, empleadosVinculados };
   }
 
   getEmpleados(): Observable<EmpleadoNomina[]> {
@@ -107,6 +290,20 @@ export class NominaService {
 
   async guardarEmpleado(empleado: EmpleadoNomina): Promise<string> {
     const timestamp = Date.now();
+    if (!empleado.cargoId) {
+      throw new Error('Selecciona un cargo parametrizado para el empleado.');
+    }
+    const [cargos, departamentos] = await Promise.all([this.getCargosOnce(), this.getDepartamentosOnce()]);
+    const cargo = cargos.find((item) => item.id === empleado.cargoId);
+    if (!cargo) {
+      throw new Error('El cargo seleccionado ya no existe.');
+    }
+    const departamento = empleado.departamentoId
+      ? departamentos.find((item) => item.id === empleado.departamentoId)
+      : undefined;
+    if (empleado.departamentoId && !departamento) {
+      throw new Error('El departamento seleccionado ya no existe.');
+    }
     const payload: EmpleadoNomina = {
       ...empleado,
       cedula: empleado.cedula.replace(/\D/g, '').slice(0, 10),
@@ -114,8 +311,10 @@ export class NominaService {
       apellidos: empleado.apellidos.trim(),
       email: empleado.email?.trim() ?? '',
       telefono: empleado.telefono?.trim() ?? '',
-      cargo: empleado.cargo.trim(),
-      departamento: empleado.departamento?.trim() ?? '',
+      cargoId: cargo.id,
+      cargo: cargo.nombre,
+      departamentoId: departamento?.id ?? '',
+      departamento: departamento?.nombre ?? '',
       sueldoBase: this.roundToTwo(empleado.sueldoBase),
       estado: empleado.estado ?? 'ACTIVO',
       modoDecimoTercero: empleado.modoDecimoTercero ?? 'ACUMULADO',
@@ -183,6 +382,7 @@ export class NominaService {
       ...configuracion,
       porcentajeAportePersonalIess: this.roundToFour(configuracion.porcentajeAportePersonalIess),
       porcentajeAportePatronalIess: this.roundToFour(configuracion.porcentajeAportePatronalIess),
+      porcentajeContribucionCcc: this.roundToFour(configuracion.porcentajeContribucionCcc),
       salarioBasicoUnificado: this.roundToTwo(configuracion.salarioBasicoUnificado),
       actualizadoEn: Date.now()
     });
@@ -279,7 +479,7 @@ export class NominaService {
             ? (config.provisionarDecimoCuarto
               ? 'Provisionas decimo cuarto pero falta el salario basico unificado.'
               : `${mensualizanDecimoCuarto} empleado(s) mensualizan el decimo cuarto y falta el salario basico unificado: se les pagaria cero.`)
-            : `Aporte personal ${config.porcentajeAportePersonalIess}% y patronal ${config.porcentajeAportePatronalIess}%.`,
+            : `Aporte personal ${config.porcentajeAportePersonalIess}%, patronal ${config.porcentajeAportePatronalIess}% y CCC ${this.tasasIess(config).ccc}%.`,
         rutaResolver: rutaConfiguracion,
         queryParams: paramsConfiguracion
       },
@@ -571,8 +771,12 @@ export class NominaService {
       throw new Error(`Ya existe un rol de pago mensual para ${periodo}.`);
     }
 
-    const config = await this.getConfiguracionOnce();
-    const empleados = await this.getEmpleadosOnce();
+    const [config, empleados, cargos, departamentos] = await Promise.all([
+      this.getConfiguracionOnce(),
+      this.getEmpleadosOnce(),
+      this.getCargosOnce(),
+      this.getDepartamentosOnce()
+    ]);
     const activos = empleados.filter((empleado) =>
       empleado.estado === 'ACTIVO' && calcularDiasTrabajadosPeriodo(empleado.fechaIngreso, periodo) > 0
     );
@@ -585,12 +789,18 @@ export class NominaService {
     // Los anticipos entregados durante el periodo se descuentan integramente en este rol.
     const anticipos = await this.anticiposService.getPendientesPorEmpleado(periodo);
     const rubroAnticipo = rubros.find((rubro) => rubro.codigo === NominaService.CODIGO_RUBRO_ANTICIPO) ?? null;
+    const cargosPorId = new Map(cargos.map((cargo) => [cargo.id ?? '', cargo]));
+    const cargosPorNombre = new Map(cargos.map((cargo) => [normalizarNombreCatalogoNomina(cargo.nombre), cargo]));
+    const departamentosPorId = new Map(departamentos.map((departamento) => [departamento.id ?? '', departamento]));
     const detalles = activos.map((empleado) => this.calcularDetalle(
       empleado,
       rubrosAutomaticos,
       config,
       periodo,
-      this.crearLineaAnticipo(anticipos.get(empleado.id ?? '') ?? 0, rubroAnticipo, config)
+      this.crearLineaAnticipo(anticipos.get(empleado.id ?? '') ?? 0, rubroAnticipo, config),
+      cargosPorId.get(empleado.cargoId ?? '')
+        ?? cargosPorNombre.get(normalizarNombreCatalogoNomina(empleado.cargo ?? '')),
+      departamentosPorId.get(empleado.departamentoId ?? '')
     ));
     return this.persistirRol('MENSUAL', periodo, fechaPago, detalles, config);
   }
@@ -1104,7 +1314,8 @@ export class NominaService {
     const config = await this.getConfiguracionOnce();
     const cuentas = await this.planCuentasService.getCuentasOnce();
     const cuentasPorId = new Map(cuentas.map((cuenta) => [cuenta.id ?? '', cuenta]));
-    return this.construirLineasRol(resumen.rol, resumen.detalles, config, cuentasPorId, true);
+    const detalles = await this.resolverCuentasCargoDetalles(resumen.detalles);
+    return this.construirLineasRol(resumen.rol, detalles, config, cuentasPorId, true);
   }
 
   /**
@@ -1134,9 +1345,13 @@ export class NominaService {
       return;
     }
 
-    const lineas = lineasConfirmadas?.length
-      ? lineasConfirmadas
-      : this.construirLineasRol(resumen.rol, resumen.detalles, config, await this.crearContexto(config), false);
+    let lineas: AsientoContableLinea[];
+    if (lineasConfirmadas?.length) {
+      lineas = lineasConfirmadas;
+    } else {
+      const detalles = await this.resolverCuentasCargoDetalles(resumen.detalles);
+      lineas = this.construirLineasRol(resumen.rol, detalles, config, await this.crearContexto(config), false);
+    }
     const asiento = this.crearAsientoRol(resumen.rol, lineas);
     const asientoId = config.modoAsiento === 'APROBADO'
       ? await this.asientosService.aprobarAsiento(asiento)
@@ -1409,6 +1624,7 @@ export class NominaService {
       modoAsiento: 'BORRADOR',
       porcentajeAportePersonalIess: 9.45,
       porcentajeAportePatronalIess: 11.15,
+      porcentajeContribucionCcc: PORCENTAJE_CCC_DEFECTO,
       salarioBasicoUnificado: 0,
       region: 'SIERRA',
       modoDecimos: 'ACUMULADO',
@@ -1418,12 +1634,19 @@ export class NominaService {
       provisionarVacaciones: true,
       cuentaGastoSueldosId: '',
       cuentaGastoBeneficiosSocialesId: '',
+      cuentaGastoDecimoTerceroId: '',
+      cuentaGastoDecimoCuartoId: '',
+      cuentaGastoFondosReservaId: '',
+      cuentaGastoVacacionesId: '',
       cuentaGastoAportePatronalId: '',
       cuentaSueldosPorPagarId: '',
       cuentaIessPorPagarId: '',
+      cuentaBeneficiosSocialesPorPagarId: '',
       cuentaAnticiposEmpleadosId: '',
       cuentaPrestamosEmpleadosId: '',
       cuentaDecimosPorPagarId: '',
+      cuentaDecimoTerceroPorPagarId: '',
+      cuentaDecimoCuartoPorPagarId: '',
       cuentaFondosReservaPorPagarId: '',
       cuentaVacacionesPorPagarId: '',
       cuentaUtilidadesPorPagarId: '',
@@ -1498,7 +1721,9 @@ export class NominaService {
     rubrosAutomaticos: RubroNomina[],
     config: ConfiguracionNominaContable,
     periodo: string,
-    lineaAnticipo: RolPagoLinea | null = null
+    lineaAnticipo: RolPagoLinea | null = null,
+    cargo?: CargoNomina,
+    departamento?: DepartamentoNomina
   ): RolPagoDetalle {
     const sueldoMensual = this.roundToTwo(empleado.sueldoBase);
     const diasTrabajadosPeriodo = calcularDiasTrabajadosPeriodo(empleado.fechaIngreso, periodo);
@@ -1542,7 +1767,11 @@ export class NominaService {
       id: empleado.id ?? `emp_${Date.now()}`,
       empleadoId: empleado.id ?? '',
       empleadoNombre: `${empleado.apellidos} ${empleado.nombres}`.trim(),
-      cargo: empleado.cargo,
+      cargoId: cargo?.id ?? empleado.cargoId,
+      cargo: cargo?.nombre ?? empleado.cargo,
+      departamentoId: departamento?.id ?? empleado.departamentoId,
+      departamento: departamento?.nombre ?? empleado.departamento ?? '',
+      cuentaGastoSueldosId: cargo?.cuentaGastoSueldosId ?? '',
       sueldoMensual,
       diasTrabajadosPeriodo,
       diasFondosReservaPeriodo,
@@ -1583,6 +1812,18 @@ export class NominaService {
    * IESS, y lo acumulado se provisiona. Los fondos de reserva usan la clasificación congelada de
    * cada trabajador: régimen general o trabajo directo de construcción.
    */
+  /**
+   * Tasas de la planilla en el formato que espera `calcularAportesIess`. El CCC cae al 1% legal si
+   * la configuracion del tenant es anterior a que existiera el campo.
+   */
+  tasasIess(config: ConfiguracionNominaContable): TasasIess {
+    return {
+      personal: config.porcentajeAportePersonalIess,
+      patronal: config.porcentajeAportePatronalIess,
+      ccc: config.porcentajeContribucionCcc ?? PORCENTAJE_CCC_DEFECTO
+    };
+  }
+
   recalcularDetalle(detalle: RolPagoDetalle, config: ConfiguracionNominaContable): RolPagoDetalle {
     const sueldoLinea = detalle.lineas.find((linea) => linea.origen === 'SUELDO');
     const sueldoBase = this.roundToTwo(sueldoLinea?.monto ?? detalle.sueldoBase);
@@ -1599,8 +1840,11 @@ export class NominaService {
     // se retroalimente (un decimo mensualizado no genera mas decimo).
     const baseRemuneracion = this.roundToTwo(ingresos.reduce((total, linea) => total + linea.monto, 0));
     const baseIess = this.roundToTwo(ingresos.filter((linea) => linea.afectaIess).reduce((total, linea) => total + linea.monto, 0));
-    const aportePersonalIess = this.roundToTwo(baseIess * (config.porcentajeAportePersonalIess / 100));
-    const aportePatronalIess = this.roundToTwo(baseIess * (config.porcentajeAportePatronalIess / 100));
+    // Los aportes se truncan concepto por concepto, no se redondean: asi cuadran contra la planilla.
+    const aportes = calcularAportesIess(baseIess, this.tasasIess(config));
+    const aportePersonalIess = aportes.aportePersonal;
+    const aportePatronalIess = aportes.aportePatronal;
+    const contribucionCcc = aportes.contribucionCcc;
 
     const diasTrabajados = Math.max(0, Math.min(30, detalle.diasTrabajadosPeriodo ?? 30));
     const diasFondos = Math.max(
@@ -1680,8 +1924,10 @@ export class NominaService {
       sueldoBase,
       lineas: [...lineasNegocio, ...lineasSistema],
       ingresosAdicionales: this.roundToTwo(totalIngresos - sueldoBase),
+      baseImponibleIess: baseIess,
       aportePersonalIess,
       aportePatronalIess,
+      contribucionCcc,
       anticipos: totalAnticipos,
       prestamos: 0,
       otrosDescuentos: this.roundToTwo(totalDescuentosManuales - totalAnticipos),
@@ -1731,6 +1977,7 @@ export class NominaService {
       totalIngresos: this.roundToTwo(detalles.reduce((total, d) => total + d.totalIngresos, 0)),
       totalAportePersonalIess: this.roundToTwo(detalles.reduce((total, d) => total + d.aportePersonalIess, 0)),
       totalAportePatronalIess: this.roundToTwo(detalles.reduce((total, d) => total + d.aportePatronalIess, 0)),
+      totalContribucionCcc: this.roundToTwo(detalles.reduce((total, d) => total + (d.contribucionCcc ?? 0), 0)),
       totalAnticipos: this.roundToTwo(detalles.reduce((total, d) => total + d.anticipos, 0)),
       totalPrestamos: this.roundToTwo(detalles.reduce((total, d) => total + d.prestamos, 0)),
       totalOtrosDescuentos: this.roundToTwo(detalles.reduce((total, d) => total + d.otrosDescuentos, 0)),
@@ -1759,7 +2006,10 @@ export class NominaService {
     const tipoRol = rol.tipo ?? 'MENSUAL';
     if (tipoRol === 'DECIMO_TERCERO' || tipoRol === 'DECIMO_CUARTO') {
       const etiqueta = this.etiquetasTipoRol[tipoRol];
-      this.addLinea(lineas, cuentasPorId, config.cuentaDecimosPorPagarId, `${etiqueta} - provision liquidada`, totals.totalNetoPagar, 0, lenient);
+      const cuentaProvision = tipoRol === 'DECIMO_TERCERO'
+        ? config.cuentaDecimoTerceroPorPagarId
+        : config.cuentaDecimoCuartoPorPagarId;
+      this.addLinea(lineas, cuentasPorId, cuentaProvision, `${etiqueta} - provision liquidada`, totals.totalNetoPagar, 0, lenient);
       this.addLinea(lineas, cuentasPorId, config.cuentaSueldosPorPagarId, `${etiqueta} por pagar`, 0, totals.totalNetoPagar, lenient);
       return lineas;
     }
@@ -1794,41 +2044,18 @@ export class NominaService {
       return lineas;
     }
 
-    const decimos = this.roundToTwo(detalles.reduce((total, d) => total + d.decimoTerceroProvision + d.decimoCuartoProvision, 0));
-    const fondos = this.roundToTwo(detalles.reduce((total, d) => total + d.fondosReservaProvision, 0));
-    const vacaciones = this.roundToTwo(detalles.reduce((total, d) => total + d.vacacionesProvision, 0));
-
-    // Gasto sueldos e ingresos: agrupados por cuenta contable del rubro (fallback a gasto sueldos).
-    const gastoIngresosPorCuenta = this.agruparLineasPorCuenta(
-      detalles,
-      (linea) => linea.tipo === 'INGRESO',
-      config.cuentaGastoSueldosId
-    );
-    for (const [cuentaId, monto] of gastoIngresosPorCuenta) {
-      this.addLinea(lineas, cuentasPorId, cuentaId, 'Gasto sueldos y salarios', monto, 0, lenient);
+    for (const partida of construirPartidasRolMensual(detalles, config)) {
+      this.addLinea(
+        lineas,
+        cuentasPorId,
+        partida.cuentaId,
+        partida.descripcion,
+        partida.debe,
+        partida.haber,
+        lenient
+      );
     }
-
-    this.addLinea(lineas, cuentasPorId, config.cuentaGastoAportePatronalId, 'Aporte patronal IESS', totals.totalAportePatronalIess, 0, lenient);
-    this.addLinea(lineas, cuentasPorId, config.cuentaGastoBeneficiosSocialesId, 'Provision beneficios sociales', totals.totalBeneficios, 0, lenient);
-
-    this.addLinea(lineas, cuentasPorId, config.cuentaSueldosPorPagarId, 'Sueldos por pagar', 0, totals.totalNetoPagar, lenient);
-    this.addLinea(lineas, cuentasPorId, config.cuentaIessPorPagarId, 'IESS por pagar', 0, this.roundToTwo(totals.totalAportePersonalIess + totals.totalAportePatronalIess), lenient);
-
-    // Descuentos manuales (anticipos, prestamos, multas, etc.): agrupados por cuenta del rubro
-    // (fallback a la cuenta de anticipos empleados).
-    const descuentosPorCuenta = this.agruparLineasPorCuenta(
-      detalles,
-      (linea) => linea.tipo === 'DESCUENTO' && linea.origen === 'RUBRO',
-      config.cuentaAnticiposEmpleadosId
-    );
-    for (const [cuentaId, monto] of descuentosPorCuenta) {
-      this.addLinea(lineas, cuentasPorId, cuentaId, 'Descuentos a empleados', 0, monto, lenient);
-    }
-
-    this.addLinea(lineas, cuentasPorId, config.cuentaDecimosPorPagarId, 'Decimos por pagar', 0, decimos, lenient);
-    this.addLinea(lineas, cuentasPorId, config.cuentaFondosReservaPorPagarId, 'Fondos de reserva por pagar', 0, fondos, lenient);
-    this.addLinea(lineas, cuentasPorId, config.cuentaVacacionesPorPagarId, 'Vacaciones por pagar', 0, vacaciones, lenient);
-
+    this.validarBalanceLineas(lineas);
     return lineas;
   }
 
@@ -1879,6 +2106,33 @@ export class NominaService {
     return porCuenta;
   }
 
+  private async resolverCuentasCargoDetalles(detalles: RolPagoDetalle[]): Promise<RolPagoDetalle[]> {
+    if (detalles.every((detalle) => !!detalle.cuentaGastoSueldosId)) {
+      return detalles;
+    }
+    const cargos = await this.getCargosOnce();
+    const porId = new Map(cargos.map((cargo) => [cargo.id ?? '', cargo]));
+    const porNombre = new Map(cargos.map((cargo) => [normalizarNombreCatalogoNomina(cargo.nombre), cargo]));
+    return detalles.map((detalle) => {
+      if (detalle.cuentaGastoSueldosId) {
+        return detalle;
+      }
+      const cargo = porId.get(detalle.cargoId ?? '')
+        ?? porNombre.get(normalizarNombreCatalogoNomina(detalle.cargo ?? ''));
+      return cargo
+        ? { ...detalle, cargoId: cargo.id, cargo: cargo.nombre, cuentaGastoSueldosId: cargo.cuentaGastoSueldosId || '' }
+        : detalle;
+    });
+  }
+
+  private validarBalanceLineas(lineas: AsientoContableLinea[]): void {
+    const debe = this.roundToTwo(lineas.reduce((total, linea) => total + linea.debe, 0));
+    const haber = this.roundToTwo(lineas.reduce((total, linea) => total + linea.haber, 0));
+    if (this.roundToTwo(debe - haber) !== 0) {
+      throw new Error(`El asiento propuesto no cuadra: debe ${debe.toFixed(2)} y haber ${haber.toFixed(2)}.`);
+    }
+  }
+
   /**
    * @param lenient Cuando la cuenta falta o no es de movimiento, deja la linea sin cuenta en lugar
    * de lanzar, para que el dialogo de revision la muestre y el contador la seleccione.
@@ -1920,12 +2174,18 @@ export class NominaService {
   private readonly etiquetasCuentas: Array<[CuentaNominaKey, string]> = [
     ['cuentaGastoSueldosId', 'gasto sueldos'],
     ['cuentaGastoBeneficiosSocialesId', 'gasto beneficios sociales'],
+    ['cuentaGastoDecimoTerceroId', 'gasto decimo tercero'],
+    ['cuentaGastoDecimoCuartoId', 'gasto decimo cuarto'],
+    ['cuentaGastoFondosReservaId', 'gasto fondos de reserva'],
+    ['cuentaGastoVacacionesId', 'gasto vacaciones'],
     ['cuentaGastoAportePatronalId', 'gasto aporte patronal'],
     ['cuentaSueldosPorPagarId', 'sueldos por pagar'],
     ['cuentaIessPorPagarId', 'IESS por pagar'],
+    ['cuentaBeneficiosSocialesPorPagarId', 'beneficios sociales por pagar'],
     ['cuentaAnticiposEmpleadosId', 'anticipos empleados'],
     ['cuentaPrestamosEmpleadosId', 'prestamos empleados'],
-    ['cuentaDecimosPorPagarId', 'decimos por pagar'],
+    ['cuentaDecimoTerceroPorPagarId', 'decimo tercero por pagar'],
+    ['cuentaDecimoCuartoPorPagarId', 'decimo cuarto por pagar'],
     ['cuentaFondosReservaPorPagarId', 'fondos reserva por pagar'],
     ['cuentaVacacionesPorPagarId', 'vacaciones por pagar']
   ];
@@ -2002,6 +2262,12 @@ export class NominaService {
       ...this.getDefaultConfiguracion(),
       ...raw,
       modoAsiento: raw?.modoAsiento ?? 'BORRADOR',
+      cuentaGastoDecimoTerceroId: raw?.cuentaGastoDecimoTerceroId ?? raw?.cuentaGastoBeneficiosSocialesId ?? '',
+      cuentaGastoDecimoCuartoId: raw?.cuentaGastoDecimoCuartoId ?? raw?.cuentaGastoBeneficiosSocialesId ?? '',
+      cuentaGastoFondosReservaId: raw?.cuentaGastoFondosReservaId ?? raw?.cuentaGastoBeneficiosSocialesId ?? '',
+      cuentaGastoVacacionesId: raw?.cuentaGastoVacacionesId ?? raw?.cuentaGastoBeneficiosSocialesId ?? '',
+      cuentaDecimoTerceroPorPagarId: raw?.cuentaDecimoTerceroPorPagarId ?? raw?.cuentaDecimosPorPagarId ?? '',
+      cuentaDecimoCuartoPorPagarId: raw?.cuentaDecimoCuartoPorPagarId ?? raw?.cuentaDecimosPorPagarId ?? '',
       camposPersonalizados: this.normalizarCampos(raw?.camposPersonalizados)
     };
   }
@@ -2026,6 +2292,67 @@ export class NominaService {
       }));
   }
 
+  private observarCatalogo<T extends { id?: string; nombre: string }>(coleccion: 'cargos' | 'departamentos'): Observable<T[]> {
+    return new Observable<T[]>((subscriber) => {
+      const unsubscribe = onValue(
+        ref(this.database, `${this.getNominaPath()}/${coleccion}`),
+        (snapshot) => {
+          if (!snapshot.exists()) {
+            subscriber.next([]);
+            return;
+          }
+          const raw = snapshot.val() as Record<string, T>;
+          subscriber.next(Object.entries(raw)
+            .map(([id, item]) => ({ ...item, id }))
+            .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })));
+        },
+        (error) => subscriber.error(error)
+      );
+      return () => unsubscribe();
+    });
+  }
+
+  private async leerCatalogo<T extends { id?: string; nombre: string }>(coleccion: 'cargos' | 'departamentos'): Promise<T[]> {
+    const snapshot = await get(ref(this.database, `${this.getNominaPath()}/${coleccion}`));
+    if (!snapshot.exists()) {
+      return [];
+    }
+    const raw = snapshot.val() as Record<string, T>;
+    return Object.entries(raw)
+      .map(([id, item]) => ({ ...item, id }))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' }));
+  }
+
+  private async validarNombreCatalogoUnico(
+    coleccion: 'cargos' | 'departamentos',
+    nombre: string,
+    itemId?: string
+  ): Promise<void> {
+    const items = await this.leerCatalogo<{ id?: string; nombre: string }>(coleccion);
+    const clave = normalizarNombreCatalogoNomina(nombre);
+    if (items.some((item) => item.id !== itemId && normalizarNombreCatalogoNomina(item.nombre) === clave)) {
+      throw new Error(`Ya existe ${coleccion === 'cargos' ? 'un cargo' : 'un departamento'} con ese nombre.`);
+    }
+  }
+
+  private async sincronizarNombreCatalogoEnEmpleados(
+    campoId: 'cargoId' | 'departamentoId',
+    id: string,
+    campoNombre: 'cargo' | 'departamento',
+    nombre: string
+  ): Promise<void> {
+    const empleados = await this.getEmpleadosOnce();
+    const updates: Record<string, unknown> = {};
+    const timestamp = Date.now();
+    for (const empleado of empleados.filter((item) => item[campoId] === id && item.id)) {
+      updates[`${this.getNominaPath()}/empleados/${empleado.id}/${campoNombre}`] = nombre;
+      updates[`${this.getNominaPath()}/empleados/${empleado.id}/actualizadoEn`] = timestamp;
+    }
+    if (Object.keys(updates).length > 0) {
+      await update(ref(this.database), updates);
+    }
+  }
+
   private validarEmpleado(empleado: EmpleadoNomina): void {
     if (!/^\d{10}$/.test(empleado.cedula)) {
       throw new Error('Ingresa una cedula valida de 10 digitos.');
@@ -2035,6 +2362,9 @@ export class NominaService {
     }
     if (!empleado.cargo) {
       throw new Error('Ingresa el cargo del empleado.');
+    }
+    if (!empleado.cargoId) {
+      throw new Error('Selecciona un cargo parametrizado para el empleado.');
     }
     if (!empleado.fechaIngreso) {
       throw new Error('Ingresa la fecha de ingreso.');

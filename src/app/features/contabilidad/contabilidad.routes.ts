@@ -357,7 +357,7 @@ export const CONTABILIDAD_ROUTES: Routes = [
             component: NominaCamposEmpleadoConfiguracionComponent,
             data: {
               module: 'Contabilidad',
-              page: 'Configuracion de empleados de nomina'
+              page: 'Configuracion de nomina'
             }
           },
           {

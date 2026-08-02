@@ -1,9 +1,13 @@
-import { Injectable, inject } from '@angular/core';
-import { Database, endAt, get, onValue, orderByChild, push, query, ref as databaseRef, remove, runTransaction, set, startAt } from '@angular/fire/database';
+import { HttpClient } from '@angular/common/http';
+import { Injectable, computed, inject } from '@angular/core';
+import { toObservable } from '@angular/core/rxjs-interop';
+import { Database, endAt, get, onValue, orderByChild, push, query, ref as databaseRef, remove, set, startAt } from '@angular/fire/database';
 import { Storage, deleteObject, getDownloadURL, ref as storageRef, uploadBytesResumable } from '@angular/fire/storage';
-import { Observable } from 'rxjs';
+import { Observable, firstValueFrom } from 'rxjs';
 
+import { environment } from '../../../environments/environment';
 import { AuthService } from './auth.service';
+import { PlanService } from './plan.service';
 import {
   ARCHIVO_ALLOWED_EXTENSIONS,
   ARCHIVO_MAX_FILE_BYTES,
@@ -22,6 +26,24 @@ export class ArchivosService {
   private readonly database = inject(Database);
   private readonly storage = inject(Storage);
   private readonly authService = inject(AuthService);
+  private readonly http = inject(HttpClient);
+  private readonly planService = inject(PlanService);
+
+  /**
+   * Consumo de espacio publicado como observable. Se construye aqui, en el inicializador del
+   * campo, porque toObservable() exige contexto de inyeccion: crearlo dentro de getUsage()
+   * revienta con NG0203 en cuanto un componente lo llama desde ngOnInit.
+   */
+  private readonly usage$ = toObservable(
+    computed(() => {
+      const acumulado = this.planService.uso()?.acumulado ?? {};
+      return {
+        totalBytes: acumulado.storageBytes ?? 0,
+        totalCount: (acumulado as Record<string, number>)['storageCount'] ?? 0,
+        updatedAt: undefined
+      } satisfies ArchivosUsage;
+    })
+  );
 
   getArchivos(): Observable<ArchivoItem[]> {
     return new Observable<ArchivoItem[]>((subscriber) => {
@@ -115,39 +137,24 @@ export class ArchivosService {
     return archivos;
   }
 
+  /**
+   * Consumo de espacio de la empresa. Sale del plan resuelto en el backend: el nodo
+   * archivos_stats dejo de ser la fuente de verdad porque el cliente podia escribirlo.
+   */
   getUsage(): Observable<ArchivosUsage> {
-    return new Observable<ArchivosUsage>((subscriber) => {
-      const tenantId = this.authService.getTenantId();
-      const statsRef = databaseRef(this.database, this.getStatsPath(tenantId));
-
-      const unsubscribe = onValue(
-        statsRef,
-        (snapshot) => {
-          const value = (snapshot.val() as Partial<ArchivosUsage> | null) ?? null;
-          subscriber.next({
-            totalBytes: typeof value?.totalBytes === 'number' ? value.totalBytes : 0,
-            totalCount: typeof value?.totalCount === 'number' ? value.totalCount : 0,
-            updatedAt: typeof value?.updatedAt === 'number' ? value.updatedAt : undefined
-          });
-        },
-        (error) => subscriber.error(error)
-      );
-
-      return () => unsubscribe();
-    });
+    return this.usage$;
   }
 
   async getUsageOnce(): Promise<ArchivosUsage> {
-    const tenantId = this.authService.getTenantId();
-    const snapshot = await get(databaseRef(this.database, this.getStatsPath(tenantId)));
-    const value = (snapshot.val() as Partial<ArchivosUsage> | null) ?? null;
-
+    await this.planService.refresh().catch(() => undefined);
+    const acumulado = this.planService.uso()?.acumulado ?? {};
     return {
-      totalBytes: typeof value?.totalBytes === 'number' ? value.totalBytes : 0,
-      totalCount: typeof value?.totalCount === 'number' ? value.totalCount : 0,
-      updatedAt: typeof value?.updatedAt === 'number' ? value.updatedAt : undefined
+      totalBytes: acumulado.storageBytes ?? 0,
+      totalCount: (acumulado as Record<string, number>)['storageCount'] ?? 0,
+      updatedAt: undefined
     };
   }
+
 
   uploadArchivo(file: File, options: ArchivoUploadOptions = {}): Observable<ArchivoUploadEvent> {
     return new Observable<ArchivoUploadEvent>((subscriber) => {
@@ -325,44 +332,31 @@ export class ArchivosService {
     return fileName.replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 120) || 'archivo';
   }
 
-  private async reserveUsage(tenantId: string, fileSize: number): Promise<void> {
-    const statsRef = databaseRef(this.database, this.getStatsPath(tenantId));
-
-    const result = await runTransaction(statsRef, (current) => {
-      const safe = (current as Partial<ArchivosUsage> | null) ?? null;
-      const totalBytes = typeof safe?.totalBytes === 'number' ? safe.totalBytes : 0;
-      const totalCount = typeof safe?.totalCount === 'number' ? safe.totalCount : 0;
-
-      if (totalBytes + fileSize > ARCHIVO_MAX_TOTAL_BYTES) {
-        return;
-      }
-
-      return {
-        totalBytes: totalBytes + fileSize,
-        totalCount: totalCount + 1,
-        updatedAt: Date.now()
-      };
-    });
-
-    if (!result.committed) {
-      throw new Error('El limite total de 20 MB ya fue alcanzado. Elimina archivos para liberar espacio.');
-    }
+  /**
+   * El espacio lo concede el backend contra el plan de la empresa. Antes se contaba en
+   * archivos_stats desde el navegador, que podia escribirlo: el tope era evadible.
+   * Un 402 lo explica el QuotaInterceptor con la opcion de comprar mas espacio.
+   */
+  private async reserveUsage(_tenantId: string, fileSize: number): Promise<void> {
+    await firstValueFrom(
+      this.http.post<void>(`${environment.apiBaseUrl}/api/tenants/current/archivos/reservar`, {
+        bytes: fileSize
+      })
+    );
+    await this.planService.refresh().catch(() => undefined);
   }
 
-  private async adjustUsage(tenantId: string, bytesDelta: number, countDelta: number): Promise<void> {
-    const statsRef = databaseRef(this.database, this.getStatsPath(tenantId));
-
-    await runTransaction(statsRef, (current) => {
-      const safe = (current as Partial<ArchivosUsage> | null) ?? null;
-      const totalBytes = typeof safe?.totalBytes === 'number' ? safe.totalBytes : 0;
-      const totalCount = typeof safe?.totalCount === 'number' ? safe.totalCount : 0;
-
-      return {
-        totalBytes: Math.max(0, totalBytes + bytesDelta),
-        totalCount: Math.max(0, totalCount + countDelta),
-        updatedAt: Date.now()
-      };
-    });
+  /** Devuelve espacio al borrar un archivo o al fallar una subida ya reservada. */
+  private async adjustUsage(_tenantId: string, bytesDelta: number, _countDelta: number): Promise<void> {
+    if (bytesDelta >= 0) {
+      return;
+    }
+    await firstValueFrom(
+      this.http.post<void>(`${environment.apiBaseUrl}/api/tenants/current/archivos/liberar`, {
+        bytes: Math.abs(bytesDelta)
+      })
+    );
+    await this.planService.refresh().catch(() => undefined);
   }
 
   /**
@@ -448,7 +442,4 @@ export class ArchivosService {
     return `archivos/${tenantId}`;
   }
 
-  private getStatsPath(tenantId: string): string {
-    return `archivos_stats/${tenantId}`;
-  }
 }

@@ -38,12 +38,14 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
 import { PlanCuentasService } from '../../../contabilidad/services/plan-cuentas.service';
 import {
   FilaDesglose,
+  aportesIessDetalle,
   baseAportesIess,
+  desgloseIess,
   desgloseIngresos,
   desgloseOtrosDescuentos
 } from './rol-detalle-desglose.util';
 
-type NombreSeccion = 'INGRESOS' | 'DESCUENTOS' | 'PROVISIONES';
+type NombreSeccion = 'INGRESOS' | 'DESCUENTOS' | 'PROVISIONES' | 'IESS';
 
 /**
  * Vista de un desglose del resumen. Las tres secciones comparten la misma tabla, asi que se
@@ -82,6 +84,10 @@ interface EmpleadoEdit {
     | 'sueldoMensual'
     | 'diasTrabajadosPeriodo'
     | 'diasFondosReservaPeriodo'
+    | 'cargoId'
+    | 'departamentoId'
+    | 'departamento'
+    | 'cuentaGastoSueldosId'
   >;
   resumen: RolPagoDetalle;
 }
@@ -139,6 +145,10 @@ interface EmpleadoEdit {
         <article class="surface-card kpi-card">
           <span>IESS personal</span>
           <strong>{{ totales().aportePersonal | currency:'USD':'symbol-narrow':'1.2-2' }}</strong>
+        </article>
+        <article class="surface-card kpi-card" matTooltip="Aporte personal + patronal + CCC: el valor a transferir al IESS">
+          <span>Planilla IESS</span>
+          <strong>{{ totales().planillaIess | currency:'USD':'symbol-narrow':'1.2-2' }}</strong>
         </article>
         <article class="surface-card kpi-card">
           <span>Descuentos</span>
@@ -262,6 +272,22 @@ interface EmpleadoEdit {
                 }
 
                 <div><dt>Aporte personal IESS</dt><dd>- {{ item.resumen.aportePersonalIess | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
+
+                <div class="fila-expandible referencia">
+                  <dt>Planilla IESS <span class="tag">referencia</span></dt>
+                  <dd>
+                    {{ planillaIess(item).totalPlanilla | currency:'USD':'symbol-narrow':'1.2-2' }}
+                    <button mat-icon-button type="button" (click)="alternarSeccion(item.id, 'IESS')"
+                      [attr.aria-expanded]="estaAbierta(item.id, 'IESS')"
+                      [attr.aria-label]="'Ver desglose de la planilla IESS de ' + item.empleadoNombre">
+                      <mat-icon>{{ estaAbierta(item.id, 'IESS') ? 'expand_less' : 'expand_more' }}</mat-icon>
+                    </button>
+                  </dd>
+                </div>
+                @if (estaAbierta(item.id, 'IESS')) {
+                  <ng-container *ngTemplateOutlet="desglose; context: { $implicit: seccionIess(item) }" />
+                }
+
                 @if (item.resumen.anticipos > 0) {
                   <div><dt>Anticipos</dt><dd>- {{ item.resumen.anticipos | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
                 }
@@ -406,7 +432,7 @@ interface EmpleadoEdit {
     .pill { display: inline-flex; padding: .3rem .75rem; border-radius: 999px; background: color-mix(in srgb, #f59e0b 18%, transparent); font-weight: 700; }
     .pill.ok { background: color-mix(in srgb, var(--primary) 18%, transparent); }
     .pill.off { background: color-mix(in srgb, var(--muted-foreground) 18%, transparent); color: var(--muted-foreground); }
-    .kpi-row { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1rem; }
+    .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
     .kpi-card { padding: 1rem 1.25rem; display: grid; gap: .25rem; border-radius: var(--tc-radius-lg); }
     .kpi-card span { color: var(--muted-foreground); font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; }
     .kpi-card strong { font-size: 1.5rem; }
@@ -431,7 +457,12 @@ interface EmpleadoEdit {
     .resumen dt, .resumen dd { margin: 0; }
     .resumen .neto { border-top: 1px solid color-mix(in srgb, var(--foreground) 12%, transparent); padding-top: .35rem; font-weight: 700; font-size: 1.05rem; }
     .fila-expandible dd { display: flex; align-items: center; gap: .25rem; }
-    .fila-expandible button { width: 32px; height: 32px; line-height: 32px; }
+    .fila-expandible button { width: 44px; height: 44px; line-height: 44px; }
+    /* La planilla no es un descuento al trabajador: se atenua para que no compita con las que si lo son. */
+    .resumen .referencia dt, .resumen .referencia dd { color: var(--muted-foreground); }
+    .referencia .tag { margin-left: .4rem; padding: .05rem .4rem; border-radius: 999px; font-size: .68rem;
+                       text-transform: uppercase; letter-spacing: .06em;
+                       background: color-mix(in srgb, var(--foreground) 10%, transparent); }
     /* Anidado dentro del dl: hay que ganarle a '.resumen div { display: flex }', que lo aplastaria. */
     .resumen .desglose-detalle { display: grid; gap: .5rem; margin: .1rem 0 .35rem; padding: .85rem 1rem; border-radius: .6rem; background: color-mix(in srgb, var(--primary) 7%, transparent); }
     .desglose-detalle header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
@@ -487,15 +518,26 @@ export class NominaRolDetalleComponent implements OnInit {
   private rolId = '';
 
   protected readonly totales = computed(() => {
-    const acc = { totalIngresos: 0, aportePersonal: 0, totalDescuentos: 0, totalBeneficios: 0, netoPagar: 0 };
+    const acc = {
+      totalIngresos: 0,
+      aportePersonal: 0,
+      // Personal + patronal + CCC: la cifra que se cuadra contra la planilla del IESS antes de pagar.
+      planillaIess: 0,
+      totalDescuentos: 0,
+      totalBeneficios: 0,
+      netoPagar: 0
+    };
+    const tasas = this.nominaService.tasasIess(this.config);
     for (const item of this.empleados()) {
       const r = item.resumen;
       acc.totalIngresos += r.totalIngresos;
       acc.aportePersonal += r.aportePersonalIess;
+      acc.planillaIess += aportesIessDetalle(r, tasas).totalPlanilla;
       acc.totalDescuentos += r.totalDescuentos;
       acc.totalBeneficios += r.totalBeneficios;
       acc.netoPagar += r.netoPagar;
     }
+    acc.planillaIess = this.redondear(acc.planillaIess);
     return acc;
   });
 
@@ -598,6 +640,29 @@ export class NominaRolDetalleComponent implements OnInit {
       },
       nota: 'Los decimos y fondos mensualizados se pagan con el sueldo pero no forman parte de la '
         + 'base de aportes, por eso el IESS no se calcula sobre el total de ingresos.'
+    };
+  }
+
+  /** Aportes de la planilla del empleado, con las tasas vigentes para los roles antiguos. */
+  protected planillaIess(item: EmpleadoEdit) {
+    return aportesIessDetalle(item.resumen, this.nominaService.tasasIess(this.config));
+  }
+
+  /**
+   * Cuadro de la planilla: base imponible, aporte personal, patronal y CCC. Es lo que se compara
+   * contra el IESS antes de pagar, y la unica forma de ver que el patronal y el CCC no salen del
+   * bolsillo del trabajador aunque se liquiden en el mismo rol.
+   */
+  protected seccionIess(item: EmpleadoEdit): SeccionDesglose {
+    const tasas = this.nominaService.tasasIess(this.config);
+    return {
+      titulo: 'Planilla IESS del periodo',
+      filas: desgloseIess(item.resumen, tasas),
+      totalEtiqueta: 'Total planilla IESS',
+      total: aportesIessDetalle(item.resumen, tasas).totalPlanilla,
+      nota: 'Solo el aporte personal se descuenta del neto. El aporte patronal y la contribucion CCC '
+        + 'son costo del empleador y se pagan al IESS junto con el personal. Los aportes se redondean '
+        + 'a dos decimales y el CCC se trunca, igual que la planilla.'
     };
   }
 
@@ -1040,7 +1105,11 @@ export class NominaRolDetalleComponent implements OnInit {
         aplicaFondosReserva: detalle.aplicaFondosReserva,
         sueldoMensual: detalle.sueldoMensual,
         diasTrabajadosPeriodo: detalle.diasTrabajadosPeriodo,
-        diasFondosReservaPeriodo: detalle.diasFondosReservaPeriodo
+        diasFondosReservaPeriodo: detalle.diasFondosReservaPeriodo,
+        cargoId: detalle.cargoId,
+        departamentoId: detalle.departamentoId,
+        departamento: detalle.departamento,
+        cuentaGastoSueldosId: detalle.cuentaGastoSueldosId
       },
       resumen: detalle
     };

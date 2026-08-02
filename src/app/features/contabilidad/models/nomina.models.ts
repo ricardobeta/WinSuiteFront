@@ -56,6 +56,35 @@ export type ConceptoProvision =
   | 'FONDOS_RESERVA'
   | 'VACACIONES';
 
+export interface CargoNomina {
+  id?: string;
+  nombre: string;
+  cuentaGastoSueldosId: string;
+  activo: boolean;
+  creadoEn?: number;
+  actualizadoEn?: number;
+}
+
+export interface DepartamentoNomina {
+  id?: string;
+  nombre: string;
+  activo: boolean;
+  creadoEn?: number;
+  actualizadoEn?: number;
+}
+
+export interface VistaPreviaImportacionCatalogosNomina {
+  cargos: string[];
+  departamentos: string[];
+  empleadosPorVincular: number;
+}
+
+export interface ResultadoImportacionCatalogosNomina {
+  cargosCreados: number;
+  departamentosCreados: number;
+  empleadosVinculados: number;
+}
+
 export interface EmpleadoNomina {
   id?: string;
   cedula: string;
@@ -63,7 +92,9 @@ export interface EmpleadoNomina {
   apellidos: string;
   email?: string;
   telefono?: string;
+  cargoId?: string;
   cargo: string;
+  departamentoId?: string;
   departamento?: string;
   fechaIngreso: string;
   sueldoBase: number;
@@ -146,7 +177,12 @@ export interface RolPagoDetalle {
   id: string;
   empleadoId: string;
   empleadoNombre: string;
+  cargoId?: string;
   cargo: string;
+  departamentoId?: string;
+  departamento?: string;
+  /** Cuenta salarial del cargo congelada al generar el rol. */
+  cuentaGastoSueldosId?: string;
   /** Remuneración mensual contractual, antes de aplicar el proporcional por ingreso. */
   sueldoMensual?: number;
   /** Días reconocidos dentro del período, usando la convención laboral de meses de 30 días. */
@@ -154,6 +190,12 @@ export interface RolPagoDetalle {
   /** Días del período que causan fondos de reserva según el régimen asignado al trabajador. */
   diasFondosReservaPeriodo?: number;
   sueldoBase: number;
+  /**
+   * Base sobre la que se liquidaron los aportes: solo los ingresos que afectan IESS. Se congela al
+   * calcular para que el cuadro de la planilla no tenga que rearmarla desde las lineas.
+   * Ausente en los roles guardados antes de existir el cuadro.
+   */
+  baseImponibleIess?: number;
   /**
    * Reglas del empleado congeladas al generar el rol, para que el recalculo del borrador no
    * dependa de volver a leer la ficha ni cambie si el empleado se edita despues.
@@ -173,6 +215,11 @@ export interface RolPagoDetalle {
   ingresosAdicionales: number;
   aportePersonalIess: number;
   aportePatronalIess: number;
+  /**
+   * Contribucion CCC del 1%: costo del empleador que el IESS recauda en la misma planilla, no un
+   * descuento al trabajador. Ausente en los roles calculados antes de incorporarla.
+   */
+  contribucionCcc?: number;
   anticipos: number;
   prestamos: number;
   otrosDescuentos: number;
@@ -197,6 +244,8 @@ export interface RolPago {
   totalIngresos: number;
   totalAportePersonalIess: number;
   totalAportePatronalIess: number;
+  /** Ausente en los roles guardados antes de incorporar el CCC. */
+  totalContribucionCcc?: number;
   totalAnticipos: number;
   totalPrestamos: number;
   totalOtrosDescuentos: number;
@@ -217,12 +266,19 @@ export interface RolPago {
 export type CuentaNominaKey =
   | 'cuentaGastoSueldosId'
   | 'cuentaGastoBeneficiosSocialesId'
+  | 'cuentaGastoDecimoTerceroId'
+  | 'cuentaGastoDecimoCuartoId'
+  | 'cuentaGastoFondosReservaId'
+  | 'cuentaGastoVacacionesId'
   | 'cuentaGastoAportePatronalId'
   | 'cuentaSueldosPorPagarId'
   | 'cuentaIessPorPagarId'
+  | 'cuentaBeneficiosSocialesPorPagarId'
   | 'cuentaAnticiposEmpleadosId'
   | 'cuentaPrestamosEmpleadosId'
   | 'cuentaDecimosPorPagarId'
+  | 'cuentaDecimoTerceroPorPagarId'
+  | 'cuentaDecimoCuartoPorPagarId'
   | 'cuentaFondosReservaPorPagarId'
   | 'cuentaVacacionesPorPagarId'
   | 'cuentaUtilidadesPorPagarId';
@@ -231,6 +287,11 @@ export interface ConfiguracionNominaContable {
   modoAsiento: ModoAsientoAutomatico;
   porcentajeAportePersonalIess: number;
   porcentajeAportePatronalIess: number;
+  /**
+   * Contribucion al Fomento de Capacidades y Conocimientos Ciudadanos (1%). Se cobra sobre la misma
+   * base imponible, la paga el empleador y el IESS la recauda como agente de retencion.
+   */
+  porcentajeContribucionCcc: number;
   salarioBasicoUnificado: number;
   /** Define el periodo de calculo del decimo cuarto: Sierra ago-jul, Costa mar-feb. */
   region: RegionNomina;
@@ -240,13 +301,22 @@ export interface ConfiguracionNominaContable {
   provisionarFondosReserva: boolean;
   provisionarVacaciones: boolean;
   cuentaGastoSueldosId: string;
+  /** Campo legado usado como respaldo de gastos de beneficios y liquidaciones. */
   cuentaGastoBeneficiosSocialesId: string;
+  cuentaGastoDecimoTerceroId: string;
+  cuentaGastoDecimoCuartoId: string;
+  cuentaGastoFondosReservaId: string;
+  cuentaGastoVacacionesId: string;
   cuentaGastoAportePatronalId: string;
   cuentaSueldosPorPagarId: string;
   cuentaIessPorPagarId: string;
+  cuentaBeneficiosSocialesPorPagarId: string;
   cuentaAnticiposEmpleadosId: string;
   cuentaPrestamosEmpleadosId: string;
+  /** Campo legado usado como respaldo para los dos pasivos de decimos. */
   cuentaDecimosPorPagarId: string;
+  cuentaDecimoTerceroPorPagarId: string;
+  cuentaDecimoCuartoPorPagarId: string;
   cuentaFondosReservaPorPagarId: string;
   cuentaVacacionesPorPagarId: string;
   /** Solo se exige al generar el rol de utilidades, no forma parte del checklist mensual. */

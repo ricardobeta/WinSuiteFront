@@ -30,6 +30,7 @@ export class EmpresaShellComponent {
     { label: 'Información general', icon: 'business', route: '/workspace/empresa/general', resource: 'empresa_general' },
     { label: 'Calendario', icon: 'calendar_month', route: '/workspace/empresa/calendario', resource: 'empresa_calendario' },
     { label: 'Módulos', icon: 'apps', route: '/workspace/empresa/modulos', resource: 'empresa_modulos' },
+    { label: 'Conector de IA', icon: 'smart_toy', route: '/workspace/empresa/ia', resource: 'empresa_ia' },
     { label: 'Colaboradores', icon: 'groups', route: '/workspace/empresa/colaboradores', resource: 'empresa_colaboradores' },
     { label: 'Roles', icon: 'admin_panel_settings', route: '/workspace/empresa/roles', resource: 'empresa_roles' },
     { label: 'Auditoría', icon: 'manage_search', route: '/workspace/empresa/auditoria', resource: 'empresa_auditoria' },

@@ -1,5 +1,14 @@
 import { RolPagoDetalle, RolPagoLinea } from '../../../contabilidad/models/nomina.models';
-import { baseAportesIess, desgloseIngresos, desgloseOtrosDescuentos } from './rol-detalle-desglose.util';
+import {
+  aportesIessDetalle,
+  baseAportesIess,
+  desgloseIess,
+  desgloseIngresos,
+  desgloseOtrosDescuentos
+} from './rol-detalle-desglose.util';
+
+/** Tasas vigentes del régimen general privado. */
+const TASAS = { personal: 9.45, patronal: 11.15, ccc: 1 };
 
 function linea(overrides: Partial<RolPagoLinea> = {}): RolPagoLinea {
   return {
@@ -105,7 +114,58 @@ describe('baseAportesIess', () => {
   });
 
   it('explica el aporte personal que muestra el resumen', () => {
-    expect(Math.round(baseAportesIess(rolConMensualizados) * 0.0945 * 100) / 100).toBe(63.32);
+    // 670 * 9.45% = 63.315, redondeado a 63.32 como lo liquida el IESS.
+    expect(aportesIessDetalle(rolConMensualizados, TASAS).aportePersonal).toBe(63.32);
+  });
+});
+
+describe('desgloseIess', () => {
+  /** Rol calculado ya con el cuadro: trae la base y el CCC congelados. */
+  const rolConPlanilla = detalle([linea({ monto: 344.77 })], {
+    baseImponibleIess: 344.77,
+    aportePersonalIess: 32.58,
+    aportePatronalIess: 38.44,
+    contribucionCcc: 3.44
+  });
+
+  it('muestra base, personal, patronal y CCC en ese orden', () => {
+    expect(desgloseIess(rolConPlanilla, TASAS).map((fila) => [fila.etiqueta, fila.monto])).toEqual([
+      ['Base imponible', 344.77],
+      ['Aporte personal', 32.58],
+      ['Aporte patronal', 38.44],
+      ['Contribución CCC', 3.44]
+    ]);
+  });
+
+  it('aclara en cada fila quien paga el concepto', () => {
+    const filas = desgloseIess(rolConPlanilla, TASAS);
+
+    expect(filas[1].nota).toBe('9.45% · se descuenta al trabajador');
+    expect(filas[2].nota).toBe('11.15% · costo del empleador');
+    expect(filas[3].nota).toBe('1% · costo del empleador');
+  });
+
+  it('usa los valores congelados del rol, no los recalcula', () => {
+    const aportes = aportesIessDetalle(rolConPlanilla, TASAS);
+
+    expect(aportes.totalPlanilla).toBe(74.46); // 32.58 + 38.44 + 3.44
+    expect(aportes.costoPatronal).toBe(41.88);
+  });
+
+  it('rearma el cuadro de un rol anterior al CCC en lugar de mostrarlo en cero', () => {
+    // rolConMensualizados no tiene baseImponibleIess ni contribucionCcc.
+    const aportes = aportesIessDetalle(rolConMensualizados, TASAS);
+
+    expect(aportes.baseImponible).toBe(670);
+    expect(aportes.contribucionCcc).toBe(6.7);
+    expect(aportes.totalPlanilla).toBe(144.73);
+  });
+
+  it('atenua la fila del CCC cuando la empresa lo tiene en cero', () => {
+    const sinCcc = desgloseIess(rolConMensualizados, { ...TASAS, ccc: 0 });
+
+    expect(sinCcc[3].monto).toBe(0);
+    expect(sinCcc[3].atenuada).toBe(true);
   });
 });
 

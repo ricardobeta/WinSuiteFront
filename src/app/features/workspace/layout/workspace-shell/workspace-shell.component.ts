@@ -8,6 +8,7 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 import { BreadcrumbState, NavItem } from '../../../../core/models/navigation.models';
+import { PlanService } from '../../../../core/services/plan.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { AuthorizationService } from '../../../../core/services/authorization.service';
 import { ThemeService } from '../../../../core/services/theme.service';
@@ -33,6 +34,8 @@ export class WorkspaceShellComponent {
   private readonly snackBar = inject(MatSnackBar);
 
   protected readonly auth = inject(AuthService);
+
+  protected readonly plan = inject(PlanService);
   protected readonly authorization = inject(AuthorizationService);
   protected readonly theme = inject(ThemeService);
   protected readonly immersive = inject(PosImmersiveService).immersive;

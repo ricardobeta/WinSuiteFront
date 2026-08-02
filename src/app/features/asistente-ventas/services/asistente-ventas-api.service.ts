@@ -116,7 +116,8 @@ export class AsistenteVentasApiService {
     return this.http.get<AiConfigView>(`${this.aiUrl}/config`);
   }
 
-  saveAiConfig(payload: { provider: string; model?: string; apiKey?: string; systemPrompt?: string; enabled: boolean }): Observable<AiConfigView> {
+  /** El proveedor y la clave los administra el conector de IA de la empresa. */
+  saveAiConfig(payload: { systemPrompt?: string; enabled: boolean }): Observable<AiConfigView> {
     return this.http.put<AiConfigView>(`${this.aiUrl}/config`, payload);
   }
 

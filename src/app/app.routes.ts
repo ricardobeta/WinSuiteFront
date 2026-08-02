@@ -3,7 +3,7 @@ import { LoginPageComponent } from './features/auth/pages/login-page/login-page.
 import { RegisterPageComponent } from './features/auth/pages/register-page/register-page.component';
 import { WorkspacePageComponent } from './features/workspace/pages/workspace-page/workspace-page.component';
 import { WorkspaceShellComponent } from './features/workspace/layout/workspace-shell/workspace-shell.component';
-import { moduleAccessGuard } from './core/guards/permission.guard';
+import { moduleAccessGuard, platformAdminGuard } from './core/guards/permission.guard';
 
 export const routes: Routes = [
   {
@@ -51,6 +51,13 @@ export const routes: Routes = [
           ).then((m) => m.TerminosCondicionesComponent),
       },
     ],
+  },
+  // Panel de super administracion: va fuera del workspace porque no tiene empresa activa.
+  {
+    path: 'super-admin',
+    canMatch: [platformAdminGuard],
+    loadChildren: () =>
+      import('./features/super-admin/super-admin.routes').then((routes) => routes.SUPER_ADMIN_ROUTES),
   },
   {
     path: 'workspace',
@@ -116,6 +123,15 @@ export const routes: Routes = [
       {
         path: 'empresa',
         loadChildren: () => import('./features/empresa/empresa.routes').then((routes) => routes.EMPRESA_ROUTES),
+      },
+      // Sin guard de modulo: cualquier usuario debe poder ver su plan y ampliarlo.
+      {
+        path: 'planes',
+        loadComponent: () =>
+          import('./features/planes/pages/planes-page/planes-page.component').then(
+            (component) => component.PlanesPageComponent,
+          ),
+        data: { module: 'Empresa', page: 'Planes y consumo' },
       },
       {
         path: 'colaboradores',

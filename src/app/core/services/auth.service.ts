@@ -25,6 +25,7 @@ import {
   TenantSessionResponse
 } from '../models/auth.models';
 import { RoleDefinition } from '../models/rbac.models';
+import { PlanService } from './plan.service';
 import { TenantApiService } from './tenant-api.service';
 import { HttpClient } from '@angular/common/http';
 import { HttpErrorResponse } from '@angular/common/http';
@@ -41,6 +42,7 @@ export class AuthService {
 
   private readonly auth = inject(Auth);
   private readonly tenantApi = inject(TenantApiService);
+  private readonly planService = inject(PlanService);
 
   readonly currentUser = signal<User | null>(this.auth.currentUser);
   readonly loading = signal(false);
@@ -54,6 +56,8 @@ export class AuthService {
   readonly activeModules = signal<string[]>([]);
   readonly ownedCompanyLimit = signal(2);
   readonly ownedCompanyCount = signal(0);
+  /** El correo esta en la lista de super administradores de la plataforma. */
+  readonly isPlatformAdmin = signal(false);
   readonly bootstrapState = signal<AuthBootstrapState>('loading');
   readonly bootstrapError = signal<string | null>(null);
   readonly isAuthenticated = computed(() => this.currentUser() !== null);
@@ -117,6 +121,8 @@ export class AuthService {
           return;
         }
         await this.loadAuthorizationContext(user.uid);
+        // Al recargar la pagina tambien hay que traer el plan y el consumo de la empresa.
+        await this.planService.refresh().catch(() => undefined);
         this.bootstrapState.set('ready');
       } catch (error: unknown) {
         this.clearAuthorizationContext();
@@ -449,6 +455,7 @@ export class AuthService {
   }
 
   private clearAuthorizationContext(): void {
+    this.planService.clear();
     this.currentProfile.set(null);
     this.roles.set([]);
     this.companies.set([]);
@@ -468,6 +475,25 @@ export class AuthService {
   }
 
   private async activateSession(response: TenantSessionResponse): Promise<void> {
+    this.isPlatformAdmin.set(response.platformAdmin === true);
+
+    // El super administrador no opera ninguna empresa: no hay token con claim de tenant que
+    // canjear, asi que se conserva la sesion de Firebase con la que acaba de iniciar sesion.
+    if (!response.firebaseCustomToken) {
+      this.clearAuthorizationContext();
+      this.planService.clear();
+      this.tenantId.set(null);
+      this.companies.set([]);
+      this.ownedCompanyLimit.set(response.ownedCompanyLimit);
+      this.ownedCompanyCount.set(response.ownedCompanyCount);
+      const user = this.auth.currentUser;
+      if (user) {
+        this.currentUser.set(user);
+        this.authToken.set(await user.getIdToken(true));
+      }
+      return;
+    }
+
     this.activatingSession = true;
     try {
       const credential = await signInWithCustomToken(this.auth, response.firebaseCustomToken);
@@ -475,11 +501,15 @@ export class AuthService {
       this.currentUser.set(credential.user);
       this.authToken.set(token);
       this.tenantId.set(response.activeTenantId);
-      this.persistTenantInStorage(response.activeTenantId);
+      if (response.activeTenantId) {
+        this.persistTenantInStorage(response.activeTenantId);
+      }
       this.companies.set(response.companies ?? []);
       this.ownedCompanyLimit.set(response.ownedCompanyLimit);
       this.ownedCompanyCount.set(response.ownedCompanyCount);
       await this.loadAuthorizationContext(credential.user.uid);
+      // El plan es informativo para la interfaz; que falle no debe impedir entrar.
+      await this.planService.refresh().catch(() => undefined);
     } finally {
       this.activatingSession = false;
     }

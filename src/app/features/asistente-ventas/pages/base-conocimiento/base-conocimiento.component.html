@@ -255,40 +255,30 @@
             <span>Responder con IA cuando ningun flujo coincida</span>
           </label>
 
-          <div class="form-grid">
-            <mat-form-field appearance="outline">
-              <mat-label>Proveedor</mat-label>
-              <mat-select [(ngModel)]="provider" (selectionChange)="onProviderChange()">
-                <mat-option value="gemini">Google Gemini</mat-option>
-                <mat-option value="anthropic">Anthropic (opcional)</mat-option>
-              </mat-select>
-            </mat-form-field>
-            <mat-form-field appearance="outline">
-              <mat-label>Modelo</mat-label>
-              <mat-select [(ngModel)]="model">
-                @for (m of availableModels; track m.value) {
-                  <mat-option [value]="m.value">{{ m.label }}</mat-option>
-                }
-              </mat-select>
-              @if (selectedModelHint) { <mat-hint>{{ selectedModelHint }}</mat-hint> }
-            </mat-form-field>
-          </div>
-
           <mat-form-field appearance="outline">
             <mat-label>Personalidad e instrucciones</mat-label>
             <textarea matInput rows="4" [(ngModel)]="systemPrompt" placeholder="Eres un asesor de ventas amable..."></textarea>
           </mat-form-field>
-          <mat-form-field appearance="outline">
-            <mat-label>{{ config()?.hasApiKey ? 'API key guardada; escribe para cambiar' : 'API key' }}</mat-label>
-            <input matInput type="password" [(ngModel)]="apiKey" autocomplete="off" />
-            <mat-hint>{{ provider === 'gemini' ? 'Obten tu API key en Google AI Studio.' : 'Obten tu API key en console.anthropic.com.' }}</mat-hint>
-          </mat-form-field>
+
+          <!-- El proveedor y la clave son ahora del conector de IA de la empresa, que atiende
+               tambien a los copilotos y al resto de funciones. -->
+          <div class="conector-heredado">
+            <div>
+              <strong>{{ config()?.provider === 'anthropic' ? 'Anthropic (Claude)' : 'Google Gemini' }}</strong>
+              <small>
+                {{ config()?.hasApiKey
+                    ? 'Se usa la clave de API de tu empresa.'
+                    : 'Se usa la cuenta general de WinSuit y consume el cupo de tu plan.' }}
+              </small>
+            </div>
+            <a mat-stroked-button routerLink="/workspace/empresa/ia">Configurar conector</a>
+          </div>
 
           <button mat-raised-button color="primary" type="button" [disabled]="saving()" (click)="saveConfig()">
             <mat-icon>save</mat-icon>
             Guardar configuracion
           </button>
-          <p class="hint muted">La API key se guarda cifrada. Los embeddings se generan localmente; solo el chat consume tokens.</p>
+          <p class="hint muted">Los embeddings se generan localmente; solo el chat consume tokens.</p>
         </section>
       </div>
     </mat-tab>

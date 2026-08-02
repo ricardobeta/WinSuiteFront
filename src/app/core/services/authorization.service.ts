@@ -41,7 +41,7 @@ export class AuthorizationService {
       return true;
     }
 
-    if (['empresa_modulos', 'empresa_auditoria'].includes(moduleKey)) {
+    if (['empresa_modulos', 'empresa_auditoria', 'empresa_ia'].includes(moduleKey)) {
       return false;
     }
 
@@ -70,7 +70,7 @@ export class AuthorizationService {
   }
 
   isModuleEnabled(moduleKey: string): boolean {
-    if (['dashboard', 'clientes', 'empresa_general', 'empresa_calendario', 'empresa_notificaciones', 'empresa_modulos', 'empresa_auditoria', 'empresa_colaboradores', 'empresa_roles'].includes(moduleKey)) {
+    if (['dashboard', 'clientes', 'empresa_general', 'empresa_calendario', 'empresa_notificaciones', 'empresa_modulos', 'empresa_auditoria', 'empresa_ia', 'empresa_colaboradores', 'empresa_roles'].includes(moduleKey)) {
       return true;
     }
     const activeModules = this.auth.activeModules();

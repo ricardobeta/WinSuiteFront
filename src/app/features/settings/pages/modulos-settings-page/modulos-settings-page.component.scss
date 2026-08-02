@@ -49,3 +49,31 @@
     align-items: start;
   }
 }
+
+// Modulos que existen en el catalogo pero que el plan contratado no habilita.
+.module-slot {
+  display: grid;
+  gap: .35rem;
+  align-content: start;
+}
+
+.module-slot.fuera-del-plan app-module-card {
+  opacity: .6;
+}
+
+.cta-plan {
+  justify-self: start;
+  border: 0;
+  background: color-mix(in srgb, var(--primary) 12%, transparent);
+  color: var(--primary);
+  font: inherit;
+  font-size: .78rem;
+  font-weight: 600;
+  padding: .25rem .6rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.cta-plan:hover {
+  background: color-mix(in srgb, var(--primary) 20%, transparent);
+}

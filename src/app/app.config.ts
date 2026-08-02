@@ -26,6 +26,7 @@ import { MatPaginatorIntl } from '@angular/material/paginator';
 import { routes } from './app.routes';
 import { environment } from '../environments/environment';
 import { AuthInterceptor } from './core/interceptors/auth.interceptor';
+import { QuotaInterceptor } from './core/interceptors/quota.interceptor';
 import { EcuadorDateAdapter } from './shared/adapters/ecuador-date.adapter';
 import { SpanishPaginatorIntl } from './shared/services/spanish-paginator-intl';
 
@@ -59,6 +60,7 @@ export const appConfig: ApplicationConfig = {
     ),
     provideHttpClient(withInterceptorsFromDi()),
     { provide: HTTP_INTERCEPTORS, useClass: AuthInterceptor, multi: true },
+    { provide: HTTP_INTERCEPTORS, useClass: QuotaInterceptor, multi: true },
     { provide: MAT_ICON_DEFAULT_OPTIONS, useValue: { fontSet: 'material-symbols-outlined' } },
     { provide: DateAdapter, useClass: EcuadorDateAdapter },
     { provide: LOCALE_ID, useValue: 'es-EC' },

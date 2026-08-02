@@ -166,6 +166,13 @@
           @if (auth.ownedCompanyCount() >= auth.ownedCompanyLimit()) {
             <p class="plan-limit" (click)="$event.stopPropagation()">Tu plan permite {{ auth.ownedCompanyLimit() }} empresas propias.</p>
           }
+          <button mat-menu-item type="button" routerLink="/workspace/planes">
+            <span class="material-symbols-outlined">workspace_premium</span>
+            <span class="company-option">
+              <strong>Mi plan y consumo</strong>
+              <small>{{ plan.nombrePlan() }}</small>
+            </span>
+          </button>
           <button mat-menu-item type="button" routerLink="/workspace/empresa/general">
             <span class="material-symbols-outlined">settings</span><span>Configurar empresa</span>
           </button>

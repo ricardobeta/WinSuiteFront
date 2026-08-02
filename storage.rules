@@ -22,6 +22,17 @@ service firebase.storage {
       allow delete: if esUsuarioDelTenant(tenantId);
     }
 
+    // Comprobantes de pago de las órdenes de compra a WinSuit. Viven aparte de
+    // /archivos porque no consumen la cuota de archivos de la empresa: son
+    // documentos de la relación comercial, no del negocio del cliente.
+    // No se permite borrar: un comprobante ya enviado es la prueba del pago.
+    match /comprobantes/{tenantId}/{allPaths=**} {
+      allow read: if esUsuarioDelTenant(tenantId);
+
+      allow write: if esUsuarioDelTenant(tenantId)
+        && request.resource.size <= 5 * 1024 * 1024;
+    }
+
     // Certificados digitales: se gestionan únicamente desde WinServer
     // mediante Firebase Admin SDK, que no está sujeto a estas reglas.
     match /firmas/{tenantId}/{allPaths=**} {

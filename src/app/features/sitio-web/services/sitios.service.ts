@@ -1,3 +1,4 @@
+import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import {
   Database,
@@ -8,7 +9,7 @@ import {
   runTransaction,
   update,
 } from 'firebase/database';
-import { Observable, from, switchMap } from 'rxjs';
+import { Observable, firstValueFrom, from, switchMap } from 'rxjs';
 import {
   ContenidoSitio,
   EntradaSubdominio,
@@ -17,16 +18,18 @@ import {
   sitioConfigSchema,
 } from '@winsuite/bloques';
 import { AuthService } from '../../../core/services/auth.service';
-import { LIMITES_SITIOS, ResumenSitio } from '../models/sitio-web.models';
+import { ResumenSitio } from '../models/sitio-web.models';
 import { esSubdominioReservado } from '../config/subdominios-reservados';
 import { SITES_DATABASE } from '../../../core/firebase/sites-firebase.tokens';
 import { SitesFirebaseSessionService } from '../../../core/services/sites-firebase-session.service';
+import { environment } from '../../../../environments/environment';
 
 @Injectable({ providedIn: 'root' })
 export class SitiosService {
   private readonly database = inject(SITES_DATABASE);
   private readonly authService = inject(AuthService);
   private readonly sitesSession = inject(SitesFirebaseSessionService);
+  private readonly http = inject(HttpClient);
 
   private getTenantPath(): string {
     return `sitios/${this.authService.getTenantId()}`;
@@ -81,19 +84,22 @@ export class SitiosService {
     const tenantId = this.authService.getTenantId();
     const { tipo, nombre, subdominio, contenidoInicial } = opciones;
 
-    const existentes = await get(ref(this.database, this.getResumenPath()));
-    const sitios = (existentes.val() ?? {}) as Record<string, { config?: SitioConfig }>;
-    const delMismoTipo = Object.values(sitios).filter((s) => s.config?.tipo === tipo).length;
-    if (delMismoTipo >= LIMITES_SITIOS[tipo]) {
-      throw new Error(
-        tipo === 'ecommerce'
-          ? 'Ya tienes un ecommerce. Tu plan permite 1 ecommerce por negocio.'
-          : `Tu plan permite hasta ${LIMITES_SITIOS.landing} landing pages.`,
-      );
-    }
+    // El backend valida el limite del plan, contabiliza la plaza y autoriza la creacion.
+    // Sin esa autorizacion las reglas del proyecto de sitios rechazan el alta.
+    const reserva = await firstValueFrom(
+      this.http.post<{ sitioId: string; tipo: TipoSitio }>(
+        `${environment.apiBaseUrl}/api/tenants/current/sitios/reservar`,
+        { tipo },
+      ),
+    );
+    const sitioId = reserva.sitioId;
 
-    const sitioId = `s-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
-    await this.reclamarSubdominio(subdominio, sitioId);
+    try {
+      await this.reclamarSubdominio(subdominio, sitioId);
+    } catch (error) {
+      await this.liberarPlaza(sitioId, tipo);
+      throw error;
+    }
 
     const ahora = Date.now();
     const config: SitioConfig = {
@@ -127,8 +133,9 @@ export class SitiosService {
         [`${this.getResumenPath()}/${sitioId}`]: { config, versionPublicada: null },
       });
     } catch (error) {
-      // Si fallo la escritura del sitio, liberar el subdominio reclamado.
+      // Si fallo la escritura del sitio, liberar el subdominio y la plaza reservada.
       await this.liberarSubdominio(subdominio).catch(() => undefined);
+      await this.liberarPlaza(sitioId, tipo);
       throw error;
     }
 
@@ -145,6 +152,21 @@ export class SitiosService {
       [`sitios_resumen/${tenantId}/${sitio.sitioId}`]: null,
       [`publicaciones/${tenantId}/${sitio.sitioId}`]: null,
     });
+    await this.liberarPlaza(sitio.sitioId, sitio.config.tipo);
+  }
+
+  /** Devuelve al plan la plaza de un sitio eliminado o de una creacion que fallo. */
+  private async liberarPlaza(sitioId: string, tipo: TipoSitio): Promise<void> {
+    try {
+      await firstValueFrom(
+        this.http.post<void>(`${environment.apiBaseUrl}/api/tenants/current/sitios/liberar`, {
+          sitioId,
+          tipo,
+        }),
+      );
+    } catch {
+      // No bloquea la operacion del usuario: el super administrador puede corregir el contador.
+    }
   }
 
   /** Comprueba disponibilidad de un subdominio (reservados + indice global). */

@@ -5,7 +5,15 @@
     "sitios": {
       "$tenantId": {
         ".read": "auth != null && auth.token.tenantId === $tenantId",
-        ".write": "auth != null && auth.token.tenantId === $tenantId"
+        "$sitioId": {
+          ".write": "auth != null && auth.token.tenantId === $tenantId && (data.exists() || !newData.exists() || root.child('sitios_reservas').child($tenantId).child($sitioId).exists())"
+        }
+      }
+    },
+    "sitios_reservas": {
+      "$tenantId": {
+        ".read": "auth != null && auth.token.tenantId === $tenantId",
+        ".write": false
       }
     },
     "sitios_catalogo": {
@@ -17,7 +25,9 @@
     "sitios_resumen": {
       "$tenantId": {
         ".read": "auth != null && auth.token.tenantId === $tenantId",
-        ".write": "auth != null && auth.token.tenantId === $tenantId"
+        "$sitioId": {
+          ".write": "auth != null && auth.token.tenantId === $tenantId && (data.exists() || !newData.exists() || root.child('sitios_reservas').child($tenantId).child($sitioId).exists())"
+        }
       }
     },
     "publicaciones": {

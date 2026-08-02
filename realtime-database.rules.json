@@ -85,12 +85,6 @@
         }
       }
     },
-    "archivos_stats": {
-      "$tenantId": {
-        ".read": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
-        ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
-      }
-    },
     "sri_config": {
       "$tenantId": {
         ".read": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
@@ -305,6 +299,16 @@
         ".read": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
         "configuracion": {
           ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+        },
+        "cargos": {
+          "$cargoId": {
+            ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
+        },
+        "departamentos": {
+          "$departamentoId": {
+            ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+          }
         },
         "empleados": {
           "$empleadoId": {
@@ -610,6 +614,18 @@
         ".write": "auth != null && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === auth.token.tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && ((!data.exists() && auth.token.tenantId === newData.child('tenantId').val() && root.child('tenant_users').child(newData.child('tenantId').val()).child(auth.uid).child('active').val() === true) || (!newData.exists() && auth.token.tenantId === data.child('tenantId').val() && root.child('tenant_users').child(data.child('tenantId').val()).child(auth.uid).child('active').val() === true))",
         ".validate": "newData.hasChildren(['tenantId', 'sitioId', 'dominio', 'tokenVerificacion', 'creadoEn']) && newData.child('verificado').val() === false"
       }
-    }
+    },
+    "archivos_stats": { ".read": false, ".write": false },
+    "tenant_ai_connector": { ".read": false, ".write": false },
+    "platform_plans": { ".read": false, ".write": false },
+    "platform_account_plans": { ".read": false, ".write": false },
+    "platform_addons": { ".read": false, ".write": false },
+    "platform_subscriptions": { ".read": false, ".write": false },
+    "platform_account_subscriptions": { ".read": false, ".write": false },
+    "platform_usage": { ".read": false, ".write": false },
+    "platform_usage_total": { ".read": false, ".write": false },
+    "platform_wallet": { ".read": false, ".write": false },
+    "platform_orders": { ".read": false, ".write": false },
+    "platform_settings": { ".read": false, ".write": false }
   }
 }

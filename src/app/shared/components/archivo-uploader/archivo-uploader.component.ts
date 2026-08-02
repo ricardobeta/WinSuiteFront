@@ -15,6 +15,7 @@ import {
   ArchivoItem,
   ArchivosUsage
 } from '../../models/archivos.models';
+import { PlanService } from '../../../core/services/plan.service';
 
 type UploadStatus = 'queued' | 'uploading' | 'success' | 'error';
 
@@ -44,7 +45,7 @@ interface UploadView {
 
         <div class="quota" aria-live="polite">
           <span>
-            Uso {{ formatBytes(usage().totalBytes) }} / {{ formatBytes(maxTotalBytes) }}
+            Uso {{ formatBytes(usage().totalBytes) }} / {{ formatBytes(maxTotalBytes()) }}
           </span>
           <mat-progress-bar mode="determinate" [value]="usagePercent()"></mat-progress-bar>
         </div>
@@ -86,7 +87,7 @@ interface UploadView {
             <mat-chip-option disabled>CSV</mat-chip-option>
             <mat-chip-option disabled>Imagenes</mat-chip-option>
           </mat-chip-listbox>
-          <span class="hint">Total disponible: {{ formatBytes(maxTotalBytes - usage().totalBytes) }}</span>
+          <span class="hint">Total disponible: {{ formatBytes(maxTotalBytes() - usage().totalBytes) }}</span>
         </div>
       </div>
 
@@ -411,7 +412,16 @@ export class ArchivoUploaderComponent implements OnInit {
   @Output() failed = new EventEmitter<{ file: File; error: string }>();
 
   protected readonly maxFileBytes = ARCHIVO_MAX_FILE_BYTES;
-  protected readonly maxTotalBytes = ARCHIVO_MAX_TOTAL_BYTES;
+  private readonly planService = inject(PlanService);
+
+  /**
+   * Tope de espacio del plan de la empresa. La constante solo se usa mientras el plan carga
+   * o si el plan no define limite de espacio.
+   */
+  protected readonly maxTotalBytes = computed(() => {
+    const limite = this.planService.estado('storageBytes')?.limite;
+    return typeof limite === 'number' && limite > 0 ? limite : ARCHIVO_MAX_TOTAL_BYTES;
+  });
   protected get accept(): string {
     const extensions = this.extensions?.length ? this.extensions : [...ARCHIVO_ALLOWED_EXTENSIONS];
     return extensions.map((extension) => `.${extension.toLowerCase()}`).join(',');
@@ -422,7 +432,7 @@ export class ArchivoUploaderComponent implements OnInit {
   protected readonly isDragOver = signal(false);
   protected readonly usagePercent = computed(() => {
     const total = this.usage().totalBytes;
-    return Math.min(100, Math.round((total / this.maxTotalBytes) * 100));
+    return Math.min(100, Math.round((total / this.maxTotalBytes()) * 100));
   });
 
   private readonly archivosService = inject(ArchivosService);

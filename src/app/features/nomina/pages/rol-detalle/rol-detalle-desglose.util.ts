@@ -1,4 +1,9 @@
 import { RolPagoDetalle, RolPagoLinea } from '../../../contabilidad/models/nomina.models';
+import {
+  DesgloseAportesIess,
+  TasasIess,
+  calcularAportesIess
+} from '../../../contabilidad/services/nomina-calculos.util';
 
 /** Codigo del rubro de anticipo; tiene fila propia en el resumen y no entra en "otros descuentos". */
 const CODIGO_ANTICIPO = 'ANTIC';
@@ -47,6 +52,69 @@ export function baseAportesIess(detalle: RolPagoDetalle): number {
   return redondear((detalle.lineas ?? [])
     .filter((linea) => linea.tipo === 'INGRESO' && linea.afectaIess)
     .reduce((total, linea) => total + linea.monto, 0));
+}
+
+/**
+ * Aportes de la planilla del periodo. Los roles calculados antes de existir el CCC no traen ni la
+ * base congelada ni la contribucion, asi que se rearman desde las lineas con las tasas vigentes:
+ * el cuadro nunca debe salir en cero por ser un rol viejo.
+ */
+export function aportesIessDetalle(detalle: RolPagoDetalle, tasas: TasasIess): DesgloseAportesIess {
+  if (detalle.baseImponibleIess === undefined || detalle.contribucionCcc === undefined) {
+    return calcularAportesIess(baseAportesIess(detalle), tasas);
+  }
+  const aportePatronal = redondear(detalle.aportePatronalIess);
+  const contribucionCcc = redondear(detalle.contribucionCcc);
+  const aportePersonal = redondear(detalle.aportePersonalIess);
+  return {
+    baseImponible: redondear(detalle.baseImponibleIess),
+    aportePersonal,
+    aportePatronal,
+    contribucionCcc,
+    costoPatronal: redondear(aportePatronal + contribucionCcc),
+    totalPlanilla: redondear(aportePersonal + aportePatronal + contribucionCcc)
+  };
+}
+
+/**
+ * Cuadro de referencia de la planilla: base imponible y los tres conceptos que se transfieren al
+ * IESS. Solo el aporte personal se descuenta al trabajador; el patronal y el CCC son costo del
+ * empleador y aparecen aqui para poder cuadrar contra la planilla antes de pagarla.
+ */
+export function desgloseIess(detalle: RolPagoDetalle, tasas: TasasIess): FilaDesglose[] {
+  const aportes = aportesIessDetalle(detalle, tasas);
+  return [
+    {
+      clave: 'BASE',
+      etiqueta: 'Base imponible',
+      nota: 'Ingresos que afectan IESS',
+      monto: aportes.baseImponible
+    },
+    {
+      clave: 'PERSONAL',
+      etiqueta: 'Aporte personal',
+      nota: `${formatearTasa(tasas.personal)} · se descuenta al trabajador`,
+      monto: aportes.aportePersonal
+    },
+    {
+      clave: 'PATRONAL',
+      etiqueta: 'Aporte patronal',
+      nota: `${formatearTasa(tasas.patronal)} · costo del empleador`,
+      monto: aportes.aportePatronal
+    },
+    {
+      clave: 'CCC',
+      etiqueta: 'Contribución CCC',
+      nota: `${formatearTasa(tasas.ccc)} · costo del empleador`,
+      monto: aportes.contribucionCcc,
+      atenuada: aportes.contribucionCcc === 0
+    }
+  ];
+}
+
+/** Quita los ceros de relleno para que 9.4500 se lea 9.45% y 1.0000 se lea 1%. */
+function formatearTasa(tasa: number): string {
+  return `${Number((Number(tasa) || 0).toFixed(4))}%`;
 }
 
 /**

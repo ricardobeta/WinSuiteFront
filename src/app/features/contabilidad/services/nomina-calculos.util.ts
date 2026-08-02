@@ -2,6 +2,33 @@ import { RegimenFondosReserva } from '../models/nomina.models';
 
 export const DIAS_LABORALES_MES = 30;
 
+/**
+ * Contribución al Fomento de Capacidades y Conocimientos Ciudadanos: 1% sobre la misma base
+ * imponible del aporte, a cargo del empleador, que el IESS recauda como agente de retención en la
+ * planilla de aportes. Solo es el valor inicial de la configuración; el cálculo usa la tasa que el
+ * contador tenga guardada.
+ */
+export const PORCENTAJE_CCC_DEFECTO = 1;
+
+/** Tasas vigentes de la planilla, en porcentaje (9.45 significa 9.45%). */
+export interface TasasIess {
+  personal: number;
+  patronal: number;
+  ccc: number;
+}
+
+export interface DesgloseAportesIess {
+  baseImponible: number;
+  /** Único concepto que se descuenta al trabajador. */
+  aportePersonal: number;
+  aportePatronal: number;
+  contribucionCcc: number;
+  /** Patronal + CCC: lo que el aporte le cuesta al empleador. */
+  costoPatronal: number;
+  /** Personal + patronal + CCC: lo que se transfiere al IESS. */
+  totalPlanilla: number;
+}
+
 export interface ParametrosBeneficiosLegales {
   baseRemuneracion: number;
   salarioBasicoUnificado: number;
@@ -118,6 +145,54 @@ export function calcularDevengadosLegales(
       ? redondearDos(baseRemuneracion / 24)
       : 0
   };
+}
+
+/**
+ * Corta a dos decimales sin redondear: 3.5977 vale 3.59, no 3.60. Es el trato que el IESS le da al
+ * CCC, a diferencia de los aportes, que sí redondea.
+ *
+ * La tolerancia corrige el error del binario: un producto cuyo valor exacto es 3.60 puede quedar
+ * almacenado como 3.5999999999999996 y truncarse a 3.59. Es demasiado pequeña para alterar un
+ * truncado legítimo (3.5977 sigue siendo 3.59). Asume valores no negativos, como todos los aportes.
+ */
+export function truncarDos(valor: number): number {
+  return Math.trunc((Number(valor) || 0) * 100 + 1e-6) / 100;
+}
+
+/**
+ * Aportes de la planilla sobre la base imponible del período.
+ *
+ * Los dos aportes se redondean y el CCC se trunca, que es como aparecen en la planilla real: con una
+ * base de 359.77 el aporte personal sale 33.998265 y el IESS cobra 34.00, mientras que el CCC sale
+ * 3.5977 y cobra 3.59.
+ *
+ * Cada concepto se resuelve por separado y el total es la suma de los tres ya ajustados; calcular el
+ * total sobre la base y ajustarlo al final daría otro centavo. El aporte patronal y el CCC no se
+ * descuentan al trabajador, son costo del empleador.
+ */
+export function calcularAportesIess(baseImponible: number, tasas: TasasIess): DesgloseAportesIess {
+  const base = Math.max(0, redondearDos(baseImponible));
+  const aportePersonal = redondearAporte(base * (Number(tasas.personal) || 0) / 100);
+  const aportePatronal = redondearAporte(base * (Number(tasas.patronal) || 0) / 100);
+  const contribucionCcc = truncarDos(base * (Number(tasas.ccc) || 0) / 100);
+
+  return {
+    baseImponible: base,
+    aportePersonal,
+    aportePatronal,
+    contribucionCcc,
+    costoPatronal: redondearDos(aportePatronal + contribucionCcc),
+    totalPlanilla: redondearDos(aportePersonal + aportePatronal + contribucionCcc)
+  };
+}
+
+/**
+ * Redondeo del aporte con la misma tolerancia que el truncado. Sin ella el medio centavo queda a
+ * merced del binario: 63.315 se almacena por debajo y caería a 63.31, mientras que 74.705 sube a
+ * 74.71. Con la tolerancia el medio centavo siempre sube, que es lo que espera el contador.
+ */
+function redondearAporte(valor: number): number {
+  return Math.round((Number(valor) || 0) * 100 + 1e-6) / 100;
 }
 
 function limitarDiaLaboral(dia: number): number {

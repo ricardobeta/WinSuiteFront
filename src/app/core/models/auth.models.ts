@@ -53,13 +53,17 @@ export interface CompanySummary {
 export interface TenantSessionResponse {
   userId: string;
   email: string;
-  activeTenantId: string;
-  firebaseCustomToken: string;
+  /** null cuando la sesion es de un super administrador sin empresa asociada. */
+  activeTenantId: string | null;
+  /** null cuando no hay empresa activa: no se emite token con claim de tenant. */
+  firebaseCustomToken: string | null;
   sessionId: string;
   sessionVersion: number;
   companies: CompanySummary[];
   ownedCompanyLimit: number;
   ownedCompanyCount: number;
+  /** true si el correo esta autorizado a entrar al panel de super administracion. */
+  platformAdmin?: boolean;
 }
 
 export interface TenantAuthorizationContext {

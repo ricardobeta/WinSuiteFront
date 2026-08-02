@@ -28,12 +28,19 @@
   } @else {
     <div class="module-grid">
       @for (module of moduleCatalog; track module.id) {
-        <app-module-card
-          [module]="module"
-          [selected]="isModuleSelected(module.id)"
-          variant="toggle"
-          (toggle)="toggleModule(module.id)"
-        />
+        <div class="module-slot" [class.fuera-del-plan]="isModuleFueraDelPlan(module.id)">
+          <app-module-card
+            [module]="module"
+            [selected]="isModuleSelected(module.id)"
+            variant="toggle"
+            (toggle)="toggleModule(module.id)"
+          />
+          @if (isModuleFueraDelPlan(module.id)) {
+            <button type="button" class="cta-plan" (click)="verPlanes()">
+              No incluido en tu plan · Ver planes
+            </button>
+          }
+        </div>
       }
     </div>
   }

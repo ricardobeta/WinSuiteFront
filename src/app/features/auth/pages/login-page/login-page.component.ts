@@ -53,7 +53,7 @@ export class LoginPageComponent {
         password: formValue.password,
         remember: formValue.remember
       });
-      await this.router.navigateByUrl('/workspace');
+      await this.router.navigateByUrl(this.auth.isPlatformAdmin() ? '/super-admin' : '/workspace');
     } catch {
       // AuthService exposes the recoverable message in the page.
     }
@@ -62,7 +62,7 @@ export class LoginPageComponent {
   protected async continueWithGoogle(): Promise<void> {
     try {
       await this.auth.loginWithGoogle(this.form.controls.remember.value);
-      await this.router.navigateByUrl('/workspace');
+      await this.router.navigateByUrl(this.auth.isPlatformAdmin() ? '/super-admin' : '/workspace');
     } catch {
       // AuthService exposes the recoverable message in the page.
     }
