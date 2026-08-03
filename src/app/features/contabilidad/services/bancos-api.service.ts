@@ -9,6 +9,7 @@ import {
   HojaExtractoResumen,
   MapeoExtracto,
   MovimientosPage,
+  PlantillaDisponible,
   ResultadoConciliacion,
   ResultadoImportacion,
   ResumenConciliacion
@@ -33,20 +34,36 @@ export class BancosApiService {
     }));
   }
 
-  /** forzarIa: ignora las plantillas guardadas y vuelve a detectar el formato con IA. */
+  /** Plantillas del banco con su compatibilidad real contra la hoja; no consume IA. */
+  listarPlantillas(
+    cuentaBancariaId: string,
+    storagePath: string,
+    nombreArchivo: string,
+    hojaIndex: number | null = null
+  ): Promise<PlantillaDisponible[]> {
+    return firstValueFrom(this.http.post<PlantillaDisponible[]>(`${this.baseUrl}/extractos/plantillas`, {
+      cuentaBancariaId,
+      storagePath,
+      nombreArchivo,
+      hojaIndex
+    }));
+  }
+
+  /** plantillaId: aplicar esa plantilla. forzarIa: ignorar plantillas y detectar con IA. */
   analizarExtracto(
     cuentaBancariaId: string,
     storagePath: string,
     nombreArchivo: string,
     hojaIndex: number | null = null,
-    forzarIa = false
+    opciones: { plantillaId?: string | null; forzarIa?: boolean } = {}
   ): Promise<AnalisisExtracto> {
     return firstValueFrom(this.http.post<AnalisisExtracto>(`${this.baseUrl}/extractos/analizar`, {
       cuentaBancariaId,
       storagePath,
       nombreArchivo,
       hojaIndex,
-      forzarIa
+      plantillaId: opciones.plantillaId ?? null,
+      forzarIa: opciones.forzarIa ?? false
     }));
   }
 
@@ -66,6 +83,7 @@ export class BancosApiService {
     mapeo: MapeoExtracto;
     guardarPlantilla: boolean;
     plantillaId?: string | null;
+    nombrePlantilla?: string | null;
   }): Promise<ResultadoImportacion> {
     return firstValueFrom(this.http.post<ResultadoImportacion>(`${this.baseUrl}/extractos/importar`, input));
   }

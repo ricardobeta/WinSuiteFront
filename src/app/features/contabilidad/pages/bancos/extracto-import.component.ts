@@ -26,13 +26,17 @@ import {
   CuentaBancaria,
   HojaExtractoResumen,
   MapeoExtracto,
+  PlantillaDisponible,
   ResultadoImportacion,
   SIN_ENCABEZADO
 } from '../../models/bancos.models';
 import { BancosApiService } from '../../services/bancos-api.service';
 import { BancosCuentasService } from '../../services/bancos-cuentas.service';
 
-type PasoImportacion = 'archivo' | 'hoja' | 'mapeo' | 'resumen';
+type PasoImportacion = 'archivo' | 'hoja' | 'formato' | 'mapeo' | 'resumen';
+
+/** Valor del paso Formato: el id de una plantilla guardada o 'IA'. */
+type FormatoElegido = string;
 
 @Component({
   selector: 'app-extracto-import',
@@ -77,9 +81,11 @@ type PasoImportacion = 'archivo' | 'hoja' | 'mapeo' | 'resumen';
           <span class="step" [class.active]="paso() === 'hoja'">2 · Hoja del Excel</span>
         }
         <mat-icon>chevron_right</mat-icon>
-        <span class="step" [class.active]="paso() === 'mapeo'">{{ hojas().length > 1 ? 3 : 2 }} · Verificar mapeo</span>
+        <span class="step" [class.active]="paso() === 'formato'">{{ pasoNumero(3) }} · Formato</span>
         <mat-icon>chevron_right</mat-icon>
-        <span class="step" [class.active]="paso() === 'resumen'">{{ hojas().length > 1 ? 4 : 3 }} · Resultado</span>
+        <span class="step" [class.active]="paso() === 'mapeo'">{{ pasoNumero(4) }} · Verificar mapeo</span>
+        <mat-icon>chevron_right</mat-icon>
+        <span class="step" [class.active]="paso() === 'resumen'">{{ pasoNumero(5) }} · Resultado</span>
       </nav>
 
       @if (paso() === 'archivo') {
@@ -136,6 +142,58 @@ type PasoImportacion = 'archivo' | 'hoja' | 'mapeo' | 'resumen';
             <button mat-flat-button color="primary" [disabled]="analizando()" (click)="analizarHoja()">
               <mat-icon>auto_awesome</mat-icon>
               {{ analizando() ? 'Analizando…' : 'Analizar esta hoja' }}
+            </button>
+          </div>
+          @if (analizando()) {
+            <mat-progress-bar mode="indeterminate" />
+          }
+        </section>
+      }
+
+      @if (paso() === 'formato') {
+        <section class="surface-card card">
+          <div>
+            <h3>¿Cómo interpretamos este archivo?</h3>
+            <p class="hint">
+              Reutiliza una plantilla guardada si el banco te entrega siempre el mismo formato,
+              o deja que la IA lo analice cuando sea un archivo distinto.
+            </p>
+          </div>
+
+          <mat-radio-group class="formatos" [(ngModel)]="formatoElegido">
+            @for (plantilla of plantillas(); track plantilla.id) {
+              <mat-radio-button [value]="plantilla.id">
+                <span class="formato-titulo">
+                  {{ plantilla.nombre }}
+                  <span class="pill" [class]="plantilla.compatible ? 'pill-success' : 'pill-muted'">
+                    {{ plantilla.compatible ? 'Compatible' : 'No coincide' }}
+                  </span>
+                </span>
+                <span class="formato-sub">{{ plantilla.motivo }} · usada {{ plantilla.vecesUsada }} vez(ces)</span>
+              </mat-radio-button>
+            }
+            <mat-radio-button value="IA">
+              <span class="formato-titulo">
+                Detectar con IA
+                <span class="pill pill-ia">IA</span>
+              </span>
+              <span class="formato-sub">
+                Analiza una muestra del archivo e identifica encabezado, fecha, descripción,
+                referencia, débito, crédito y saldo.
+              </span>
+            </mat-radio-button>
+          </mat-radio-group>
+
+          @if (plantillas().length === 0) {
+            <p class="hint">Aún no hay plantillas guardadas para este banco: la IA detectará el formato y podrás guardarlo al final.</p>
+          }
+
+          <div class="acciones">
+            <button mat-button (click)="volverDesdeFormato()">Atrás</button>
+            <span class="spacer"></span>
+            <button mat-flat-button color="primary" [disabled]="analizando()" (click)="aplicarFormato()">
+              <mat-icon>{{ formatoElegido === 'IA' ? 'auto_awesome' : 'bookmark' }}</mat-icon>
+              {{ analizando() ? 'Analizando…' : (formatoElegido === 'IA' ? 'Analizar con IA' : 'Usar plantilla') }}
             </button>
           </div>
           @if (analizando()) {
@@ -291,8 +349,20 @@ type PasoImportacion = 'archivo' | 'hoja' | 'mapeo' | 'resumen';
             </table>
           </div>
 
+          <div class="guardar-plantilla">
+            <mat-checkbox [(ngModel)]="guardarPlantilla">
+              {{ plantillaAplicada() ? 'Actualizar la plantilla usada' : 'Guardar este formato como plantilla' }}
+            </mat-checkbox>
+            @if (guardarPlantilla) {
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="nombre-plantilla">
+                <mat-label>Nombre de la plantilla</mat-label>
+                <input matInput [(ngModel)]="nombrePlantilla" maxlength="80" />
+                <mat-hint>Ej. Pichincha corriente 2204</mat-hint>
+              </mat-form-field>
+            }
+          </div>
+
           <div class="acciones">
-            <mat-checkbox [(ngModel)]="guardarPlantilla">Guardar como plantilla de este banco</mat-checkbox>
             <span class="spacer"></span>
             <button mat-button (click)="reiniciar()">Atrás</button>
             <button mat-flat-button color="primary"
@@ -359,6 +429,12 @@ type PasoImportacion = 'archivo' | 'hoja' | 'mapeo' | 'resumen';
     .hoja-nombre { font-weight: 600; }
     .hoja-sub { color: var(--muted-foreground); font-size: .82rem; margin-left: .5rem; }
     .archivo-acciones { display: grid; gap: .5rem; justify-items: start; }
+    .formatos { display: grid; gap: .5rem; }
+    .formatos mat-radio-button { border: 1px solid color-mix(in srgb, var(--muted-foreground) 20%, transparent); border-radius: .6rem; padding: .55rem .8rem; }
+    .formato-titulo { font-weight: 600; display: inline-flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+    .formato-sub { display: block; color: var(--muted-foreground); font-size: .82rem; }
+    .guardar-plantilla { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .nombre-plantilla { min-width: min(320px, 100%); }
     .mapeo-header { display: flex; justify-content: space-between; align-items: start; gap: 1rem; flex-wrap: wrap; }
     .mapeo-header h3 { margin: 0; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
     .mapeo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
@@ -397,6 +473,7 @@ export class ExtractoImportComponent {
   protected readonly paso = signal<PasoImportacion>('archivo');
   protected readonly cuentas = signal<CuentaBancaria[]>([]);
   protected readonly hojas = signal<HojaExtractoResumen[]>([]);
+  protected readonly plantillas = signal<PlantillaDisponible[]>([]);
   protected readonly analizando = signal(false);
   protected readonly previsualizando = signal(false);
   protected readonly importando = signal(false);
@@ -405,7 +482,9 @@ export class ExtractoImportComponent {
 
   protected cuentaSeleccionadaId: string | null = null;
   protected hojaSeleccionada = 0;
+  protected formatoElegido: FormatoElegido = 'IA';
   protected guardarPlantilla = true;
+  protected nombrePlantilla = '';
   protected mapeoEditable!: MapeoExtracto;
   protected referenciaCol: number | null = null;
   protected debitoCol: number | null = null;
@@ -469,14 +548,15 @@ export class ExtractoImportComponent {
       const hojas = await this.api.listarHojas(archivo.storagePath, archivo.name);
       this.hojas.set(hojas);
       const conDatos = hojas.filter((hoja) => hoja.filasConDatos > 0);
-      // Con una sola hoja útil no se agrega fricción: se analiza directo.
+      // Con una sola hoja útil no se agrega fricción: se salta al paso de formato.
       if (conDatos.length > 1) {
         this.hojaSeleccionada = conDatos.reduce((mayor, hoja) =>
           hoja.filasConDatos > mayor.filasConDatos ? hoja : mayor, conDatos[0]).index;
         this.paso.set('hoja');
         return;
       }
-      await this.analizar(conDatos[0]?.index ?? null);
+      this.hojaSeleccionada = conDatos[0]?.index ?? 0;
+      await this.cargarFormatos();
     } catch (error) {
       this.mostrarError(error, 'No se pudo leer el archivo.');
     } finally {
@@ -487,20 +567,55 @@ export class ExtractoImportComponent {
   protected async analizarHoja(): Promise<void> {
     this.analizando.set(true);
     try {
-      await this.analizar(this.hojaSeleccionada);
+      await this.cargarFormatos();
     } catch (error) {
-      this.mostrarError(error, 'No se pudo analizar la hoja seleccionada.');
+      this.mostrarError(error, 'No se pudo leer la hoja seleccionada.');
     } finally {
       this.analizando.set(false);
     }
   }
 
-  private async analizar(hojaIndex: number | null, forzarIa = false): Promise<void> {
+  /** Paso Formato: plantillas del banco evaluadas contra la hoja, sin gastar IA. */
+  private async cargarFormatos(): Promise<void> {
+    if (!this.cuentaSeleccionadaId || !this.archivoActual) {
+      return;
+    }
+    const plantillas = await this.api.listarPlantillas(
+      this.cuentaSeleccionadaId, this.archivoActual.storagePath, this.archivoActual.name, this.hojaSeleccionada);
+    this.plantillas.set(plantillas);
+    // Se preselecciona la plantilla compatible; si ninguna sirve, la IA.
+    this.formatoElegido = plantillas.find((plantilla) => plantilla.compatible)?.id ?? 'IA';
+    this.paso.set('formato');
+  }
+
+  protected async aplicarFormato(): Promise<void> {
+    this.analizando.set(true);
+    try {
+      const usaIa = this.formatoElegido === 'IA';
+      await this.analizar(this.hojaSeleccionada, {
+        plantillaId: usaIa ? null : this.formatoElegido,
+        forzarIa: usaIa
+      });
+    } catch (error) {
+      this.mostrarError(error, 'No se pudo interpretar el formato de esta hoja.');
+    } finally {
+      this.analizando.set(false);
+    }
+  }
+
+  protected volverDesdeFormato(): void {
+    this.paso.set(this.hojas().length > 1 ? 'hoja' : 'archivo');
+  }
+
+  private async analizar(
+    hojaIndex: number | null,
+    opciones: { plantillaId?: string | null; forzarIa?: boolean } = {}
+  ): Promise<void> {
     if (!this.cuentaSeleccionadaId || !this.archivoActual) {
       return;
     }
     const analisis = await this.api.analizarExtracto(
-      this.cuentaSeleccionadaId, this.archivoActual.storagePath, this.archivoActual.name, hojaIndex, forzarIa);
+      this.cuentaSeleccionadaId, this.archivoActual.storagePath, this.archivoActual.name, hojaIndex, opciones);
     this.aplicarAnalisis(analisis);
     this.paso.set('mapeo');
   }
@@ -509,7 +624,7 @@ export class ExtractoImportComponent {
   protected async redetectarConIa(): Promise<void> {
     this.analizando.set(true);
     try {
-      await this.analizar(this.mapeoEditable?.hojaIndex ?? this.analisis()?.hojaIndex ?? null, true);
+      await this.analizar(this.mapeoEditable?.hojaIndex ?? this.analisis()?.hojaIndex ?? null, { forzarIa: true });
       this.snackBar.open('Formato detectado con IA.', 'OK', { duration: 3000 });
     } catch (error) {
       this.mostrarError(error, 'La IA no pudo interpretar el formato de esta hoja.');
@@ -518,11 +633,24 @@ export class ExtractoImportComponent {
     }
   }
 
+  /** Plantilla que se aplicó al análisis actual, si la hubo. */
+  protected plantillaAplicada(): PlantillaDisponible | null {
+    const id = this.analisis()?.plantillaId;
+    return id ? this.plantillas().find((plantilla) => plantilla.id === id) ?? null : null;
+  }
+
+  protected pasoNumero(base: number): number {
+    return this.hojas().length > 1 ? base : base - 1;
+  }
+
   private aplicarAnalisis(analisis: AnalisisExtracto): void {
     this.analisis.set(analisis);
     if (analisis.hojas?.length) {
       this.hojas.set(analisis.hojas);
     }
+    // Se propone el nombre de la plantilla aplicada para actualizarla, o uno nuevo.
+    const aplicada = this.plantillas().find((plantilla) => plantilla.id === analisis.plantillaId);
+    this.nombrePlantilla = aplicada?.nombre ?? this.nombrePlantillaPorDefecto();
     this.mapeoEditable = structuredClone(analisis.mapeo);
     this.mapeoEditable.hojaIndex = analisis.hojaIndex;
     this.referenciaCol = analisis.mapeo.mapeo.referencia?.col ?? null;
@@ -577,7 +705,8 @@ export class ExtractoImportComponent {
         nombreArchivo: this.archivoActual.name,
         mapeo: this.construirMapeo(),
         guardarPlantilla: this.guardarPlantilla,
-        plantillaId: this.analisis()?.plantillaId ?? null
+        plantillaId: this.analisis()?.plantillaId ?? null,
+        nombrePlantilla: this.guardarPlantilla ? this.nombrePlantilla : null
       });
       this.resultado.set(resultado);
       this.paso.set('resumen');
@@ -624,10 +753,17 @@ export class ExtractoImportComponent {
     return this.analisis()?.origenMapeo === 'IA' ? 'pill-ia' : 'pill-info';
   }
 
+  private nombrePlantillaPorDefecto(): string {
+    const cuenta = this.cuentas().find((item) => item.id === this.cuentaSeleccionadaId);
+    const formato = this.archivoActual?.name?.toLowerCase().endsWith('.csv') ? 'CSV' : 'XLSX';
+    return cuenta ? `${cuenta.bancoNombre} ${formato}` : formato;
+  }
+
   protected reiniciar(): void {
     this.analisis.set(null);
     this.resultado.set(null);
     this.hojas.set([]);
+    this.plantillas.set([]);
     this.archivoActual = null;
     this.paso.set('archivo');
   }

@@ -134,6 +134,19 @@ export interface HojaExtractoResumen {
   filasConDatos: number;
 }
 
+/** Plantilla guardada evaluada contra la hoja elegida. */
+export interface PlantillaDisponible {
+  id: string;
+  nombre: string;
+  bancoCodigo: string;
+  formato: 'XLSX' | 'CSV';
+  vecesUsada: number;
+  compatible: boolean;
+  motivo: string;
+  filasValidas: number;
+  filasDatos: number;
+}
+
 /** Fila candidata a encabezado, para el selector del wizard. */
 export interface FilaCandidata {
   index: number;
