@@ -6,6 +6,7 @@ import { environment } from '../../../../environments/environment';
 import {
   AnalisisExtracto,
   ContraparteMatch,
+  HojaExtractoResumen,
   MapeoExtracto,
   MovimientosPage,
   ResultadoConciliacion,
@@ -24,11 +25,34 @@ export class BancosApiService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${environment.apiBaseUrl}/api/contabilidad/bancos`;
 
-  analizarExtracto(cuentaBancariaId: string, storagePath: string, nombreArchivo: string): Promise<AnalisisExtracto> {
+  /** Hojas del archivo, sin llamar a la IA. */
+  listarHojas(storagePath: string, nombreArchivo: string): Promise<HojaExtractoResumen[]> {
+    return firstValueFrom(this.http.post<HojaExtractoResumen[]>(`${this.baseUrl}/extractos/hojas`, {
+      storagePath,
+      nombreArchivo
+    }));
+  }
+
+  analizarExtracto(
+    cuentaBancariaId: string,
+    storagePath: string,
+    nombreArchivo: string,
+    hojaIndex: number | null = null
+  ): Promise<AnalisisExtracto> {
     return firstValueFrom(this.http.post<AnalisisExtracto>(`${this.baseUrl}/extractos/analizar`, {
       cuentaBancariaId,
       storagePath,
-      nombreArchivo
+      nombreArchivo,
+      hojaIndex
+    }));
+  }
+
+  /** Recalcula preview y contadores con el mapeo ajustado a mano; no consume IA. */
+  previsualizar(storagePath: string, nombreArchivo: string, mapeo: MapeoExtracto): Promise<AnalisisExtracto> {
+    return firstValueFrom(this.http.post<AnalisisExtracto>(`${this.baseUrl}/extractos/previsualizar`, {
+      storagePath,
+      nombreArchivo,
+      mapeo
     }));
   }
 

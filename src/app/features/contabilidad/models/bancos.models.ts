@@ -128,14 +128,34 @@ export interface MapeoExtracto {
   separadorDecimal: '.' | ',';
 }
 
+export interface HojaExtractoResumen {
+  index: number;
+  nombre: string;
+  filasConDatos: number;
+}
+
+/** Fila candidata a encabezado, para el selector del wizard. */
+export interface FilaCandidata {
+  index: number;
+  resumen: string;
+}
+
+/** filaEncabezado con este valor = el archivo no tiene títulos. */
+export const SIN_ENCABEZADO = -1;
+
 export interface AnalisisExtracto {
-  origenMapeo: 'PLANTILLA' | 'IA';
+  origenMapeo: 'PLANTILLA' | 'IA' | 'MANUAL';
   plantillaId?: string | null;
   mapeo: MapeoExtracto;
   encabezados: string[];
   preview: PreviewFila[];
   filasDetectadas: number;
   filasValidas: number;
+  filasDescartadas: number;
+  erroresMuestra: string[];
+  hojaIndex: number;
+  hojas: HojaExtractoResumen[];
+  primerasFilas: FilaCandidata[];
 }
 
 export interface PreviewFila {
@@ -151,6 +171,7 @@ export interface PreviewFila {
 
 export interface ResultadoImportacion {
   extractoId: string;
+  filasLeidas: number;
   importadas: number;
   duplicadas: number;
   errores: string[];

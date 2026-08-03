@@ -8,22 +8,26 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatRadioModule } from '@angular/material/radio';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
+import { Subject, debounceTime } from 'rxjs';
 
 import { ArchivoUploaderComponent } from '../../../../shared/components/archivo-uploader/archivo-uploader.component';
 import { ArchivoItem } from '../../../../shared/models/archivos.models';
 import {
   AnalisisExtracto,
   CuentaBancaria,
+  HojaExtractoResumen,
   MapeoExtracto,
-  ResultadoImportacion
+  ResultadoImportacion,
+  SIN_ENCABEZADO
 } from '../../models/bancos.models';
 import { BancosApiService } from '../../services/bancos-api.service';
 import { BancosCuentasService } from '../../services/bancos-cuentas.service';
 
-type PasoImportacion = 'archivo' | 'mapeo' | 'resumen';
+type PasoImportacion = 'archivo' | 'hoja' | 'mapeo' | 'resumen';
 
 @Component({
   selector: 'app-extracto-import',
@@ -37,6 +41,7 @@ type PasoImportacion = 'archivo' | 'mapeo' | 'resumen';
     MatFormFieldModule,
     MatIconModule,
     MatProgressBarModule,
+    MatRadioModule,
     MatSelectModule,
     MatSnackBarModule,
     MatTableModule,
@@ -61,10 +66,14 @@ type PasoImportacion = 'archivo' | 'mapeo' | 'resumen';
 
       <nav class="steps surface-card">
         <span class="step" [class.active]="paso() === 'archivo'">1 · Cuenta y archivo</span>
+        @if (hojas().length > 1) {
+          <mat-icon>chevron_right</mat-icon>
+          <span class="step" [class.active]="paso() === 'hoja'">2 · Hoja del Excel</span>
+        }
         <mat-icon>chevron_right</mat-icon>
-        <span class="step" [class.active]="paso() === 'mapeo'">2 · Verificar mapeo</span>
+        <span class="step" [class.active]="paso() === 'mapeo'">{{ hojas().length > 1 ? 3 : 2 }} · Verificar mapeo</span>
         <mat-icon>chevron_right</mat-icon>
-        <span class="step" [class.active]="paso() === 'resumen'">3 · Resultado</span>
+        <span class="step" [class.active]="paso() === 'resumen'">{{ hojas().length > 1 ? 4 : 3 }} · Resultado</span>
       </nav>
 
       @if (paso() === 'archivo') {
@@ -97,26 +106,72 @@ type PasoImportacion = 'archivo' | 'mapeo' | 'resumen';
         </section>
       }
 
+      @if (paso() === 'hoja') {
+        <section class="surface-card card">
+          <div>
+            <h3>El archivo tiene {{ hojas().length }} hojas</h3>
+            <p class="hint">Elige cuál contiene los movimientos del extracto. Se preselecciona la que tiene más filas.</p>
+          </div>
+
+          <mat-radio-group class="hojas" [(ngModel)]="hojaSeleccionada">
+            @for (hoja of hojas(); track hoja.index) {
+              <mat-radio-button [value]="hoja.index" [disabled]="hoja.filasConDatos === 0">
+                <span class="hoja-nombre">{{ hoja.nombre }}</span>
+                <span class="hoja-sub">{{ hoja.filasConDatos }} filas con datos</span>
+              </mat-radio-button>
+            }
+          </mat-radio-group>
+
+          <div class="acciones">
+            <button mat-button (click)="reiniciar()">Atrás</button>
+            <span class="spacer"></span>
+            <button mat-flat-button color="primary" [disabled]="analizando()" (click)="analizarHoja()">
+              <mat-icon>auto_awesome</mat-icon>
+              {{ analizando() ? 'Analizando…' : 'Analizar esta hoja' }}
+            </button>
+          </div>
+          @if (analizando()) {
+            <mat-progress-bar mode="indeterminate" />
+          }
+        </section>
+      }
+
       @if (paso() === 'mapeo' && analisis()) {
         <section class="surface-card card">
           <div class="mapeo-header">
             <div>
               <h3>Mapeo de columnas
-                <span class="pill" [class]="analisis()!.origenMapeo === 'IA' ? 'pill-ia' : 'pill-info'">
-                  {{ analisis()!.origenMapeo === 'IA' ? 'Detectado con IA' : 'Plantilla del banco' }}
-                </span>
+                <span class="pill" [class]="origenClase()">{{ origenLabel() }}</span>
               </h3>
-              <p class="hint">
-                {{ analisis()!.filasValidas }} de {{ analisis()!.filasDetectadas }} filas interpretadas.
-                Ajusta las columnas si algo no coincide.
-              </p>
+              <p class="hint">Ajusta la hoja, la fila de encabezado o las columnas si algo no coincide.</p>
             </div>
           </div>
 
           <div class="mapeo-grid">
+            @if (hojas().length > 1) {
+              <mat-form-field appearance="outline">
+                <mat-label>Hoja</mat-label>
+                <mat-select [(ngModel)]="mapeoEditable.hojaIndex" (ngModelChange)="onCambioHoja($event)">
+                  @for (hoja of hojas(); track hoja.index) {
+                    <mat-option [value]="hoja.index">{{ hoja.nombre }} ({{ hoja.filasConDatos }} filas)</mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            }
+
+            <mat-form-field appearance="outline" class="encabezado-select">
+              <mat-label>Fila de encabezado</mat-label>
+              <mat-select [(ngModel)]="mapeoEditable.filaEncabezado" (ngModelChange)="refrescarPreview()">
+                <mat-option [value]="sinEncabezado">Sin encabezado — los datos empiezan en la primera fila</mat-option>
+                @for (fila of analisis()!.primerasFilas; track fila.index) {
+                  <mat-option [value]="fila.index">Fila {{ fila.index + 1 }}: {{ fila.resumen }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
+
             <mat-form-field appearance="outline">
               <mat-label>Columna de fecha</mat-label>
-              <mat-select [(ngModel)]="mapeoEditable.mapeo.fecha.col">
+              <mat-select [(ngModel)]="mapeoEditable.mapeo.fecha.col" (ngModelChange)="refrescarPreview()">
                 @for (encabezado of encabezadosOpciones(); track encabezado.col) {
                   <mat-option [value]="encabezado.col">{{ encabezado.label }}</mat-option>
                 }
@@ -125,7 +180,7 @@ type PasoImportacion = 'archivo' | 'mapeo' | 'resumen';
 
             <mat-form-field appearance="outline">
               <mat-label>Columna de descripción</mat-label>
-              <mat-select [(ngModel)]="mapeoEditable.mapeo.descripcion.col">
+              <mat-select [(ngModel)]="mapeoEditable.mapeo.descripcion.col" (ngModelChange)="refrescarPreview()">
                 @for (encabezado of encabezadosOpciones(); track encabezado.col) {
                   <mat-option [value]="encabezado.col">{{ encabezado.label }}</mat-option>
                 }
@@ -134,7 +189,7 @@ type PasoImportacion = 'archivo' | 'mapeo' | 'resumen';
 
             <mat-form-field appearance="outline">
               <mat-label>Columna de referencia</mat-label>
-              <mat-select [(ngModel)]="referenciaCol">
+              <mat-select [(ngModel)]="referenciaCol" (ngModelChange)="refrescarPreview()">
                 <mat-option [value]="null">— Sin referencia —</mat-option>
                 @for (encabezado of encabezadosOpciones(); track encabezado.col) {
                   <mat-option [value]="encabezado.col">{{ encabezado.label }}</mat-option>
@@ -144,7 +199,7 @@ type PasoImportacion = 'archivo' | 'mapeo' | 'resumen';
 
             <mat-form-field appearance="outline">
               <mat-label>Columna débitos</mat-label>
-              <mat-select [(ngModel)]="debitoCol">
+              <mat-select [(ngModel)]="debitoCol" (ngModelChange)="refrescarPreview()">
                 <mat-option [value]="null">— No aplica —</mat-option>
                 @for (encabezado of encabezadosOpciones(); track encabezado.col) {
                   <mat-option [value]="encabezado.col">{{ encabezado.label }}</mat-option>
@@ -154,7 +209,7 @@ type PasoImportacion = 'archivo' | 'mapeo' | 'resumen';
 
             <mat-form-field appearance="outline">
               <mat-label>Columna créditos</mat-label>
-              <mat-select [(ngModel)]="creditoCol">
+              <mat-select [(ngModel)]="creditoCol" (ngModelChange)="refrescarPreview()">
                 <mat-option [value]="null">— No aplica —</mat-option>
                 @for (encabezado of encabezadosOpciones(); track encabezado.col) {
                   <mat-option [value]="encabezado.col">{{ encabezado.label }}</mat-option>
@@ -164,7 +219,7 @@ type PasoImportacion = 'archivo' | 'mapeo' | 'resumen';
 
             <mat-form-field appearance="outline">
               <mat-label>Columna de saldo</mat-label>
-              <mat-select [(ngModel)]="saldoCol">
+              <mat-select [(ngModel)]="saldoCol" (ngModelChange)="refrescarPreview()">
                 <mat-option [value]="null">— Sin saldo —</mat-option>
                 @for (encabezado of encabezadosOpciones(); track encabezado.col) {
                   <mat-option [value]="encabezado.col">{{ encabezado.label }}</mat-option>
@@ -173,8 +228,26 @@ type PasoImportacion = 'archivo' | 'mapeo' | 'resumen';
             </mat-form-field>
           </div>
 
-          <h4>Vista previa normalizada</h4>
-          <div class="preview-wrap">
+          <div class="preview-header">
+            <h4>Vista previa</h4>
+            <p class="contadores" [class.con-descartes]="analisis()!.filasDescartadas > 0">
+              Mostrando {{ analisis()!.preview.length }} de {{ analisis()!.filasDetectadas }} filas ·
+              <strong>se importarán {{ analisis()!.filasValidas }}</strong>
+              @if (analisis()!.filasDescartadas > 0) {
+                · se descartarán {{ analisis()!.filasDescartadas }}
+              }
+            </p>
+          </div>
+
+          @if (analisis()!.erroresMuestra.length > 0) {
+            <ul class="errores">
+              @for (error of analisis()!.erroresMuestra; track error) {
+                <li>{{ error }}</li>
+              }
+            </ul>
+          }
+
+          <div class="preview-wrap" [class.recalculando]="previsualizando()">
             <table mat-table [dataSource]="analisis()!.preview" class="preview-table">
               <ng-container matColumnDef="fila">
                 <th mat-header-cell *matHeaderCellDef>#</th>
@@ -206,13 +279,15 @@ type PasoImportacion = 'archivo' | 'mapeo' | 'resumen';
           <div class="acciones">
             <mat-checkbox [(ngModel)]="guardarPlantilla">Guardar como plantilla de este banco</mat-checkbox>
             <span class="spacer"></span>
-            <button mat-button (click)="paso.set('archivo')">Atrás</button>
-            <button mat-flat-button color="primary" [disabled]="importando()" (click)="importar()">
+            <button mat-button (click)="reiniciar()">Atrás</button>
+            <button mat-flat-button color="primary"
+                    [disabled]="importando() || previsualizando() || analisis()!.filasValidas === 0"
+                    (click)="importar()">
               <mat-icon>publish</mat-icon>
-              {{ importando() ? 'Importando…' : 'Importar movimientos' }}
+              {{ importando() ? 'Importando…' : 'Importar ' + analisis()!.filasValidas + ' movimientos' }}
             </button>
           </div>
-          @if (importando()) {
+          @if (importando() || previsualizando()) {
             <mat-progress-bar mode="indeterminate" />
           }
         </section>
@@ -221,10 +296,11 @@ type PasoImportacion = 'archivo' | 'mapeo' | 'resumen';
       @if (paso() === 'resumen' && resultado()) {
         <section class="surface-card card resumen">
           <div class="pills">
+            <span class="pill pill-info">{{ resultado()!.filasLeidas }} filas leídas</span>
             <span class="pill pill-success">{{ resultado()!.importadas }} importadas</span>
             <span class="pill pill-muted">{{ resultado()!.duplicadas }} duplicadas (omitidas)</span>
             <span class="pill" [class]="resultado()!.errores.length ? 'pill-void' : 'pill-muted'">
-              {{ resultado()!.errores.length }} errores
+              {{ descartadas() }} descartadas
             </span>
           </div>
           @if (resultado()!.errores.length) {
@@ -263,8 +339,18 @@ type PasoImportacion = 'archivo' | 'mapeo' | 'resumen';
     .cuenta-select { max-width: 480px; }
     .hint { color: var(--muted-foreground); margin: 0; }
     .progress { display: grid; gap: .5rem; }
+    .hojas { display: grid; gap: .5rem; }
+    .hojas mat-radio-button { border: 1px solid color-mix(in srgb, var(--muted-foreground) 20%, transparent); border-radius: .6rem; padding: .5rem .75rem; }
+    .hoja-nombre { font-weight: 600; }
+    .hoja-sub { color: var(--muted-foreground); font-size: .82rem; margin-left: .5rem; }
     .mapeo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
+    .encabezado-select { grid-column: span 2; }
+    .preview-header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+    .preview-header h4 { margin: 0; }
+    .contadores { margin: 0; color: var(--muted-foreground); }
+    .contadores.con-descartes { color: #b45309; }
     .preview-wrap { overflow-x: auto; }
+    .preview-wrap.recalculando { opacity: .55; }
     .preview-table td.num, .preview-table th.num { text-align: right; }
     .preview-table td.neg { color: var(--destructive); }
     .error-row { background: color-mix(in srgb, var(--destructive) 8%, transparent); }
@@ -277,8 +363,8 @@ type PasoImportacion = 'archivo' | 'mapeo' | 'resumen';
     .pill-success { background: color-mix(in srgb, #16a34a 16%, transparent); color: #15803d; }
     .pill-void { background: color-mix(in srgb, #dc2626 14%, transparent); color: #b91c1c; }
     .pill-muted { background: color-mix(in srgb, var(--muted-foreground) 14%, transparent); color: var(--muted-foreground); }
-    .errores { margin: 0; padding-left: 1.2rem; color: var(--destructive); display: grid; gap: .2rem; }
-    @media (max-width: 900px) { .mapeo-grid { grid-template-columns: 1fr; } }
+    .errores { margin: 0; padding-left: 1.2rem; color: var(--destructive); display: grid; gap: .2rem; font-size: .85rem; }
+    @media (max-width: 900px) { .mapeo-grid { grid-template-columns: 1fr; } .encabezado-select { grid-column: auto; } }
   `]
 })
 export class ExtractoImportComponent {
@@ -288,14 +374,18 @@ export class ExtractoImportComponent {
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly previewColumnas = ['fila', 'fecha', 'descripcion', 'referencia', 'monto'];
+  protected readonly sinEncabezado = SIN_ENCABEZADO;
   protected readonly paso = signal<PasoImportacion>('archivo');
   protected readonly cuentas = signal<CuentaBancaria[]>([]);
+  protected readonly hojas = signal<HojaExtractoResumen[]>([]);
   protected readonly analizando = signal(false);
+  protected readonly previsualizando = signal(false);
   protected readonly importando = signal(false);
   protected readonly analisis = signal<AnalisisExtracto | null>(null);
   protected readonly resultado = signal<ResultadoImportacion | null>(null);
 
   protected cuentaSeleccionadaId: string | null = null;
+  protected hojaSeleccionada = 0;
   protected guardarPlantilla = true;
   protected mapeoEditable!: MapeoExtracto;
   protected referenciaCol: number | null = null;
@@ -303,6 +393,9 @@ export class ExtractoImportComponent {
   protected creditoCol: number | null = null;
   protected saldoCol: number | null = null;
   private archivoActual: ArchivoItem | null = null;
+
+  /** Los ajustes de mapeo se agrupan antes de pedir el recálculo al backend. */
+  private readonly cambioMapeo = new Subject<void>();
 
   protected readonly encabezadosOpciones = computed(() => {
     const encabezados = this.analisis()?.encabezados ?? [];
@@ -312,10 +405,22 @@ export class ExtractoImportComponent {
     }));
   });
 
+  protected readonly descartadas = computed(() => {
+    const datos = this.resultado();
+    if (!datos) {
+      return 0;
+    }
+    return Math.max(0, datos.filasLeidas - datos.importadas - datos.duplicadas);
+  });
+
   constructor() {
     this.cuentasService.getCuentas()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((cuentas) => this.cuentas.set(cuentas.filter((cuenta) => cuenta.estado === 'ACTIVA')));
+
+    this.cambioMapeo
+      .pipe(debounceTime(400), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => void this.previsualizar());
   }
 
   protected async onArchivoSubido(archivo: ArchivoItem): Promise<void> {
@@ -325,20 +430,89 @@ export class ExtractoImportComponent {
     this.archivoActual = archivo;
     this.analizando.set(true);
     try {
-      const analisis = await this.api.analizarExtracto(this.cuentaSeleccionadaId, archivo.storagePath, archivo.name);
-      this.analisis.set(analisis);
-      this.mapeoEditable = structuredClone(analisis.mapeo);
-      this.referenciaCol = analisis.mapeo.mapeo.referencia?.col ?? null;
-      this.debitoCol = analisis.mapeo.mapeo.debito?.col ?? analisis.mapeo.mapeo.montoUnico?.col ?? null;
-      this.creditoCol = analisis.mapeo.mapeo.credito?.col ?? null;
-      this.saldoCol = analisis.mapeo.mapeo.saldo?.col ?? null;
-      this.paso.set('mapeo');
+      const hojas = await this.api.listarHojas(archivo.storagePath, archivo.name);
+      this.hojas.set(hojas);
+      const conDatos = hojas.filter((hoja) => hoja.filasConDatos > 0);
+      // Con una sola hoja útil no se agrega fricción: se analiza directo.
+      if (conDatos.length > 1) {
+        this.hojaSeleccionada = conDatos.reduce((mayor, hoja) =>
+          hoja.filasConDatos > mayor.filasConDatos ? hoja : mayor, conDatos[0]).index;
+        this.paso.set('hoja');
+        return;
+      }
+      await this.analizar(conDatos[0]?.index ?? null);
     } catch (error) {
-      const mensaje = (error as { error?: { message?: string } })?.error?.message
-        ?? 'No se pudo analizar el extracto. Verifica el archivo.';
-      this.snackBar.open(mensaje, 'OK', { duration: 5000 });
+      this.mostrarError(error, 'No se pudo leer el archivo.');
     } finally {
       this.analizando.set(false);
+    }
+  }
+
+  protected async analizarHoja(): Promise<void> {
+    this.analizando.set(true);
+    try {
+      await this.analizar(this.hojaSeleccionada);
+    } catch (error) {
+      this.mostrarError(error, 'No se pudo analizar la hoja seleccionada.');
+    } finally {
+      this.analizando.set(false);
+    }
+  }
+
+  private async analizar(hojaIndex: number | null): Promise<void> {
+    if (!this.cuentaSeleccionadaId || !this.archivoActual) {
+      return;
+    }
+    const analisis = await this.api.analizarExtracto(
+      this.cuentaSeleccionadaId, this.archivoActual.storagePath, this.archivoActual.name, hojaIndex);
+    this.aplicarAnalisis(analisis);
+    this.paso.set('mapeo');
+  }
+
+  private aplicarAnalisis(analisis: AnalisisExtracto): void {
+    this.analisis.set(analisis);
+    if (analisis.hojas?.length) {
+      this.hojas.set(analisis.hojas);
+    }
+    this.mapeoEditable = structuredClone(analisis.mapeo);
+    this.mapeoEditable.hojaIndex = analisis.hojaIndex;
+    this.referenciaCol = analisis.mapeo.mapeo.referencia?.col ?? null;
+    this.debitoCol = analisis.mapeo.mapeo.debito?.col ?? analisis.mapeo.mapeo.montoUnico?.col ?? null;
+    this.creditoCol = analisis.mapeo.mapeo.credito?.col ?? null;
+    this.saldoCol = analisis.mapeo.mapeo.saldo?.col ?? null;
+  }
+
+  /** Cambiar de hoja invalida el mapeo actual: se vuelve a analizar esa hoja. */
+  protected async onCambioHoja(hojaIndex: number): Promise<void> {
+    this.analizando.set(true);
+    try {
+      await this.analizar(hojaIndex);
+    } catch (error) {
+      this.mostrarError(error, 'No se pudo analizar la hoja seleccionada.');
+    } finally {
+      this.analizando.set(false);
+    }
+  }
+
+  protected refrescarPreview(): void {
+    this.cambioMapeo.next();
+  }
+
+  /** Recalcula contadores y preview en el backend; no consume IA. */
+  private async previsualizar(): Promise<void> {
+    if (!this.archivoActual || !this.mapeoEditable) {
+      return;
+    }
+    this.previsualizando.set(true);
+    try {
+      const analisis = await this.api.previsualizar(
+        this.archivoActual.storagePath, this.archivoActual.name, this.construirMapeo());
+      // Conserva las selecciones del usuario: solo se refrescan preview y contadores.
+      this.analisis.set({ ...analisis, mapeo: this.analisis()?.mapeo ?? analisis.mapeo });
+    } catch (error) {
+      this.mostrarError(error, 'El mapeo actual no es válido para este archivo.');
+    } finally {
+      this.previsualizando.set(false);
     }
   }
 
@@ -348,21 +522,18 @@ export class ExtractoImportComponent {
     }
     this.importando.set(true);
     try {
-      const mapeo = this.construirMapeo();
       const resultado = await this.api.importarExtracto({
         cuentaBancariaId: this.cuentaSeleccionadaId,
         storagePath: this.archivoActual.storagePath,
         nombreArchivo: this.archivoActual.name,
-        mapeo,
+        mapeo: this.construirMapeo(),
         guardarPlantilla: this.guardarPlantilla,
         plantillaId: this.analisis()?.plantillaId ?? null
       });
       this.resultado.set(resultado);
       this.paso.set('resumen');
     } catch (error) {
-      const mensaje = (error as { error?: { message?: string } })?.error?.message
-        ?? 'No se pudo importar el extracto.';
-      this.snackBar.open(mensaje, 'OK', { duration: 5000 });
+      this.mostrarError(error, 'No se pudo importar el extracto.');
     } finally {
       this.importando.set(false);
     }
@@ -392,10 +563,28 @@ export class ExtractoImportComponent {
     };
   }
 
+  protected origenLabel(): string {
+    return ({
+      IA: 'Detectado con IA',
+      PLANTILLA: 'Plantilla del banco',
+      MANUAL: 'Ajustado por ti'
+    } as Record<string, string>)[this.analisis()?.origenMapeo ?? ''] ?? '';
+  }
+
+  protected origenClase(): string {
+    return this.analisis()?.origenMapeo === 'IA' ? 'pill-ia' : 'pill-info';
+  }
+
   protected reiniciar(): void {
     this.analisis.set(null);
     this.resultado.set(null);
+    this.hojas.set([]);
     this.archivoActual = null;
     this.paso.set('archivo');
+  }
+
+  private mostrarError(error: unknown, porDefecto: string): void {
+    const mensaje = (error as { error?: { message?: string } })?.error?.message ?? porDefecto;
+    this.snackBar.open(mensaje, 'OK', { duration: 5000 });
   }
 }
