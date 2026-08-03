@@ -33,17 +33,20 @@ export class BancosApiService {
     }));
   }
 
+  /** forzarIa: ignora las plantillas guardadas y vuelve a detectar el formato con IA. */
   analizarExtracto(
     cuentaBancariaId: string,
     storagePath: string,
     nombreArchivo: string,
-    hojaIndex: number | null = null
+    hojaIndex: number | null = null,
+    forzarIa = false
   ): Promise<AnalisisExtracto> {
     return firstValueFrom(this.http.post<AnalisisExtracto>(`${this.baseUrl}/extractos/analizar`, {
       cuentaBancariaId,
       storagePath,
       nombreArchivo,
-      hojaIndex
+      hojaIndex,
+      forzarIa
     }));
   }
 

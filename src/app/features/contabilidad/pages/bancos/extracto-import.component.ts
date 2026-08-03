@@ -10,11 +10,16 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatRadioModule } from '@angular/material/radio';
 import { MatSelectModule } from '@angular/material/select';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
-import { Subject, debounceTime } from 'rxjs';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { Subject, debounceTime, firstValueFrom } from 'rxjs';
 
-import { ArchivoUploaderComponent } from '../../../../shared/components/archivo-uploader/archivo-uploader.component';
+import {
+  ArchivoSelectorDialogComponent,
+  ArchivoSelectorDialogResult
+} from '../../../../shared/components/archivo-selector-dialog/archivo-selector-dialog.component';
 import { ArchivoItem } from '../../../../shared/models/archivos.models';
 import {
   AnalisisExtracto,
@@ -38,6 +43,7 @@ type PasoImportacion = 'archivo' | 'hoja' | 'mapeo' | 'resumen';
     RouterLink,
     MatButtonModule,
     MatCheckboxModule,
+    MatDialogModule,
     MatFormFieldModule,
     MatIconModule,
     MatProgressBarModule,
@@ -45,7 +51,7 @@ type PasoImportacion = 'archivo' | 'hoja' | 'mapeo' | 'resumen';
     MatSelectModule,
     MatSnackBarModule,
     MatTableModule,
-    ArchivoUploaderComponent
+    MatTooltipModule
   ],
   template: `
     <section class="import-page">
@@ -88,13 +94,15 @@ type PasoImportacion = 'archivo' | 'hoja' | 'mapeo' | 'resumen';
           </mat-form-field>
 
           @if (!cuentaSeleccionadaId) {
-            <p class="hint">Selecciona la cuenta bancaria antes de subir el archivo.</p>
+            <p class="hint">Selecciona la cuenta bancaria antes de elegir el archivo.</p>
           } @else {
-            <app-archivo-uploader
-              sourceModule="bancos"
-              [extensions]="['xlsx', 'csv']"
-              (uploaded)="onArchivoSubido($event)"
-            />
+            <div class="archivo-acciones">
+              <button mat-flat-button color="primary" type="button" (click)="elegirArchivo()">
+                <mat-icon>folder_open</mat-icon>
+                Elegir archivo
+              </button>
+              <p class="hint">Puedes reutilizar un extracto que ya subiste antes o cargar uno nuevo (.xlsx o .csv).</p>
+            </div>
           }
 
           @if (analizando()) {
@@ -145,6 +153,13 @@ type PasoImportacion = 'archivo' | 'hoja' | 'mapeo' | 'resumen';
               </h3>
               <p class="hint">Ajusta la hoja, la fila de encabezado o las columnas si algo no coincide.</p>
             </div>
+            <button mat-stroked-button color="primary" type="button"
+                    [disabled]="analizando() || previsualizando()"
+                    matTooltip="Ignora la plantilla guardada y vuelve a detectar el formato con IA"
+                    (click)="redetectarConIa()">
+              <mat-icon>auto_awesome</mat-icon>
+              {{ analizando() ? 'Detectando…' : 'Detectar con IA' }}
+            </button>
           </div>
 
           <div class="mapeo-grid">
@@ -343,6 +358,9 @@ type PasoImportacion = 'archivo' | 'hoja' | 'mapeo' | 'resumen';
     .hojas mat-radio-button { border: 1px solid color-mix(in srgb, var(--muted-foreground) 20%, transparent); border-radius: .6rem; padding: .5rem .75rem; }
     .hoja-nombre { font-weight: 600; }
     .hoja-sub { color: var(--muted-foreground); font-size: .82rem; margin-left: .5rem; }
+    .archivo-acciones { display: grid; gap: .5rem; justify-items: start; }
+    .mapeo-header { display: flex; justify-content: space-between; align-items: start; gap: 1rem; flex-wrap: wrap; }
+    .mapeo-header h3 { margin: 0; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
     .mapeo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
     .encabezado-select { grid-column: span 2; }
     .preview-header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
@@ -370,6 +388,7 @@ type PasoImportacion = 'archivo' | 'hoja' | 'mapeo' | 'resumen';
 export class ExtractoImportComponent {
   private readonly api = inject(BancosApiService);
   private readonly cuentasService = inject(BancosCuentasService);
+  private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   private readonly destroyRef = inject(DestroyRef);
 
@@ -423,6 +442,23 @@ export class ExtractoImportComponent {
       .subscribe(() => void this.previsualizar());
   }
 
+  /** Reutiliza el selector del módulo Archivos: elegir uno ya subido o cargar uno nuevo. */
+  protected async elegirArchivo(): Promise<void> {
+    const seleccion = await firstValueFrom(this.dialog.open(ArchivoSelectorDialogComponent, {
+      width: 'min(920px, 96vw)',
+      data: {
+        title: 'Extracto bancario',
+        subtitle: 'Elige un extracto ya subido o carga uno nuevo (.xlsx o .csv)',
+        sourceModule: 'bancos',
+        allowUpload: true,
+        extensions: ['xlsx', 'csv']
+      }
+    }).afterClosed()) as ArchivoSelectorDialogResult | undefined;
+    if (seleccion?.archivo) {
+      await this.onArchivoSubido(seleccion.archivo);
+    }
+  }
+
   protected async onArchivoSubido(archivo: ArchivoItem): Promise<void> {
     if (!this.cuentaSeleccionadaId) {
       return;
@@ -459,14 +495,27 @@ export class ExtractoImportComponent {
     }
   }
 
-  private async analizar(hojaIndex: number | null): Promise<void> {
+  private async analizar(hojaIndex: number | null, forzarIa = false): Promise<void> {
     if (!this.cuentaSeleccionadaId || !this.archivoActual) {
       return;
     }
     const analisis = await this.api.analizarExtracto(
-      this.cuentaSeleccionadaId, this.archivoActual.storagePath, this.archivoActual.name, hojaIndex);
+      this.cuentaSeleccionadaId, this.archivoActual.storagePath, this.archivoActual.name, hojaIndex, forzarIa);
     this.aplicarAnalisis(analisis);
     this.paso.set('mapeo');
+  }
+
+  /** Ignora la plantilla guardada y pide a la IA que vuelva a leer esta hoja. */
+  protected async redetectarConIa(): Promise<void> {
+    this.analizando.set(true);
+    try {
+      await this.analizar(this.mapeoEditable?.hojaIndex ?? this.analisis()?.hojaIndex ?? null, true);
+      this.snackBar.open('Formato detectado con IA.', 'OK', { duration: 3000 });
+    } catch (error) {
+      this.mostrarError(error, 'La IA no pudo interpretar el formato de esta hoja.');
+    } finally {
+      this.analizando.set(false);
+    }
   }
 
   private aplicarAnalisis(analisis: AnalisisExtracto): void {
