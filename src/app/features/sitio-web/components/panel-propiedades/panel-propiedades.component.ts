@@ -21,6 +21,9 @@ import {
   OverridesResponsive,
   PaginaDoc,
   Viewport,
+  medidaFondoSeccion,
+  medidaImagenBloque,
+  valorPrecio,
 } from '@winsuite/bloques';
 import { CategoriasService } from '../../../inventario/services/categorias.service';
 import { FormulariosService } from '../../services/formularios.service';
@@ -83,6 +86,13 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
             </select>
           </label>
         }
+      }
+
+      @if (medidaImagen(); as medida) {
+        <p class="ayuda medida">
+          <mat-icon>photo_size_select_large</mat-icon>
+          <span>{{ medida.texto }}</span>
+        </p>
       }
 
       @switch (bloque().tipo) {
@@ -604,8 +614,9 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
         }
         @case ('planes') {
           <p class="ayuda">
-            Los nombres, precios y caracteristicas se editan escribiendo sobre el bloque. Usa ★
-            sobre una card para destacarla.
+            Los nombres, valores y caracteristicas se editan escribiendo sobre el bloque. Usa ★
+            sobre una card para destacarla. El valor destacado acepta un monto (50 se muestra
+            como $50) o texto libre si el plan no publica precio (1000 MB, A convenir).
           </p>
           <div class="fila">
             <label>
@@ -637,13 +648,12 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
               <span class="mini-titulo">{{ plan.nombre }}</span>
               <div class="fila">
                 <label>
-                  Precio (vacio = sin precio)
+                  Valor destacado (vacio = sin valor)
                   <input
-                    type="number"
-                    min="0"
-                    step="0.01"
+                    maxlength="40"
+                    placeholder="50 o 1000 MB"
                     [ngModel]="plan.precio"
-                    (ngModelChange)="patchPlan(i, { precio: $event === null ? undefined : numero($event) })"
+                    (ngModelChange)="patchPlan(i, { precio: valorPrecio($event) })"
                   />
                 </label>
                 <label>
@@ -1482,6 +1492,10 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
               [url]="b.estilos?.fondoImagenUrl"
               (urlChange)="patchEstilos({ fondoImagenUrl: $event })"
             />
+            <p class="ayuda medida">
+              <mat-icon>photo_size_select_large</mat-icon>
+              <span>{{ medidaFondo().texto }}</span>
+            </p>
             <label class="check">
               <input
                 type="checkbox"
@@ -1524,6 +1538,12 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
           <option value="dosTercios">Dos tercios (66%)</option>
         </select>
       </label>
+      @if (medidaImagen(); as medida) {
+        <p class="ayuda medida">
+          <mat-icon>photo_size_select_large</mat-icon>
+          <span>{{ medida.texto }} Cambia con los anchos de arriba.</span>
+        </p>
+      }
       </mat-expansion-panel>
 
       <mat-expansion-panel>
@@ -1742,6 +1762,25 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       opacity: 0.65;
       font-size: 0.8rem;
     }
+    /* Medida de imagen: se recalcula con los anchos, conviene que resalte algo. */
+    .ayuda.medida {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      opacity: 1;
+      color: #475569;
+      background: rgba(37, 99, 235, 0.07);
+      border-left: 3px solid rgba(37, 99, 235, 0.55);
+      border-radius: 4px;
+      padding: 7px 9px;
+    }
+    .ayuda.medida mat-icon {
+      font-size: 17px;
+      width: 17px;
+      height: 17px;
+      flex-shrink: 0;
+      color: #2563eb;
+    }
     .mini-titulo {
       font-size: 0.75rem;
       font-weight: 700;
@@ -1902,6 +1941,15 @@ export class PanelPropiedadesComponent {
   readonly paginasMenu = computed(() =>
     this.paginas().filter((pagina) => !pagina.slug.startsWith('__')),
   );
+
+  /**
+   * Medida de imagen recomendada para el bloque. Se recalcula sola al cambiar
+   * ancho de contenido, ancho de bloque, columnas u orientacion: null en los
+   * bloques que no llevan imagen propia.
+   */
+  readonly medidaImagen = computed(() => medidaImagenBloque(this.bloque()));
+  /** Medida del fondo de seccion, que cubre el bloque entero (ignora anchoContenido). */
+  readonly medidaFondo = computed(() => medidaFondoSeccion(this.bloque().estilos));
 
   readonly campoFormatoActivo = signal('titulo');
   readonly camposFormato = computed<{ id: string; nombre: string }[]>(() => {
@@ -2205,6 +2253,9 @@ export class PanelPropiedadesComponent {
   numero(valor: unknown): number {
     return Number(valor);
   }
+
+  /** Valor destacado de un plan: numero puro -> monto; cualquier otro texto -> literal. */
+  readonly valorPrecio = valorPrecio;
 
   /** timestamp (ms) -> valor de <input type=datetime-local> en hora local. */
   fechaLocal(timestamp: number): string {

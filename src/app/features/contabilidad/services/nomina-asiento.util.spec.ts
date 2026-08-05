@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { ConfiguracionNominaContable, RolPagoDetalle, RolPagoLinea } from '../models/nomina.models';
-import { construirPartidasRolMensual } from './nomina-asiento.util';
+import { construirPartidasLiquidacion, construirPartidasRolMensual } from './nomina-asiento.util';
 
 const config: ConfiguracionNominaContable = {
   modoAsiento: 'BORRADOR',
@@ -22,6 +22,8 @@ const config: ConfiguracionNominaContable = {
   cuentaGastoFondosReservaId: 'gasto-fondos',
   cuentaGastoVacacionesId: 'gasto-vacaciones',
   cuentaGastoAportePatronalId: 'gasto-patronal',
+  cuentaGastoDesahucioId: 'gasto-desahucio',
+  cuentaGastoIndemnizacionId: 'gasto-indemnizacion',
   cuentaSueldosPorPagarId: 'pasivo-sueldos',
   cuentaIessPorPagarId: 'pasivo-iess',
   cuentaBeneficiosSocialesPorPagarId: 'pasivo-beneficios',
@@ -33,6 +35,7 @@ const config: ConfiguracionNominaContable = {
   cuentaFondosReservaPorPagarId: 'pasivo-fondos',
   cuentaVacacionesPorPagarId: 'pasivo-vacaciones',
   cuentaUtilidadesPorPagarId: 'pasivo-utilidades',
+  cuentaLiquidacionesPorPagarId: 'pasivo-liquidaciones',
   camposPersonalizados: []
 };
 
@@ -111,5 +114,47 @@ describe('construirPartidasRolMensual', () => {
     expect(partidas[0]).toEqual(expect.objectContaining({ cuentaId: '', debe: 500 }));
     expect(partidas.some((item) => item.cuentaId === config.cuentaGastoSueldosId && item.debe === 500)).toBe(false);
     expect(partidas.every((item) => item.debe > 0 || item.haber > 0)).toBe(true);
+  });
+});
+
+describe('construirPartidasLiquidacion', () => {
+  it('separa gastos, provisiones, IESS, descuentos y neto sin perder el balance', () => {
+    const partidas = construirPartidasLiquidacion([detalle({
+      lineas: [
+        linea({ codigo: 'SUELDO_ULTIMO', nombre: 'Sueldo proporcional', tipo: 'INGRESO', origen: 'SISTEMA', monto: 300, cuentaContableId: 'gasto-maestros' }),
+        linea({ codigo: 'D13_INICIAL', nombre: 'Decimo tercero inicial', tipo: 'INGRESO', origen: 'SISTEMA', monto: 100, cuentaContableId: 'pasivo-d13' }),
+        linea({ codigo: 'D13_ULTIMO', nombre: 'Decimo tercero ultimo mes', tipo: 'INGRESO', origen: 'SISTEMA', monto: 25, cuentaContableId: 'gasto-d13' }),
+        linea({ codigo: 'IESS_PERSONAL', nombre: 'IESS personal', tipo: 'DESCUENTO', origen: 'SISTEMA', monto: 28.35, cuentaContableId: 'pasivo-iess' }),
+        linea({ codigo: 'ANTIC', nombre: 'Anticipo', tipo: 'DESCUENTO', origen: 'SISTEMA', monto: 20, cuentaContableId: 'activo-anticipos' })
+      ],
+      aportePersonalIess: 28.35,
+      aportePatronalIess: 33.45,
+      contribucionCcc: 3,
+      totalIngresos: 425,
+      totalDescuentos: 48.35,
+      netoPagar: 376.65
+    })], config);
+
+    expect(partidas.find((partida) => partida.cuentaId === 'gasto-maestros')?.debe).toBe(300);
+    expect(partidas.find((partida) => partida.cuentaId === 'pasivo-d13')?.debe).toBe(100);
+    expect(partidas.find((partida) => partida.cuentaId === 'pasivo-iess')?.haber).toBe(64.8);
+    expect(partidas.find((partida) => partida.cuentaId === 'pasivo-liquidaciones')?.haber).toBe(376.65);
+    expect(partidas.reduce((total, partida) => total + partida.debe, 0)).toBeCloseTo(partidas.reduce((total, partida) => total + partida.haber, 0), 2);
+  });
+
+  it('mantiene cada concepto sin cuenta en una fila separada para resolverlo en el popup', () => {
+    const partidas = construirPartidasLiquidacion([detalle({
+      lineas: [
+        linea({ codigo: 'SUELDO_ULTIMO', nombre: 'Sueldo proporcional', tipo: 'INGRESO', origen: 'SISTEMA', monto: 300, cuentaContableId: '' }),
+        linea({ codigo: 'AJUSTE_1', nombre: 'Ajuste contractual', tipo: 'INGRESO', origen: 'SISTEMA', monto: 50, cuentaContableId: '' })
+      ],
+      totalIngresos: 350,
+      netoPagar: 350
+    })], config);
+
+    expect(partidas.filter((partida) => !partida.cuentaId && partida.debe > 0)).toEqual([
+      expect.objectContaining({ descripcion: 'Sueldo proporcional', debe: 300 }),
+      expect.objectContaining({ descripcion: 'Ajuste contractual', debe: 50 })
+    ]);
   });
 });

@@ -1,1 +1,5 @@
 <router-outlet />
+
+@if (loadingInitialCompany()) {
+  <app-company-loading-overlay [companyName]="auth.currentTenant()?.name ?? null" />
+}

@@ -1,5 +1,15 @@
 import { PlantillaPlanCuentas } from '../models/contabilidad.models';
 
+/**
+ * OJO: existe una COPIA de este catalogo en el backend, en
+ * `WinServer/win-server/src/main/resources/ai/plan-cuentas-ecuador.json`, porque el Copiloto de
+ * Configuracion tambien puede sembrar el plan y necesita conocerlo.
+ *
+ * Si cambias una cuenta aqui, cambiala tambien alli. Ningun test compara las dos copias: viven en
+ * repositorios distintos. La unificacion real (una sola fuente en el backend que el frontend
+ * consuma por endpoint) esta pendiente.
+ */
+
 export const PLANTILLA_ESF_CONSTRUCTORA: PlantillaPlanCuentas = {
   id: 'esf-constructora',
   nombre: 'ESF Constructora',

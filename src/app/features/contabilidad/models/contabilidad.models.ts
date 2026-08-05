@@ -20,6 +20,12 @@ export type SeccionReporteFinanciero =
   | 'OTROS_INGRESOS'
   | 'OTROS_GASTOS';
 
+/**
+ * ACUMULADO: saldos arrastrados desde el inicio de operaciones hasta la fecha de corte.
+ * PERIODO: solo los montos acumulados por las cuentas dentro del rango consultado.
+ */
+export type ModoConsultaEstadoFinanciero = 'ACUMULADO' | 'PERIODO';
+
 export type TipoContribuyente = 'RIMPE' | 'NORMAL' | 'ESPECIAL';
 
 export type EstadoPeriodoContable = 'ABIERTO' | 'CERRADO';
@@ -158,7 +164,7 @@ export type OrigenAsientoAutomatico = Exclude<OrigenAsiento, 'MANUAL'>;
 
 export type ModoAsientoAutomatico = 'APROBADO' | 'BORRADOR';
 
-export type OrigenModuloContable = 'VENTAS' | 'INVENTARIO' | 'COMPRAS' | 'NOMINA' | 'CUENTAS_POR_PAGAR';
+export type OrigenModuloContable = 'VENTAS' | 'INVENTARIO' | 'COMPRAS' | 'NOMINA' | 'CUENTAS_POR_PAGAR' | 'BANCOS';
 
 export interface AsientoContableLinea {
   id: string;
@@ -208,6 +214,14 @@ export interface AsientoContable {
   ultimaAccion?: string | null;
   aprobadoEn?: number | null;
   reversadoEn?: number | null;
+  /**
+   * Correcciones sobre el asiento ya aprobado. El motivo se guarda aqui ademas de en auditoria
+   * porque AuditService.recordSafe traga los errores del backend: el rastro no puede depender de el.
+   */
+  editadoEn?: number | null;
+  editadoPor?: string | null;
+  motivoUltimaEdicion?: string | null;
+  edicionesCount?: number;
 }
 
 export interface ConfiguracionIntegracionContable {
@@ -385,6 +399,9 @@ export interface EstadoFinancieroSeccion {
 
 export interface EstadoSituacionFinancieraResultado {
   fechaCorte: string;
+  /** Solo en modo PERIODO: inicio del rango cuyos movimientos se acumulan. */
+  fechaDesde?: string;
+  modo: ModoConsultaEstadoFinanciero;
   secciones: EstadoFinancieroSeccion[];
   totalActivo: number;
   totalPasivo: number;

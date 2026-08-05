@@ -3,7 +3,12 @@ import { LoginPageComponent } from './features/auth/pages/login-page/login-page.
 import { RegisterPageComponent } from './features/auth/pages/register-page/register-page.component';
 import { WorkspacePageComponent } from './features/workspace/pages/workspace-page/workspace-page.component';
 import { WorkspaceShellComponent } from './features/workspace/layout/workspace-shell/workspace-shell.component';
-import { moduleAccessGuard, platformAdminGuard } from './core/guards/permission.guard';
+import {
+  moduleAccessGuard,
+  platformAdminGuard,
+  redirectAuthenticatedGuard,
+  workspaceAuthGuard,
+} from './core/guards/permission.guard';
 
 export const routes: Routes = [
   {
@@ -14,10 +19,12 @@ export const routes: Routes = [
   {
     path: 'auth/login',
     component: LoginPageComponent,
+    canActivate: [redirectAuthenticatedGuard],
   },
   {
     path: 'auth/register',
     component: RegisterPageComponent,
+    canActivate: [redirectAuthenticatedGuard],
   },
   // Paginas legales publicas. Se entregan a Meta para la verificacion de negocio,
   // por lo que van sin guard y antes del comodin que redirige a login.
@@ -62,6 +69,7 @@ export const routes: Routes = [
   {
     path: 'workspace',
     component: WorkspaceShellComponent,
+    canActivate: [workspaceAuthGuard],
     children: [
       {
         path: '',

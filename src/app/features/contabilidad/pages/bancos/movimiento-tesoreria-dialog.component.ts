@@ -213,6 +213,8 @@ export class MovimientoTesoreriaDialogComponent {
         referencia: value.referencia || undefined,
         estado: 'BORRADOR',
         origen: 'MANUAL',
+        // Atado al movimiento de tesoreria: la correccion no puede alterar los totales.
+        origenModulo: 'BANCOS',
         lineas: [lineaBanco, lineaContrapartida],
         totalDebe: monto,
         totalHaber: monto,

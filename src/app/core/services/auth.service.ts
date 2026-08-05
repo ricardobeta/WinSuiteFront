@@ -60,6 +60,7 @@ export class AuthService {
   readonly isPlatformAdmin = signal(false);
   readonly bootstrapState = signal<AuthBootstrapState>('loading');
   readonly bootstrapError = signal<string | null>(null);
+  readonly initialBootstrapPending = signal(true);
   readonly isAuthenticated = computed(() => this.currentUser() !== null);
   private readonly http = inject(HttpClient);
   private authStateReadyResolver: (() => void) | null = null;
@@ -99,6 +100,7 @@ export class AuthService {
         if (!user) {
           this.authToken.set(null);
           this.tenantId.set(null);
+          this.isPlatformAdmin.set(false);
           this.currentProfile.set(null);
           this.roles.set([]);
           this.companies.set([]);
@@ -131,6 +133,7 @@ export class AuthService {
       } finally {
         if (!this.initialBootstrapResolved) {
           this.initialBootstrapResolved = true;
+          this.initialBootstrapPending.set(false);
           this.initialBootstrapResolver?.();
           this.initialBootstrapResolver = null;
         }
@@ -257,8 +260,10 @@ export class AuthService {
       // Firebase sign-out must still complete if the server is temporarily unavailable.
     }
     await signOut(this.auth);
+    this.currentUser.set(null);
     this.authToken.set(null);
     this.tenantId.set(null);
+    this.isPlatformAdmin.set(false);
     this.currentProfile.set(null);
     this.roles.set([]);
     this.companies.set([]);

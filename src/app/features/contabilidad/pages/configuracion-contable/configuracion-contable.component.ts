@@ -19,7 +19,12 @@ import { MatTabsModule } from '@angular/material/tabs';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { Subscription } from 'rxjs';
 
+import { ConfigApplyResponse, ConfigScreenContext } from '../../../../core/services/ai-config-copilot.service';
 import { AuthorizationService } from '../../../../core/services/authorization.service';
+import {
+  ConfigCopilotPanelComponent,
+  ConfigDocumentoImportable
+} from '../../../../shared/components/config-copilot-panel/config-copilot-panel.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { Categoria, Proveedor } from '../../../inventario/models/inventario.models';
 import { CategoriasService } from '../../../inventario/services/categorias.service';
@@ -35,6 +40,7 @@ import {
   PeriodoContable,
   TipoContribuyente
 } from '../../models/contabilidad.models';
+import { AsientosContablesService } from '../../services/asientos-contables.service';
 import { ConfiguracionContableService } from '../../services/configuracion-contable.service';
 import { IntegracionContableService } from '../../services/integracion-contable.service';
 import { PlanCuentasService } from '../../services/plan-cuentas.service';
@@ -83,6 +89,7 @@ type CuentaIntegracionCampo = {
     MatTableModule,
     MatTabsModule,
     MatTooltipModule,
+    ConfigCopilotPanelComponent,
     CuentaContableAutocompleteComponent,
     NominaConfiguracionContableComponent,
     TiposGastoCompraComponent,
@@ -101,7 +108,26 @@ type CuentaIntegracionCampo = {
           </h2>
           <p>Configura la empresa, los períodos fiscales y las reglas que generan asientos automáticos.</p>
         </div>
+        <app-config-copilot-panel
+          [context]="copilotContext"
+          [ejemplos]="copilotEjemplos"
+          [documento]="copilotDocumento"
+          (aplicado)="onCopilotAplicado($event)"
+        />
       </header>
+
+      @if (configuracionDesactualizada()) {
+        <p class="config-aviso" role="status">
+          <mat-icon aria-hidden="true">info</mat-icon>
+          <span>
+            La configuración cambió en otro sitio. Tus cambios sin guardar siguen en pantalla, pero
+            para guardar hay que descartarlos y volver a hacerlos sobre la versión actual.
+          </span>
+          <button mat-stroked-button type="button" (click)="descartarMisCambios()">
+            Descartar mis cambios
+          </button>
+        </p>
+      }
 
       @if (!empresaConfigurada()) {
         <section class="warning-box">
@@ -253,6 +279,11 @@ type CuentaIntegracionCampo = {
                 <button mat-raised-button color="primary" type="button" (click)="generarPeriodos()" [disabled]="generandoPeriodos() || !canUpdate()" matTooltipPosition="above" [matTooltip]="ayudaConfig.generarPeriodos">
                   <mat-icon>calendar_month</mat-icon>
                   Generar periodos
+                </button>
+
+                <button mat-stroked-button type="button" (click)="recalcularSaldos()" [disabled]="recalculandoSaldos() || !canUpdate()" matTooltipPosition="above" [matTooltip]="ayudaConfig.recalcularSaldos">
+                  <mat-icon>calculate</mat-icon>
+                  Recalcular saldos
                 </button>
               </div>
 
@@ -762,6 +793,7 @@ type CuentaIntegracionCampo = {
 })
 export class ConfiguracionContableComponent implements OnInit, OnDestroy {
   private readonly service = inject(ConfiguracionContableService);
+  private readonly asientosService = inject(AsientosContablesService);
   private readonly integracionService = inject(IntegracionContableService);
   private readonly planCuentasService = inject(PlanCuentasService);
   private readonly categoriasService = inject(CategoriasService);
@@ -795,8 +827,51 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
     return JSON.stringify(this.integracionForm) !== JSON.stringify(this.integracionGuardada());
   });
   protected readonly generandoPeriodos = signal(false);
+  protected readonly recalculandoSaldos = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly empresaConfigurada = signal(false);
+
+  /**
+   * La pestana Empresa se edita con ngModel sobre un objeto plano, que no es reactivo. No hace
+   * falta que lo sea: quien pregunta si hay cambios sin guardar son metodos, no la plantilla, asi
+   * que basta comparar contra lo ultimo que se leyo de RTDB en el momento de preguntar.
+   */
+  private empresaGuardada = '';
+
+  private empresaDirty(): boolean {
+    return JSON.stringify(this.empresaForm) !== this.empresaGuardada;
+  }
+
+  /**
+   * La configuracion cambio en otro sitio (el copiloto, u otra pestana) mientras habia ediciones
+   * sin guardar. Se avisa en vez de pisar lo que el usuario tenia escrito.
+   */
+  protected readonly configuracionDesactualizada = signal(false);
+
+  /** screenKey debe coincidir con el ConfigToolSet del backend. */
+  protected readonly copilotContext: ConfigScreenContext = {
+    route: '/workspace/contabilidad/configuracion',
+    module: 'Contabilidad',
+    page: 'Configuracion',
+    screenKey: 'contabilidad.configuracion'
+  };
+  protected readonly copilotEjemplos = [
+    'Configúrame las cuentas de ventas',
+    'Genera los periodos de este año',
+    'Necesito una cuenta para las propinas'
+  ];
+  /** Reutiliza el selector del módulo Archivos: busca entre lo ya subido o sube uno nuevo. */
+  protected readonly copilotDocumento: ConfigDocumentoImportable = {
+    etiqueta: 'Importar el PDF del RUC',
+    title: 'Importar el PDF del RUC',
+    subtitle: 'Sube el certificado de RUC que descargas del portal del SRI, o reutiliza uno ya '
+      + 'cargado. De ahí salgo con el RUC, la razón social, la actividad económica y el régimen. '
+      + 'El PDF se queda en WinSuit: se extrae su texto en el servidor y solo ese texto se envía '
+      + 'al proveedor de IA.',
+    sourceModule: 'contabilidad',
+    allowUpload: true,
+    extensions: ['pdf']
+  };
   protected readonly fechaInicioDate = signal<Date | null>(new Date(new Date().getFullYear(), 0, 1));
   protected readonly canUpdate = computed(() => this.authorization.canAccess('contabilidad', 'update'));
 
@@ -823,6 +898,7 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
     obligado: 'Marque si la empresa esta obligada a llevar contabilidad formal segun su situacion tributaria.',
     anio: 'Anio fiscal para generar periodos mensuales. En Ecuador normalmente va de enero a diciembre.',
     generarPeriodos: 'Crea los 12 periodos del anio. Los periodos cerrados bloquean nuevos asientos en sus fechas.',
+    recalcularSaldos: 'Reconstruye los saldos por cuenta y periodo desde los asientos aprobados y reversados. Uselo para verificar el cuadre despues de corregir asientos.',
     modoAutomatico: 'Borrador permite revision contable antes de impactar reportes; aprobado registra directamente en saldos y mayores.'
   };
 
@@ -935,11 +1011,17 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe({
         next: (empresa) => {
-          if (empresa) {
-            Object.assign(this.empresaForm, empresa);
-            this.fechaInicioDate.set(this.parseFecha(empresa.fechaInicioContable));
+          // Es nuestra propia escritura volviendo: el estado local ya es el correcto.
+          if (this.guardandoEmpresa()) {
+            return;
           }
-          this.empresaConfigurada.set(!!empresa?.configurado);
+          // La suscripcion es en vivo. Si el copiloto (o el usuario en otra pestana) cambia la
+          // ficha mientras hay ediciones sin guardar, refrescar aqui las borraria sin aviso.
+          if (this.empresaDirty()) {
+            this.configuracionDesactualizada.set(true);
+            return;
+          }
+          this.aplicarEmpresa(empresa);
         },
         error: () => this.error.set('No se pudo cargar la configuracion contable.')
       });
@@ -952,7 +1034,49 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
     this.periodosSubscription?.unsubscribe();
   }
 
+  private aplicarEmpresa(empresa: ConfiguracionEmpresaContable | null): void {
+    if (empresa) {
+      Object.assign(this.empresaForm, empresa);
+      this.fechaInicioDate.set(this.parseFecha(empresa.fechaInicioContable));
+    }
+    this.empresaConfigurada.set(!!empresa?.configurado);
+    this.empresaGuardada = JSON.stringify(this.empresaForm);
+    this.configuracionDesactualizada.set(false);
+  }
+
+  /**
+   * El copiloto acaba de escribir. Si el usuario tenia ediciones sin guardar, el aviso se enciende
+   * ya: sin esto no lo sabria hasta intentar guardar. Si no las tenia, la suscripcion en vivo
+   * refresca la pantalla sola y un aviso solo confundiria.
+   */
+  protected onCopilotAplicado(respuesta: ConfigApplyResponse): void {
+    if (respuesta.aplicadas > 0 && (this.empresaDirty() || this.integracionDirty())) {
+      this.configuracionDesactualizada.set(true);
+    }
+  }
+
+  /** Descarta las ediciones locales y vuelve a leer lo que hay guardado. */
+  protected descartarMisCambios(): void {
+    void this.service.getEmpresaOnce()
+      .then((empresa) => this.aplicarEmpresa(empresa))
+      .catch(() => this.error.set('No se pudo recargar la configuracion guardada.'));
+    void this.integracionService.getConfiguracionOnce()
+      .then((config) => {
+        Object.assign(this.integracionForm, this.getDefaultIntegracion(), config);
+        this.integracionGuardada.set({ ...this.integracionForm });
+        this.integracionVersion.update((version) => version + 1);
+        this.configuracionDesactualizada.set(false);
+      })
+      .catch(() => this.error.set('No se pudo recargar la configuracion guardada.'));
+  }
+
   protected async guardarEmpresa(): Promise<void> {
+    // Guardar ahora escribiria el nodo completo con un estado que ya no incluye lo que se cambio
+    // por otro lado: perderia esos cambios en silencio.
+    if (this.configuracionDesactualizada()) {
+      this.error.set('La configuracion cambio en otro sitio. Descarta tus cambios para ver la version actual.');
+      return;
+    }
     this.error.set(null);
     this.guardandoEmpresa.set(true);
 
@@ -961,6 +1085,7 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
         ...this.empresaForm,
         tipoContribuyente: this.empresaForm.tipoContribuyente as TipoContribuyente
       });
+      this.empresaGuardada = JSON.stringify(this.empresaForm);
       this.mostrarMensaje('Configuracion contable guardada.', 'save');
     } catch (error: unknown) {
       this.error.set(error instanceof Error ? error.message : 'No se pudo guardar la configuracion.');
@@ -994,6 +1119,24 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
       this.error.set(error instanceof Error ? error.message : 'No se pudieron generar los periodos.');
     } finally {
       this.generandoPeriodos.set(false);
+    }
+  }
+
+  /**
+   * Reconstruye los saldos por periodo desde los asientos. Sirve para verificar que una correccion
+   * dejo los saldos cuadrados y para reparar desviaciones de escrituras parciales.
+   */
+  protected async recalcularSaldos(): Promise<void> {
+    this.error.set(null);
+    this.recalculandoSaldos.set(true);
+
+    try {
+      const resultado = await this.asientosService.recalcularSaldos();
+      this.mostrarMensaje(`Saldos recalculados: ${resultado.periodos} periodos, ${resultado.cuentas} cuentas.`, 'calculate');
+    } catch (error: unknown) {
+      this.error.set(error instanceof Error ? error.message : 'No se pudieron recalcular los saldos.');
+    } finally {
+      this.recalculandoSaldos.set(false);
     }
   }
 
@@ -1033,6 +1176,12 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
   }
 
   protected async guardarIntegracion(): Promise<void> {
+    // El nodo se escribe entero: guardar sobre un estado obsoleto borraria lo que cambio el
+    // copiloto sin que nadie se entere.
+    if (this.configuracionDesactualizada()) {
+      this.error.set('La configuracion cambio en otro sitio. Descarta tus cambios para ver la version actual.');
+      return;
+    }
     this.error.set(null);
     this.guardandoIntegracion.set(true);
 
@@ -1161,9 +1310,18 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
       .getConfiguracion()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((config) => {
+        if (this.guardandoIntegracion()) {
+          return;
+        }
+        // Mismo motivo que en la pestana Empresa: avisar, nunca pisar.
+        if (this.integracionDirty()) {
+          this.configuracionDesactualizada.set(true);
+          return;
+        }
         Object.assign(this.integracionForm, this.getDefaultIntegracion(), config);
         this.integracionGuardada.set({ ...this.integracionForm });
         this.integracionVersion.update((version) => version + 1);
+        this.configuracionDesactualizada.set(false);
       });
 
     this.planCuentasService

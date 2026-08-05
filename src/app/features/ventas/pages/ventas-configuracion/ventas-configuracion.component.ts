@@ -12,7 +12,6 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
-import { combineLatest } from 'rxjs';
 
 import { AuthService } from '../../../../core/services/auth.service';
 import { FacturacionConfigService } from '../../../../core/services/facturacion-config.service';
@@ -75,8 +74,10 @@ export class VentasConfiguracionComponent {
   protected readonly asignacionesTrabajo = signal<UsuariosAlmacenesConfig | null>(null);
   protected readonly guardando = signal(false);
 
-  protected readonly cargandoAlmacenesUsuario = signal(true);
-  protected readonly almacenesPermitidosUsuario = signal<Almacen[]>([]);
+  // Los almacenes del usuario los resuelve el servicio de sesión: es la misma
+  // fuente que usa el POS, así ambas pantallas no pueden contradecirse.
+  protected readonly cargandoAlmacenesUsuario = this.almacenSesionService.cargandoAlmacenesPermitidos;
+  protected readonly almacenesPermitidosUsuario = this.almacenSesionService.almacenesPermitidosSignal;
   protected readonly almacenActualUsuario = computed(() => this.almacenSesionService.getAlmacenSeleccionado());
   protected readonly usuarioActualNombre = computed(() => this.authService.currentUser()?.displayName ?? 'Usuario');
 
@@ -201,16 +202,6 @@ export class VentasConfiguracionComponent {
       next: (asignaciones) => { this.asignacionesActuales.set(asignaciones); this.asignacionesTrabajo.set(structuredClone(asignaciones)); },
       error: () => this.mostrarMensaje('No se pudieron cargar las asignaciones.', 'error')
     });
-    combineLatest([this.almacenesService.getAlmacenesActivos(), this.usuariosAlmacenesService.getAsignaciones()])
-      .pipe(takeUntilDestroyed(this.destroyRef)).subscribe({
-        next: ([almacenes, asignaciones]) => {
-          const usuarioId = this.authService.currentUser()?.uid;
-          const ids = usuarioId ? asignaciones?.asignaciones?.[usuarioId]?.almacenIds ?? [] : [];
-          this.almacenesPermitidosUsuario.set(almacenes.filter((almacen) => ids.includes(almacen.id ?? '')));
-          this.cargandoAlmacenesUsuario.set(false);
-        },
-        error: () => { this.cargandoAlmacenesUsuario.set(false); this.almacenesPermitidosUsuario.set([]); }
-      });
   }
 
   private mostrarMensaje(mensaje: string, tipo: 'success' | 'error' | 'info'): void {

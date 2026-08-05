@@ -1,0 +1,27 @@
+<section
+  class="company-loading"
+  role="status"
+  aria-live="polite"
+  aria-atomic="true"
+  aria-busy="true"
+>
+  <div class="company-loading__content">
+    <img class="company-loading__logo" src="/images/winsuite-logo.png" alt="WinSuit" />
+
+    <div class="company-loading__indicator" aria-hidden="true">
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+
+    <p class="company-loading__title">Cargando empresa&hellip;</p>
+    @if (companyName(); as name) {
+      <p class="company-loading__detail">
+        Estamos preparando <strong>{{ name }}</strong
+        >.
+      </p>
+    } @else {
+      <p class="company-loading__detail">Estamos preparando tu espacio de trabajo.</p>
+    }
+  </div>
+</section>

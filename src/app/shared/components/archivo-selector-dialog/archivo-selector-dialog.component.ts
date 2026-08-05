@@ -746,6 +746,12 @@ export class ArchivoSelectorDialogComponent implements OnInit {
 
   protected typeLabel(item: ArchivoItem): string {
     const extension = item.extension ?? item.name.split('.').pop()?.toLowerCase();
+    if (extension === 'pdf') {
+      return 'PDF';
+    }
+    if (extension === 'xml') {
+      return 'XML';
+    }
     if (extension === 'xls' || extension === 'xlsx') {
       return 'Excel';
     }
@@ -760,6 +766,9 @@ export class ArchivoSelectorDialogComponent implements OnInit {
 
   protected iconFor(item: ArchivoItem): string {
     const extension = item.extension ?? item.name.split('.').pop()?.toLowerCase();
+    if (extension === 'pdf') {
+      return 'picture_as_pdf';
+    }
     if (extension === 'xls' || extension === 'xlsx' || extension === 'csv') {
       return 'description';
     }

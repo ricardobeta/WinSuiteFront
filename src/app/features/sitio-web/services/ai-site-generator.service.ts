@@ -26,7 +26,8 @@ export interface AiSiteBlueprintItem {
   value?: string;
   icon?: string;
   imageIndex?: number;
-  price?: number;
+  /** Valor destacado del plan: numero (monto) o texto libre ("1000 MB", "A convenir"). */
+  price?: number | string;
   period?: string;
   features?: string[];
 }

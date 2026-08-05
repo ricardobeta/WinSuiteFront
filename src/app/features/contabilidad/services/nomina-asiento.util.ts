@@ -117,6 +117,53 @@ export function construirPartidasRolMensual(
   return partidas;
 }
 
+export function construirPartidasLiquidacion(
+  detalles: RolPagoDetalle[],
+  config: ConfiguracionNominaContable
+): PartidaNominaMensual[] {
+  const partidas: PartidaNominaMensual[] = [];
+  const round2 = (value: number) => Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100;
+  const agregar = (cuentaId: string, descripcion: string, debe: number, haber: number) => {
+    const d = round2(debe);
+    const h = round2(haber);
+    if (d > 0 || h > 0) partidas.push({ cuentaId, descripcion, debe: d, haber: h });
+  };
+  const agruparLiquidacion = (filtro: (linea: RolPagoLinea) => boolean) => {
+    const grupos = new Map<string, { cuentaId: string; monto: number; nombres: Set<string> }>();
+    for (const detalle of detalles) {
+      for (const [indice, linea] of (detalle.lineas ?? []).entries()) {
+        if (!filtro(linea) || linea.monto <= 0) continue;
+        // Una cuenta ausente conserva su propia fila para que el contador asigne la correcta en
+        // el popup; no se mezcla ni recibe un respaldo silencioso de otro concepto.
+        const key = linea.cuentaContableId || `SIN_CUENTA:${detalle.id}:${linea.codigo}:${indice}`;
+        const grupo = grupos.get(key) ?? { cuentaId: linea.cuentaContableId || '', monto: 0, nombres: new Set<string>() };
+        grupo.monto = round2(grupo.monto + linea.monto);
+        grupo.nombres.add(linea.nombre?.trim() || linea.codigo);
+        grupos.set(key, grupo);
+      }
+    }
+    return [...grupos.values()];
+  };
+  const ingresos = agruparLiquidacion((linea) => linea.tipo === 'INGRESO');
+  for (const acumulado of ingresos) {
+    agregar(acumulado.cuentaId, descripcionAgrupada(acumulado.nombres, 'Liquidacion de haberes'), acumulado.monto, 0);
+  }
+  const aportePersonal = round2(detalles.reduce((total, detalle) => total + detalle.aportePersonalIess, 0));
+  const costoPatronal = round2(detalles.reduce((total, detalle) => total + detalle.aportePatronalIess + (detalle.contribucionCcc ?? 0), 0));
+  agregar(config.cuentaGastoAportePatronalId, 'Aporte patronal y CCC - liquidacion', costoPatronal, 0);
+  agregar(config.cuentaIessPorPagarId, 'IESS por pagar - liquidacion', 0, aportePersonal + costoPatronal);
+  const descuentos = agruparLiquidacion((linea) => linea.tipo === 'DESCUENTO' && linea.codigo !== 'IESS_PERSONAL');
+  for (const acumulado of descuentos) {
+    agregar(acumulado.cuentaId, descripcionAgrupada(acumulado.nombres, 'Descuentos en liquidacion'), 0, acumulado.monto);
+  }
+  agregar(config.cuentaLiquidacionesPorPagarId, 'Liquidacion por pagar', 0, round2(detalles.reduce((total, detalle) => total + detalle.netoPagar, 0)));
+
+  const debe = round2(partidas.reduce((total, partida) => total + partida.debe, 0));
+  const haber = round2(partidas.reduce((total, partida) => total + partida.haber, 0));
+  if (round2(debe - haber) !== 0) throw new Error(`El asiento de liquidacion no cuadra: debe ${debe.toFixed(2)} y haber ${haber.toFixed(2)}.`);
+  return partidas;
+}
+
 function agruparLineasPorCuenta(
   detalles: RolPagoDetalle[],
   filtro: (linea: RolPagoLinea) => boolean,

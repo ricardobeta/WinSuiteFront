@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -10,6 +10,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 
 import { AuthService } from '../../../../core/services/auth.service';
+import { CompanyLoadingOverlayComponent } from '../../../../shared/components/company-loading-overlay/company-loading-overlay.component';
 import { PasswordVisibilityToggleComponent } from '../../../../shared/components/password-visibility-toggle/password-visibility-toggle.component';
 
 @Component({
@@ -24,20 +25,22 @@ import { PasswordVisibilityToggleComponent } from '../../../../shared/components
     MatCheckboxModule,
     MatIconModule,
     MatProgressSpinnerModule,
-    PasswordVisibilityToggleComponent
+    CompanyLoadingOverlayComponent,
+    PasswordVisibilityToggleComponent,
   ],
   templateUrl: './login-page.component.html',
-  styleUrl: './login-page.component.scss'
+  styleUrl: './login-page.component.scss',
 })
 export class LoginPageComponent {
   private readonly router = inject(Router);
   private readonly formBuilder = inject(FormBuilder);
 
   protected readonly auth = inject(AuthService);
+  protected readonly loadingCompany = signal(false);
   protected readonly form = this.formBuilder.nonNullable.group({
     email: ['', [Validators.required, Validators.email]],
     password: ['', [Validators.required]],
-    remember: [true]
+    remember: [true],
   });
 
   protected async submit(): Promise<void> {
@@ -47,23 +50,37 @@ export class LoginPageComponent {
     }
 
     const formValue = this.form.getRawValue();
+    this.loadingCompany.set(true);
     try {
       await this.auth.login({
         email: formValue.email,
         password: formValue.password,
-        remember: formValue.remember
+        remember: formValue.remember,
       });
-      await this.router.navigateByUrl(this.auth.isPlatformAdmin() ? '/super-admin' : '/workspace');
+      const navigated = await this.router.navigateByUrl(
+        this.auth.isPlatformAdmin() ? '/super-admin' : '/workspace',
+      );
+      if (!navigated) {
+        this.loadingCompany.set(false);
+      }
     } catch {
+      this.loadingCompany.set(false);
       // AuthService exposes the recoverable message in the page.
     }
   }
 
   protected async continueWithGoogle(): Promise<void> {
+    this.loadingCompany.set(true);
     try {
       await this.auth.loginWithGoogle(this.form.controls.remember.value);
-      await this.router.navigateByUrl(this.auth.isPlatformAdmin() ? '/super-admin' : '/workspace');
+      const navigated = await this.router.navigateByUrl(
+        this.auth.isPlatformAdmin() ? '/super-admin' : '/workspace',
+      );
+      if (!navigated) {
+        this.loadingCompany.set(false);
+      }
     } catch {
+      this.loadingCompany.set(false);
       // AuthService exposes the recoverable message in the page.
     }
   }

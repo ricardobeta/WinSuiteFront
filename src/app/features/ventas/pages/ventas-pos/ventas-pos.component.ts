@@ -82,7 +82,26 @@ interface CatalogoPosItem {
     CobroPorPartesComponent
   ],
   template: `
-    @if (sineAlmacenesPermitidos()) {
+    @if (resolviendoAlmacenesPermitidos()) {
+      <section class="pos-bloqueado">
+        <div class="bloqueado-contenido">
+          <mat-spinner diameter="46"></mat-spinner>
+          <p class="subtitulo">Verificando tus almacenes…</p>
+        </div>
+      </section>
+    } @else if (errorAlmacenesPermitidos()) {
+      <section class="pos-bloqueado">
+        <div class="bloqueado-contenido">
+          <mat-icon class="bloqueado-icono">cloud_off</mat-icon>
+          <h2>No se pudo verificar tu acceso</h2>
+          <p class="subtitulo">Falló la lectura de almacenes y asignaciones. Revisa tu conexión e inténtalo otra vez.</p>
+          <button mat-raised-button color="primary" (click)="reintentarAlmacenes()">
+            <mat-icon>refresh</mat-icon>
+            Reintentar
+          </button>
+        </div>
+      </section>
+    } @else if (sineAlmacenesPermitidos()) {
       <section class="pos-bloqueado">
         <div class="bloqueado-contenido">
           <mat-icon class="bloqueado-icono">lock</mat-icon>
@@ -1007,9 +1026,11 @@ export class VentasPosComponent {
   private syncCuentaTimeout: ReturnType<typeof setTimeout> | null = null;
   private cuentaHeartbeatId: ReturnType<typeof setInterval> | null = null;
   private readonly avisoSinAlmacenesMostrado = signal(false);
-  protected readonly sineAlmacenesPermitidos = computed(
-    () => this.cargandoAlmacenes() === false && !this.almacenSesionService.tieneAlmacenesPermitidos()
-  );
+  // El bloqueo depende del estado del servicio de sesión, no de la carga de
+  // almacenes del POS: son streams distintos y el segundo termina antes.
+  protected readonly sineAlmacenesPermitidos = this.almacenSesionService.sinAlmacenesPermitidos;
+  protected readonly errorAlmacenesPermitidos = this.almacenSesionService.errorAlmacenesPermitidos;
+  protected readonly resolviendoAlmacenesPermitidos = this.almacenSesionService.cargandoAlmacenesPermitidos;
 
   protected readonly vendedorNombre = computed(() => this.auth.currentUser()?.displayName ?? 'Sin nombre');
   protected readonly sesionEstado = computed(() => (this.sesionActiva() ? 'ACTIVA' : 'PENDIENTE'));
@@ -1160,10 +1181,12 @@ export class VentasPosComponent {
   });
 
   private readonly syncAlmacenSesionConPos = effect(() => {
-    const almacenesPermitidos = this.almacenSesionService.almacenesPermitidosSignal();
     const almacenSeleccionado = this.almacenSesionService.almacenSeleccionado();
+    const sinAlmacenes = this.sineAlmacenesPermitidos();
 
-    if (this.cargandoAlmacenes()) {
+    // Mientras el servicio no haya resuelto el acceso no hay nada que sincronizar
+    // ni motivo para avisar que el usuario no tiene almacenes.
+    if (this.cargandoAlmacenes() || this.resolviendoAlmacenesPermitidos()) {
       return;
     }
 
@@ -1175,7 +1198,7 @@ export class VentasPosComponent {
       return;
     }
 
-    if (almacenesPermitidos.length === 0 && !this.avisoSinAlmacenesMostrado()) {
+    if (sinAlmacenes && !this.avisoSinAlmacenesMostrado()) {
       this.avisoSinAlmacenesMostrado.set(true);
       this.snackBar.open('No tienes almacenes asignados. Contacta a tu administrador.', 'Ir a Configuración', {
         duration: 0,
@@ -2209,6 +2232,11 @@ export class VentasPosComponent {
 
   protected irAConfiguracion(): void {
     this.router.navigate(['/workspace/ventas/configuracion']);
+  }
+
+  protected reintentarAlmacenes(): void {
+    this.avisoSinAlmacenesMostrado.set(false);
+    this.almacenSesionService.recargar();
   }
 
   protected async togglePantallaCompleta(): Promise<void> {

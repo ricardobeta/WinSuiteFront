@@ -21,11 +21,11 @@ import {
   ConfigPlanResponse,
   ConfigScreenContext
 } from '../../../core/services/ai-config-copilot.service';
-import { ArchivoItem } from '../../models/archivos.models';
 import {
-  DocumentoImportDialogComponent,
-  DocumentoImportDialogData
-} from '../documento-import-dialog/documento-import-dialog.component';
+  ArchivoSelectorDialogComponent,
+  ArchivoSelectorDialogData,
+  ArchivoSelectorDialogResult
+} from '../archivo-selector-dialog/archivo-selector-dialog.component';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -37,8 +37,12 @@ interface ChatMessage {
 /**
  * Descripcion del documento del que esta pantalla sabe partir. El panel es generico: los
  * textos concretos los pone la pantalla que lo monta.
+ *
+ * Extiende los datos del selector de Archivos porque el copiloto NO tiene selector propio:
+ * reutiliza el del modulo Archivos, que ya sabe buscar entre lo subido, filtrar por extension,
+ * subir uno nuevo y controlar la cuota.
  */
-export interface ConfigDocumentoImportable extends DocumentoImportDialogData {
+export interface ConfigDocumentoImportable extends ArchivoSelectorDialogData {
   /** Texto del boton, por ejemplo "Importar el PDF del RUC". */
   etiqueta: string;
 }
@@ -181,12 +185,13 @@ export class ConfigCopilotPanelComponent {
     }
 
     this.dialog
-      .open<DocumentoImportDialogComponent, DocumentoImportDialogData, ArchivoItem>(
-        DocumentoImportDialogComponent,
-        { width: '560px', maxWidth: 'calc(100vw - 32px)', data: documento }
+      .open<ArchivoSelectorDialogComponent, ArchivoSelectorDialogData, ArchivoSelectorDialogResult | null>(
+        ArchivoSelectorDialogComponent,
+        { maxWidth: '96vw', data: documento }
       )
       .afterClosed()
-      .subscribe((archivo) => {
+      .subscribe((resultado) => {
+        const archivo = resultado?.archivo;
         if (!archivo) {
           return;
         }

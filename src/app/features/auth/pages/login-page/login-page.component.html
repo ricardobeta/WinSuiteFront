@@ -1,34 +1,46 @@
+@if (loadingCompany()) {
+  <app-company-loading-overlay />
+}
+
 <div class="auth-layout">
   <section class="hero-panel" aria-labelledby="login-hero-title">
-    <img
-      class="hero-image"
-      src="/images/auth-hero.jpg"
-      alt=""
-      aria-hidden="true"
-    />
+    <img class="hero-image" src="/images/auth-hero.jpg" alt="" aria-hidden="true" />
     <div class="hero-overlay" aria-hidden="true"></div>
     <div class="hero-content">
-      <img class="brand-logo" src="/images/winsuite-logo.png" alt="WinSuit — Gestión empresarial integral" />
+      <img
+        class="brand-logo"
+        src="/images/winsuite-logo.png"
+        alt="WinSuit — Gestión empresarial integral"
+      />
 
       <div class="hero-copy">
-        <p class="hero-kicker"><mat-icon aria-hidden="true">space_dashboard</mat-icon>Tu operación, conectada</p>
+        <p class="hero-kicker">
+          <mat-icon aria-hidden="true">space_dashboard</mat-icon>Tu operación, conectada
+        </p>
         <h1 id="login-hero-title">Gestiona tu empresa con WinSuit</h1>
         <p class="hero-subtitle">
-          Contabilidad, facturación, inventario y procesos automatizados con IA para que tu equipo trabaje con información clara.
+          Contabilidad, facturación, inventario y procesos automatizados con IA para que tu equipo
+          trabaje con información clara.
         </p>
 
         <ul class="hero-capabilities" aria-label="Capacidades de WinSuit">
           <li>
             <mat-icon aria-hidden="true">point_of_sale</mat-icon>
-            <div><strong>Ventas e inventario</strong><span>La operación diaria en un solo lugar.</span></div>
+            <div>
+              <strong>Ventas e inventario</strong><span>La operación diaria en un solo lugar.</span>
+            </div>
           </li>
           <li>
             <mat-icon aria-hidden="true">account_balance</mat-icon>
-            <div><strong>Contabilidad</strong><span>Información organizada para decidir.</span></div>
+            <div>
+              <strong>Contabilidad</strong><span>Información organizada para decidir.</span>
+            </div>
           </li>
           <li>
             <mat-icon aria-hidden="true">auto_awesome</mat-icon>
-            <div><strong>Automatización con IA</strong><span>Procesos más ágiles para tu equipo.</span></div>
+            <div>
+              <strong>Automatización con IA</strong><span>Procesos más ágiles para tu equipo.</span>
+            </div>
           </li>
         </ul>
       </div>
@@ -40,7 +52,9 @@
       <img class="mobile-brand" src="/images/winsuite-logo.png" alt="WinSuit" />
       <mat-card class="auth-card">
         <header class="form-heading">
-          <p class="form-kicker"><mat-icon aria-hidden="true">verified_user</mat-icon>Acceso a tu espacio</p>
+          <p class="form-kicker">
+            <mat-icon aria-hidden="true">verified_user</mat-icon>Acceso a tu espacio
+          </p>
           <h2 id="login-title">Iniciar sesión</h2>
           <p class="form-description">Ingresa con tu cuenta para continuar.</p>
         </header>
@@ -52,14 +66,26 @@
           </p>
         }
 
-        <button mat-stroked-button class="google-button" type="button" [disabled]="auth.loading()" (click)="continueWithGoogle()">
+        <button
+          mat-stroked-button
+          class="google-button"
+          type="button"
+          [disabled]="auth.loading()"
+          (click)="continueWithGoogle()"
+        >
           <span class="google-mark" aria-hidden="true">G</span>
           Continuar con Google
         </button>
 
         <div class="auth-divider" aria-hidden="true"><span>o usa tu correo</span></div>
 
-        <form class="auth-form" [formGroup]="form" (ngSubmit)="submit()" novalidate [attr.aria-busy]="auth.loading()">
+        <form
+          class="auth-form"
+          [formGroup]="form"
+          (ngSubmit)="submit()"
+          novalidate
+          [attr.aria-busy]="auth.loading()"
+        >
           <mat-form-field appearance="outline">
             <mat-label>Correo electrónico</mat-label>
             <mat-icon matPrefix aria-hidden="true">mail</mat-icon>
@@ -106,7 +132,9 @@
             [disabled]="auth.loading()"
           >
             @if (auth.loading()) {
-              <span class="button-content"><mat-spinner diameter="18"></mat-spinner>Iniciando sesión…</span>
+              <span class="button-content"
+                ><mat-spinner diameter="18"></mat-spinner>Iniciando sesión…</span
+              >
             } @else {
               <span>Iniciar sesión</span>
             }

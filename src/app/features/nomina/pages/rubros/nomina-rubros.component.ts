@@ -120,6 +120,7 @@ import { PlanCuentasService } from '../../../contabilidad/services/plan-cuentas.
           <div class="checks">
             @if (form.tipo === 'INGRESO') {
               <mat-checkbox [(ngModel)]="form.afectaIess" name="afectaIess" [disabled]="!canUpdate()">Afecta base IESS</mat-checkbox>
+              <mat-checkbox [(ngModel)]="form.incluyeBaseIndemnizacion" name="incluyeBaseIndemnizacion" [disabled]="!canUpdate()">Incluye base de indemnizacion</mat-checkbox>
             }
             <mat-checkbox [(ngModel)]="form.activo" name="activo" [disabled]="!canUpdate()">Activo</mat-checkbox>
           </div>
@@ -298,7 +299,7 @@ export class NominaRubrosComponent {
     if (!this.canUpdate()) {
       return;
     }
-    this.form = { ...rubro };
+    this.form = { ...rubro, incluyeBaseIndemnizacion: rubro.incluyeBaseIndemnizacion ?? rubro.afectaIess };
   }
 
   protected limpiar(): void {
@@ -379,6 +380,7 @@ export class NominaRubrosComponent {
       nombre: '',
       tipo: 'INGRESO',
       afectaIess: true,
+      incluyeBaseIndemnizacion: true,
       modoCalculo: 'MANUAL' as ModoCalculoRubro,
       valorReferencia: 0,
       cuentaContableId: '',

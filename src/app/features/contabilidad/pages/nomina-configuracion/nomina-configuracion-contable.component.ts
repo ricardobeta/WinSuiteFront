@@ -201,6 +201,16 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
           </button>
         </div>
 
+        @if (respaldosHeredados().length) {
+          <div class="legacy-note" role="status">
+            <mat-icon>info</mat-icon>
+            <div>
+              <strong>Compatibilidad con configuracion anterior</strong>
+              @for (respaldo of respaldosHeredados(); track respaldo) { <span>{{ respaldo }}</span> }
+            </div>
+          </div>
+        }
+
         <div class="account-grid">
           @for (campo of camposCuentas; track campo.key) {
             <div class="account-field">
@@ -235,6 +245,10 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
     .section-head { display: flex; justify-content: space-between; gap: 1rem; align-items: end; flex-wrap: wrap; }
     .section-head h3, .section-head p { margin: 0; }
     .section-head p { max-width: 68ch; margin-top: .3rem; color: var(--muted-foreground); }
+    .legacy-note { display: flex; gap: .75rem; align-items: flex-start; padding: .85rem 1rem; border-radius: 1rem; background: var(--tc-surface-container-low); }
+    .legacy-note mat-icon { color: var(--primary); }
+    .legacy-note div { display: grid; gap: .2rem; }
+    .legacy-note span { color: var(--muted-foreground); font-size: .84rem; }
     .tenant-badge {
       display: inline-flex;
       min-height: 44px;
@@ -343,6 +357,7 @@ export class NominaConfiguracionContableComponent {
   protected readonly guardando = signal(false);
   protected readonly sugiriendo = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly respaldosHeredados = signal<string[]>([]);
   protected readonly canUpdate = computed(() => this.authorization.canAccess('contabilidad', 'update'));
   protected readonly form: ConfiguracionNominaContable = this.nominaService.getDefaultConfiguracion();
   protected readonly camposCuentas: Array<{ key: CuentaNominaKey; label: string }> = [
@@ -353,6 +368,8 @@ export class NominaConfiguracionContableComponent {
     { key: 'cuentaGastoFondosReservaId', label: 'Gasto fondos de reserva' },
     { key: 'cuentaGastoVacacionesId', label: 'Gasto vacaciones' },
     { key: 'cuentaGastoAportePatronalId', label: 'Gasto aporte patronal' },
+    { key: 'cuentaGastoDesahucioId', label: 'Gasto bonificacion por desahucio' },
+    { key: 'cuentaGastoIndemnizacionId', label: 'Gasto indemnizaciones laborales' },
     { key: 'cuentaSueldosPorPagarId', label: 'Sueldos por pagar' },
     { key: 'cuentaIessPorPagarId', label: 'IESS por pagar' },
     { key: 'cuentaBeneficiosSocialesPorPagarId', label: 'Beneficios sociales por pagar' },
@@ -362,10 +379,12 @@ export class NominaConfiguracionContableComponent {
     { key: 'cuentaDecimoCuartoPorPagarId', label: 'Decimo cuarto por pagar' },
     { key: 'cuentaFondosReservaPorPagarId', label: 'Fondos reserva por pagar' },
     { key: 'cuentaVacacionesPorPagarId', label: 'Vacaciones por pagar' },
-    { key: 'cuentaUtilidadesPorPagarId', label: 'Utilidades por pagar' }
+    { key: 'cuentaUtilidadesPorPagarId', label: 'Utilidades por pagar' },
+    { key: 'cuentaLiquidacionesPorPagarId', label: 'Liquidaciones por pagar' }
   ];
 
   constructor() {
+    void this.nominaService.getRespaldosConfiguracionOnce().then((respaldos) => this.respaldosHeredados.set(respaldos));
     this.nominaService
       .getConfiguracion()
       .pipe(takeUntilDestroyed(this.destroyRef))

@@ -23,4 +23,11 @@ export class NominaPdfApiService {
       responseType: 'blob'
     }));
   }
+
+  /** Matriz consolidada del rol, generada en el servidor desde la información persistida. */
+  descargarConsolidado(rolId: string): Promise<Blob> {
+    return firstValueFrom(this.http.get(`${this.baseUrl}/roles/${rolId}/consolidado/pdf`, {
+      responseType: 'blob'
+    }));
+  }
 }

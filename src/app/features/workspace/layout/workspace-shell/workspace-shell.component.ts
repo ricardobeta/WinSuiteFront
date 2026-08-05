@@ -20,12 +20,22 @@ import { CompanyNotificationService } from '../../../../core/services/company-no
 import { CompanyInvitation } from '../../../../core/models/company-invitation.models';
 import { CompanyInvitationService } from '../../../../core/services/company-invitation.service';
 import { PosImmersiveService } from '../../../ventas/services/pos-immersive.service';
+import { CompanyLoadingOverlayComponent } from '../../../../shared/components/company-loading-overlay/company-loading-overlay.component';
 
 @Component({
   selector: 'app-workspace-shell',
-  imports: [DatePipe, RouterLink, RouterOutlet, GlobalCopilotComponent, MatDialogModule, MatMenuModule, MatSnackBarModule],
+  imports: [
+    DatePipe,
+    RouterLink,
+    RouterOutlet,
+    GlobalCopilotComponent,
+    CompanyLoadingOverlayComponent,
+    MatDialogModule,
+    MatMenuModule,
+    MatSnackBarModule,
+  ],
   templateUrl: './workspace-shell.component.html',
-  styleUrl: './workspace-shell.component.scss'
+  styleUrl: './workspace-shell.component.scss',
 })
 export class WorkspaceShellComponent {
   protected readonly router = inject(Router);
@@ -42,10 +52,15 @@ export class WorkspaceShellComponent {
   protected readonly notifications = inject(CompanyNotificationService);
   protected readonly invitations = inject(CompanyInvitationService);
   protected readonly invitationActionId = signal<string | null>(null);
-  protected readonly totalNotificationCount = computed(() =>
-    this.notifications.unreadCount() + this.invitations.pending().length
+  protected readonly companyTransition = signal<{ tenantId: string; name: string | null } | null>(
+    null,
   );
-  protected readonly menuItems = computed(() => this.authorization.filterNavItems(WORKSPACE_NAV_ITEMS));
+  protected readonly totalNotificationCount = computed(
+    () => this.notifications.unreadCount() + this.invitations.pending().length,
+  );
+  protected readonly menuItems = computed(() =>
+    this.authorization.filterNavItems(WORKSPACE_NAV_ITEMS),
+  );
   protected readonly isSidebarCollapsed = signal(true);
   protected readonly expandedMenuIds = signal<Set<string>>(new Set(['sales']));
 
@@ -53,29 +68,29 @@ export class WorkspaceShellComponent {
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
       startWith(null),
-      map(() => this.router.url)
+      map(() => this.router.url),
     ),
-    { initialValue: this.router.url }
+    { initialValue: this.router.url },
   );
 
   protected readonly breadcrumb = toSignal(
     this.router.events.pipe(
       filter((event) => event instanceof NavigationEnd),
       startWith(null),
-      map(() => this.resolveBreadcrumb())
+      map(() => this.resolveBreadcrumb()),
     ),
     {
       initialValue: {
         module: 'Workspace',
-        page: 'Dashboard'
-      }
-    }
+        page: 'Dashboard',
+      },
+    },
   );
 
   protected readonly copilotContext = computed(() => ({
     route: this.currentUrl(),
     module: this.breadcrumb().module,
-    page: this.breadcrumb().page
+    page: this.breadcrumb().page,
   }));
 
   constructor() {
@@ -84,7 +99,9 @@ export class WorkspaceShellComponent {
     void this.notifications.syncPush();
     this.notifications.foregroundPush.pipe(takeUntilDestroyed()).subscribe((push) => {
       const message = push.body ? `${push.title}: ${push.body}` : push.title;
-      const snackBarRef = this.snackBar.open(message, push.link ? 'Ver' : 'Cerrar', { duration: 6000 });
+      const snackBarRef = this.snackBar.open(message, push.link ? 'Ver' : 'Cerrar', {
+        duration: 6000,
+      });
       if (push.link) {
         snackBarRef.onAction().subscribe(() => void this.router.navigateByUrl(push.link!));
       }
@@ -147,8 +164,18 @@ export class WorkspaceShellComponent {
   }
 
   protected openNotifications(): void {
-    this.notifications.load().subscribe({ error: () => this.snackBar.open('No se pudieron cargar las notificaciones.', 'Cerrar', { duration: 3000 }) });
-    this.invitations.load().subscribe({ error: () => this.snackBar.open('No se pudieron cargar las invitaciones.', 'Cerrar', { duration: 3000 }) });
+    this.notifications.load().subscribe({
+      error: () =>
+        this.snackBar.open('No se pudieron cargar las notificaciones.', 'Cerrar', {
+          duration: 3000,
+        }),
+    });
+    this.invitations.load().subscribe({
+      error: () =>
+        this.snackBar.open('No se pudieron cargar las invitaciones.', 'Cerrar', {
+          duration: 3000,
+        }),
+    });
   }
 
   protected async acceptInvitation(invitation: CompanyInvitation): Promise<void> {
@@ -157,8 +184,14 @@ export class WorkspaceShellComponent {
     try {
       await firstValueFrom(this.invitations.accept(invitation.id));
       await this.auth.refreshCompanies();
-      const message = this.snackBar.open(`Ahora formas parte de ${invitation.tenantName}.`, 'Cambiar empresa', { duration: 7000 });
-      message.onAction().subscribe(() => void this.switchCompany(invitation.tenantId));
+      const message = this.snackBar.open(
+        `Ahora formas parte de ${invitation.tenantName}.`,
+        'Cambiar empresa',
+        { duration: 7000 },
+      );
+      message
+        .onAction()
+        .subscribe(() => void this.switchCompany(invitation.tenantId, invitation.tenantName));
     } catch {
       this.snackBar.open('No se pudo aceptar la invitación.', 'Cerrar', { duration: 3600 });
       this.invitations.load().subscribe({ error: () => undefined });
@@ -172,7 +205,9 @@ export class WorkspaceShellComponent {
     this.invitationActionId.set(invitation.id);
     try {
       await firstValueFrom(this.invitations.reject(invitation.id));
-      this.snackBar.open(`Invitación de ${invitation.tenantName} rechazada.`, 'Cerrar', { duration: 3000 });
+      this.snackBar.open(`Invitación de ${invitation.tenantName} rechazada.`, 'Cerrar', {
+        duration: 3000,
+      });
     } catch {
       this.snackBar.open('No se pudo responder la invitación.', 'Cerrar', { duration: 3600 });
     } finally {
@@ -185,19 +220,29 @@ export class WorkspaceShellComponent {
     if (item.link?.startsWith('/workspace/')) void this.router.navigateByUrl(item.link);
   }
 
-  protected async switchCompany(tenantId: string): Promise<void> {
-    if (tenantId === this.auth.tenantId()) return;
+  protected async switchCompany(tenantId: string, companyName?: string): Promise<void> {
+    if (this.companyTransition() || tenantId === this.auth.tenantId()) return;
+
+    const resolvedName =
+      companyName ??
+      this.auth.companies().find((company) => company.tenantId === tenantId)?.name ??
+      null;
+    this.companyTransition.set({ tenantId, name: resolvedName });
+
     try {
       await this.auth.switchCompany(tenantId);
       window.location.assign('/workspace/dashboard');
     } catch {
+      this.companyTransition.set(null);
       this.snackBar.open('No se pudo cambiar de empresa.', 'Cerrar', { duration: 3200 });
     }
   }
 
   protected openCreateCompany(): void {
     const dialogRef = this.dialog.open(CreateCompanyDialogComponent, {
-      width: '500px', maxWidth: '94vw', autoFocus: 'first-tabbable'
+      width: '500px',
+      maxWidth: '94vw',
+      autoFocus: 'first-tabbable',
     });
     dialogRef.afterClosed().subscribe(async (name) => {
       if (!name) return;
@@ -205,7 +250,9 @@ export class WorkspaceShellComponent {
         await this.auth.createCompany(name);
         window.location.assign('/workspace/empresa/general');
       } catch {
-        this.snackBar.open('No se pudo crear la empresa. Revisa el limite de tu plan.', 'Cerrar', { duration: 4200 });
+        this.snackBar.open('No se pudo crear la empresa. Revisa el limite de tu plan.', 'Cerrar', {
+          duration: 4200,
+        });
       }
     });
   }
@@ -225,7 +272,7 @@ export class WorkspaceShellComponent {
 
     return {
       module: moduleName ?? 'Workspace',
-      page: pageName ?? 'Dashboard'
+      page: pageName ?? 'Dashboard',
     };
   }
 }

@@ -13,6 +13,7 @@ import {
   TemaSitio,
   contenidoSitioSchema,
   slugify,
+  valorPrecio,
 } from '@winsuite/bloques';
 import { nuevoIdBloque } from '../config/bloques-catalogo';
 import { LIENZO_PLANTILLAS, LienzoSlotDef, esPlantillaLienzo } from '../config/lienzo-plantillas';
@@ -139,7 +140,7 @@ export class AiSiteBlueprintCompilerService {
       case 'faq': return { ...base, tipo: 'faq', titulo: title, items: (items.length ? items : [{ title: '¿Como podemos ayudarte?', text }]).map(x => ({ pregunta: x.title || 'Pregunta frecuente', respuesta: x.text || text })) };
       case 'statistics': return { ...base, tipo: 'estadisticas', items: (items.length ? items : [{ value: '100%', title: 'Compromiso' }]).map(x => ({ valor: (x.value || '100%').slice(0, 20), etiqueta: x.title || x.text || 'Resultado' })) };
       case 'team': return { ...base, tipo: 'equipo', titulo: title, columnas: 3, items: (items.length ? items : [{ title: 'Nuestro equipo', text: 'Especialistas a tu servicio' }]).map((x, i) => ({ nombre: x.title || `Integrante ${i + 1}`, cargo: x.text, fotoUrl: this.imageAt(images, x.imageIndex) ?? (ctx.mockups ? foto(600, 600, i) : images[i]) })) };
-      case 'plans': return { ...base, tipo: 'planes', titulo: title, orientacion: 'vertical', columnas: 3, planes: (items.length ? items : [{ title: 'Plan recomendado', text }]).map((x, i) => ({ id: `${id}-${i}`, nombre: x.title || `Plan ${i + 1}`, precio: typeof x.price === 'number' && x.price >= 0 ? x.price : undefined, periodo: typeof x.period === 'string' ? x.period.slice(0, 30) : undefined, descripcion: x.text, caracteristicas: (Array.isArray(x.features) && x.features.length ? x.features : [x.value || 'Personalizable']).slice(0, 12).map(f => String(f).slice(0, 200)), ctaTexto: section.ctaText || 'Solicitar', ctaEnlace: this.link(section.ctaLink), destacado: i === 1 })) };
+      case 'plans': return { ...base, tipo: 'planes', titulo: title, orientacion: 'vertical', columnas: 3, planes: (items.length ? items : [{ title: 'Plan recomendado', text }]).map((x, i) => ({ id: `${id}-${i}`, nombre: x.title || `Plan ${i + 1}`, precio: valorPrecio(x.price), periodo: typeof x.period === 'string' ? x.period.slice(0, 30) : undefined, descripcion: x.text, caracteristicas: (Array.isArray(x.features) && x.features.length ? x.features : [x.value || 'Personalizable']).slice(0, 12).map(f => String(f).slice(0, 200)), ctaTexto: section.ctaText || 'Solicitar', ctaEnlace: this.link(section.ctaLink), destacado: i === 1 })) };
       case 'payment': return { ...base, tipo: 'metodos-pago', titulo: title, metodos: ['efectivo', 'transferencia', 'tarjeta'], nota: text, cta: { texto: section.ctaText || 'Ver formas de pago', enlace: '/pago', variante: 'primario' } };
       case 'contact': {
         // Formulario real creado por la "tool" del chat; fallback legacy con campos inline.

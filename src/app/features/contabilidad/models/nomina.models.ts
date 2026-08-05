@@ -1,7 +1,7 @@
 import { ModoAsientoAutomatico } from './contabilidad.models';
 import { CampoPersonalizado } from '../../../shared/models/clientes.models';
 
-export type EstadoEmpleadoNomina = 'ACTIVO' | 'INACTIVO';
+export type EstadoEmpleadoNomina = 'ACTIVO' | 'EN_LIQUIDACION' | 'INACTIVO';
 
 export type EstadoContratoNomina = 'VIGENTE' | 'FINALIZADO';
 
@@ -43,12 +43,27 @@ export type ModoDecimos = 'MENSUALIZADO' | 'ACUMULADO';
  * bonificacion del 25% por año, el despido intempestivo paga la escala del Codigo del Trabajo,
  * y la renuncia o el fin de contrato solo liquidan lo devengado.
  */
-export type MotivoSalidaNomina =
-  | 'RENUNCIA'
-  | 'DESPIDO_INTEMPESTIVO'
-  | 'DESAHUCIO'
+export type CausalTerminacionNomina =
+  | 'CAUSAS_CONTRATO'
   | 'MUTUO_ACUERDO'
+  | 'FIN_OBRA_PERIODO_SERVICIO'
+  | 'MUERTE_INCAPACIDAD_EMPLEADOR'
+  | 'MUERTE_INCAPACIDAD_TRABAJADOR'
+  | 'FUERZA_MAYOR'
+  | 'VISTO_BUENO_EMPLEADOR'
+  | 'VISTO_BUENO_TRABAJADOR'
+  | 'DESAHUCIO_TRABAJADOR'
+  | 'DESPIDO_INTEMPESTIVO'
+  | 'LIQUIDACION_NEGOCIO_CON_AVISO'
+  | 'LIQUIDACION_NEGOCIO_SIN_AVISO';
+
+/** Valores anteriores que se conservan para leer empleados y liquidaciones historicas. */
+export type MotivoSalidaLegacyNomina =
+  | 'RENUNCIA'
+  | 'DESAHUCIO'
   | 'FIN_CONTRATO';
+
+export type MotivoSalidaNomina = CausalTerminacionNomina | MotivoSalidaLegacyNomina;
 
 export type ConceptoProvision =
   | 'DECIMO_TERCERO'
@@ -140,6 +155,8 @@ export interface RubroNomina {
   nombre: string;
   tipo: TipoRubroNomina;
   afectaIess: boolean;
+  /** Incluye el valor mensual normal del rubro en la base de indemnizaciones. */
+  incluyeBaseIndemnizacion?: boolean;
   modoCalculo: ModoCalculoRubro;
   valorReferencia?: number;
   cuentaContableId?: string;
@@ -171,6 +188,10 @@ export interface RolPagoLinea {
   monto: number;
   origen: OrigenLineaRol;
   editable: boolean;
+  /** Metadatos congelados cuando la linea proviene de una liquidacion. */
+  origenLiquidacion?: OrigenRubroLiquidacion;
+  valorCalculadoLiquidacion?: number;
+  justificacionAjuste?: string;
 }
 
 export interface RolPagoDetalle {
@@ -271,6 +292,8 @@ export type CuentaNominaKey =
   | 'cuentaGastoFondosReservaId'
   | 'cuentaGastoVacacionesId'
   | 'cuentaGastoAportePatronalId'
+  | 'cuentaGastoDesahucioId'
+  | 'cuentaGastoIndemnizacionId'
   | 'cuentaSueldosPorPagarId'
   | 'cuentaIessPorPagarId'
   | 'cuentaBeneficiosSocialesPorPagarId'
@@ -281,7 +304,8 @@ export type CuentaNominaKey =
   | 'cuentaDecimoCuartoPorPagarId'
   | 'cuentaFondosReservaPorPagarId'
   | 'cuentaVacacionesPorPagarId'
-  | 'cuentaUtilidadesPorPagarId';
+  | 'cuentaUtilidadesPorPagarId'
+  | 'cuentaLiquidacionesPorPagarId';
 
 export interface ConfiguracionNominaContable {
   modoAsiento: ModoAsientoAutomatico;
@@ -308,6 +332,8 @@ export interface ConfiguracionNominaContable {
   cuentaGastoFondosReservaId: string;
   cuentaGastoVacacionesId: string;
   cuentaGastoAportePatronalId: string;
+  cuentaGastoDesahucioId: string;
+  cuentaGastoIndemnizacionId: string;
   cuentaSueldosPorPagarId: string;
   cuentaIessPorPagarId: string;
   cuentaBeneficiosSocialesPorPagarId: string;
@@ -321,6 +347,7 @@ export interface ConfiguracionNominaContable {
   cuentaVacacionesPorPagarId: string;
   /** Solo se exige al generar el rol de utilidades, no forma parte del checklist mensual. */
   cuentaUtilidadesPorPagarId: string;
+  cuentaLiquidacionesPorPagarId: string;
   camposPersonalizados: CampoPersonalizado[];
   actualizadoEn?: number;
 }
@@ -350,12 +377,41 @@ export interface RepartoUtilidades {
   totalExcedente: number;
 }
 
+export type OrigenRubroLiquidacion =
+  | 'SALDO_INICIAL'
+  | 'WINSUITE'
+  | 'ULTIMO_MES'
+  | 'INDEMNIZACION'
+  | 'AJUSTE'
+  | 'DESCUENTO';
+
+export interface SaldoInicialLaboralEmpleado {
+  empleadoId: string;
+  fechaCorte: string;
+  decimoTerceroPendiente: number;
+  decimoCuartoPendiente: number;
+  fondosReservaPendiente: number;
+  diasVacacionesPendientes: number;
+  valorVacacionesPendiente: number;
+  confirmadoSinSaldos: boolean;
+  observacion?: string;
+  referenciaDocumental?: string;
+  creadoEn?: number;
+  actualizadoEn?: number;
+}
+
 export interface RubroLiquidacion {
   codigo: string;
   nombre: string;
   tipo: TipoRubroNomina;
   monto: number;
   detalle: string;
+  origen: OrigenRubroLiquidacion;
+  valorCalculado: number;
+  cuentaContableId: string;
+  afectaIess?: boolean;
+  ajustado?: boolean;
+  justificacionAjuste?: string;
 }
 
 export interface LiquidacionEmpleado {
@@ -364,12 +420,44 @@ export interface LiquidacionEmpleado {
   fechaIngreso: string;
   fechaSalida: string;
   motivoSalida: MotivoSalidaNomina;
+  causalTerminacion: CausalTerminacionNomina;
   aniosServicio: number;
+  aniosCompletosServicio: number;
   ultimaRemuneracion: number;
+  diasTrabajadosUltimoMes: number;
+  sueldoUltimoMes: number;
+  baseImponibleIess: number;
+  aportePersonalIess: number;
+  aportePatronalIess: number;
+  contribucionCcc: number;
+  saldoInicial: SaldoInicialLaboralEmpleado;
+  rolesConsiderados: string[];
   rubros: RubroLiquidacion[];
   totalIngresos: number;
   totalDescuentos: number;
   netoPagar: number;
+}
+
+export type EstadoLiquidacionNomina = 'BORRADOR' | 'APROBADA' | 'ANULADA';
+
+export interface LiquidacionNomina extends LiquidacionEmpleado {
+  id?: string;
+  rolId: string;
+  fechaPago: string;
+  estado: EstadoLiquidacionNomina;
+  asientoId?: string | null;
+  detalleRolMensualRetirado?: RolPagoDetalle | null;
+  rolMensualId?: string | null;
+  configuracionCongelada: Partial<ConfiguracionNominaContable>;
+  cargoId?: string;
+  cargo: string;
+  departamentoId?: string;
+  departamento?: string;
+  cuentaGastoSueldosId?: string;
+  creadoEn?: number;
+  actualizadoEn?: number;
+  aprobadoEn?: number | null;
+  anuladoEn?: number | null;
 }
 
 export interface ResumenRolPago {
@@ -430,6 +518,11 @@ export interface AporteAcumuladoNomina {
   decimoCuartoProvision: number;
   fondosReservaProvision: number;
   vacacionesProvision: number;
+  /** Pagos de provisiones efectuados por este rol; las liquidaciones completan estos campos. */
+  decimoTerceroPagado?: number;
+  decimoCuartoPagado?: number;
+  fondosReservaPagado?: number;
+  vacacionesPagado?: number;
   /** Dias trabajados imputados al periodo; base del reparto de utilidades. */
   diasTrabajados: number;
   registradoEn: number;

@@ -111,13 +111,19 @@ export class ConfiguracionFacturacionPageComponent {
     '¿Qué me falta para pasar a producción?',
     'Solo cobro en efectivo y transferencia'
   ];
+  /**
+   * Reutiliza el selector del módulo Archivos: busca entre lo ya subido o sube uno nuevo, con la
+   * cuota y el almacenamiento que ese módulo ya controla.
+   */
   protected readonly copilotDocumento: ConfigDocumentoImportable = {
     etiqueta: 'Importar el PDF del RUC',
-    titulo: 'Importar el PDF del RUC',
-    ayuda: 'Sube el certificado de RUC que descargas del portal del SRI. De ahí salen la '
-      + 'dirección de la matriz, el régimen y tus establecimientos, que podrás revisar antes '
-      + 'de aplicar nada.',
-    sourceModule: 'facturacion'
+    title: 'Importar el PDF del RUC',
+    subtitle: 'Sube el certificado de RUC que descargas del portal del SRI, o reutiliza uno ya '
+      + 'cargado. El PDF se queda en WinSuit: se extrae su texto en el servidor y solo ese texto '
+      + 'se envía al proveedor de IA.',
+    sourceModule: 'facturacion',
+    allowUpload: true,
+    extensions: ['pdf']
   };
 
   protected readonly catalogos = signal<CatalogosFacturacion>({

@@ -1,9 +1,10 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -16,12 +17,14 @@ import { SuccessSnackbarComponent } from '../../../../shared/components/success-
 import { TwoDecimalInputDirective } from '../../../../shared/directives/two-decimal-input.directive';
 import { CampoPersonalizado } from '../../../../shared/models/clientes.models';
 import { dateAIso, isoADate } from '../../../../shared/utils/fecha-input.util';
+import { AuthorizationService } from '../../../../core/services/authorization.service';
 import {
   CargoNomina,
   DepartamentoNomina,
   EmpleadoNomina,
   ModoDecimos,
-  RegimenFondosReserva
+  RegimenFondosReserva,
+  SaldoInicialLaboralEmpleado
 } from '../../../contabilidad/models/nomina.models';
 import { NominaService } from '../../../contabilidad/services/nomina.service';
 
@@ -33,6 +36,7 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
     ReactiveFormsModule,
     RouterLink,
     MatButtonModule,
+    MatCheckboxModule,
     MatDatepickerModule,
     MatFormFieldModule,
     MatIconModule,
@@ -83,10 +87,72 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
               <mat-label>Estado</mat-label>
               <mat-select formControlName="estado">
                 <mat-option value="ACTIVO">Activo</mat-option>
+                <mat-option value="EN_LIQUIDACION">En liquidacion</mat-option>
                 <mat-option value="INACTIVO">Inactivo</mat-option>
               </mat-select>
             </mat-form-field>
           </div>
+        </section>
+
+        <section class="form-section opening-balance-section">
+          <div class="section-heading">
+            <div>
+              <h3>Saldos laborales anteriores</h3>
+              <p class="section-hint">Registra el punto de partida cuando la empresa comenzo a usar WinSuite despues del ingreso del empleado.</p>
+            </div>
+            @if (!saldoInicialActivo()) {
+              <button mat-stroked-button type="button" (click)="activarSaldoInicial()" [disabled]="!canUpdate()">
+                <mat-icon>history</mat-icon>
+                Configurar saldos
+              </button>
+            }
+          </div>
+
+          @if (saldoInicialActivo()) {
+            <div class="balance-note" role="status">
+              <mat-icon>fact_check</mat-icon>
+              <p>Los valores se conciliaran con los roles aprobados posteriores a la fecha de corte. No incluyas montos que ya fueron pagados.</p>
+            </div>
+            <div class="grid-4">
+              <mat-form-field appearance="outline">
+                <mat-label>Fecha de corte</mat-label>
+                <input matInput [matDatepicker]="pickerCorte" formControlName="saldoFechaCorte" />
+                <mat-datepicker-toggle matSuffix [for]="pickerCorte"></mat-datepicker-toggle>
+                <mat-datepicker #pickerCorte></mat-datepicker>
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Decimo tercero pendiente</mat-label>
+                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="saldoDecimoTercero" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Decimo cuarto pendiente</mat-label>
+                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="saldoDecimoCuarto" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Fondos de reserva pendientes</mat-label>
+                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="saldoFondosReserva" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Dias de vacaciones pendientes</mat-label>
+                <input matInput type="number" min="0" step="0.5" formControlName="saldoDiasVacaciones" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Valor vacaciones pendientes</mat-label>
+                <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="saldoValorVacaciones" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Referencia documental</mat-label>
+                <input matInput formControlName="saldoReferencia" placeholder="Acta, archivo o corte contable" />
+              </mat-form-field>
+              <mat-form-field appearance="outline">
+                <mat-label>Observacion</mat-label>
+                <input matInput formControlName="saldoObservacion" />
+              </mat-form-field>
+            </div>
+            <mat-checkbox formControlName="saldoConfirmadoCero">
+              Confirmo que no existen saldos anteriores cuando todos los valores son cero
+            </mat-checkbox>
+          }
         </section>
 
         <section class="form-section">
@@ -241,7 +307,7 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
 
         <footer class="actions-row">
           <a mat-button routerLink="/workspace/contabilidad/nomina/empleados">Cancelar</a>
-          <button mat-raised-button color="primary" type="submit" [disabled]="form.invalid || guardando()">
+          <button mat-raised-button color="primary" type="submit" [disabled]="form.invalid || guardando() || !canUpdate()">
             <mat-icon>save</mat-icon>
             Guardar empleado
           </button>
@@ -258,6 +324,7 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
     .page-header p { margin-top: .35rem; color: var(--muted-foreground); }
     .form-card { display: grid; gap: 1rem; }
     .form-section { display: grid; gap: .75rem; }
+    .section-heading { display: flex; justify-content: space-between; gap: 1rem; align-items: center; flex-wrap: wrap; }
     .section-hint { color: var(--muted-foreground); font-size: .88rem; max-width: 78ch; }
     .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
     .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
@@ -281,6 +348,10 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
       background: color-mix(in srgb, #f59e0b 12%, var(--tc-surface-container-lowest));
       color: var(--foreground);
     }
+    .opening-balance-section { padding: 1rem; border-radius: 1rem; background: var(--tc-surface-container-low); }
+    .balance-note { display: flex; gap: .7rem; align-items: flex-start; padding: .8rem 1rem; border-radius: .85rem; background: var(--tc-surface-container-lowest); }
+    .balance-note mat-icon { color: var(--primary); flex: 0 0 auto; }
+    .balance-note p { max-width: 72ch; color: var(--muted-foreground); line-height: 1.45; }
     .catalog-warning.legacy { align-items: flex-start; }
     .catalog-warning mat-icon { flex: 0 0 auto; color: #9a5b00; }
     .catalog-warning p { flex: 1 1 auto; line-height: 1.45; }
@@ -300,6 +371,7 @@ export class NominaEmpleadoFormComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly authorization = inject(AuthorizationService);
 
   protected readonly empleadoId = signal<string | null>(null);
   protected readonly camposPersonalizados = signal<CampoPersonalizado[]>([]);
@@ -309,6 +381,9 @@ export class NominaEmpleadoFormComponent implements OnInit {
   protected readonly departamentoLegacy = signal('');
   protected readonly guardando = signal(false);
   protected readonly error = signal<string | null>(null);
+  protected readonly saldoInicialActivo = signal(false);
+  protected readonly canUpdate = computed(() => this.authorization.canAccess('contabilidad', 'update'));
+  private saldoInicialActual: SaldoInicialLaboralEmpleado | null = null;
   private empleadoActual: EmpleadoNomina | null = null;
 
   protected readonly form = this.formBuilder.group({
@@ -327,6 +402,15 @@ export class NominaEmpleadoFormComponent implements OnInit {
     modoFondosReserva: ['ACUMULADO' as ModoDecimos, [Validators.required]],
     regimenFondosReserva: ['GENERAL' as RegimenFondosReserva, [Validators.required]],
     cargasFamiliares: [0],
+    saldoFechaCorte: [null as Date | null],
+    saldoDecimoTercero: [0],
+    saldoDecimoCuarto: [0],
+    saldoFondosReserva: [0],
+    saldoDiasVacaciones: [0],
+    saldoValorVacaciones: [0],
+    saldoConfirmadoCero: [false],
+    saldoReferencia: [''],
+    saldoObservacion: [''],
     camposPersonalizados: this.formBuilder.control<Record<string, any>>({})
   });
 
@@ -351,6 +435,9 @@ export class NominaEmpleadoFormComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    if (this.route.snapshot.queryParamMap.get('saldoInicial') === '1') {
+      this.saldoInicialActivo.set(true);
+    }
     this.nominaService
       .getConfiguracion()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -377,6 +464,7 @@ export class NominaEmpleadoFormComponent implements OnInit {
   }
 
   protected async guardar(): Promise<void> {
+    if (!this.canUpdate()) return;
     if (this.form.invalid) {
       this.form.markAllAsTouched();
       return;
@@ -386,7 +474,7 @@ export class NominaEmpleadoFormComponent implements OnInit {
     this.guardando.set(true);
     try {
       const raw = this.form.getRawValue();
-      await this.nominaService.guardarEmpleado({
+      const empleadoId = await this.nominaService.guardarEmpleado({
         ...this.empleadoActual,
         id: this.empleadoId() ?? undefined,
         cedula: raw.cedula ?? '',
@@ -408,6 +496,21 @@ export class NominaEmpleadoFormComponent implements OnInit {
         cargasFamiliares: Number(raw.cargasFamiliares ?? 0),
         camposPersonalizados: raw.camposPersonalizados ?? {}
       });
+      if (this.saldoInicialActivo()) {
+        await this.guardarSaldoInicial(empleadoId, raw);
+      } else if (!this.empleadoId()) {
+        await this.nominaService.guardarSaldoInicialLaboral({
+          empleadoId,
+          fechaCorte: dateAIso(raw.fechaIngreso),
+          decimoTerceroPendiente: 0,
+          decimoCuartoPendiente: 0,
+          fondosReservaPendiente: 0,
+          diasVacacionesPendientes: 0,
+          valorVacacionesPendiente: 0,
+          confirmadoSinSaldos: true,
+          observacion: 'Empleado administrado en WinSuite desde su ingreso.'
+        });
+      }
       this.toast('Empleado guardado.', 'save');
       await this.router.navigate(['/workspace/contabilidad/nomina/empleados']);
     } catch (error) {
@@ -446,6 +549,46 @@ export class NominaEmpleadoFormComponent implements OnInit {
     this.cargoLegacy.set(empleado.cargoId ? '' : empleado.cargo);
     this.departamentoLegacy.set(empleado.departamentoId ? '' : empleado.departamento ?? '');
     this.resolverCatalogosLegacy();
+    const saldo = await this.nominaService.getSaldoInicialLaboral(id);
+    if (saldo) {
+      this.saldoInicialActual = saldo;
+      this.saldoInicialActivo.set(true);
+      this.form.patchValue({
+        saldoFechaCorte: isoADate(saldo.fechaCorte),
+        saldoDecimoTercero: saldo.decimoTerceroPendiente,
+        saldoDecimoCuarto: saldo.decimoCuartoPendiente,
+        saldoFondosReserva: saldo.fondosReservaPendiente,
+        saldoDiasVacaciones: saldo.diasVacacionesPendientes,
+        saldoValorVacaciones: saldo.valorVacacionesPendiente,
+        saldoConfirmadoCero: saldo.confirmadoSinSaldos,
+        saldoReferencia: saldo.referenciaDocumental ?? '',
+        saldoObservacion: saldo.observacion ?? ''
+      });
+    }
+  }
+
+  protected activarSaldoInicial(): void {
+    this.saldoInicialActivo.set(true);
+    if (!this.form.controls.saldoFechaCorte.value) {
+      this.form.controls.saldoFechaCorte.setValue(this.form.controls.fechaIngreso.value);
+    }
+  }
+
+  private async guardarSaldoInicial(empleadoId: string, raw: ReturnType<typeof this.form.getRawValue>): Promise<void> {
+    if (!raw.saldoFechaCorte) throw new Error('Selecciona la fecha de corte de los saldos laborales.');
+    await this.nominaService.guardarSaldoInicialLaboral({
+      ...this.saldoInicialActual,
+      empleadoId,
+      fechaCorte: dateAIso(raw.saldoFechaCorte),
+      decimoTerceroPendiente: Number(raw.saldoDecimoTercero ?? 0),
+      decimoCuartoPendiente: Number(raw.saldoDecimoCuarto ?? 0),
+      fondosReservaPendiente: Number(raw.saldoFondosReserva ?? 0),
+      diasVacacionesPendientes: Number(raw.saldoDiasVacaciones ?? 0),
+      valorVacacionesPendiente: Number(raw.saldoValorVacaciones ?? 0),
+      confirmadoSinSaldos: !!raw.saldoConfirmadoCero,
+      referenciaDocumental: raw.saldoReferencia ?? '',
+      observacion: raw.saldoObservacion ?? ''
+    });
   }
 
   protected cargosSeleccionables(): CargoNomina[] {

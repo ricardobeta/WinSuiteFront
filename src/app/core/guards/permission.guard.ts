@@ -1,9 +1,41 @@
-import { CanMatchFn, Router } from '@angular/router';
+import { CanActivateFn, CanMatchFn, Router } from '@angular/router';
 import { inject } from '@angular/core';
 
 import { PermissionAction } from '../models/rbac.models';
 import { AuthService } from '../services/auth.service';
 import { AuthorizationService } from '../services/authorization.service';
+
+export const workspaceAuthGuard: CanActivateFn = async () => {
+  const authService = inject(AuthService);
+  const router = inject(Router);
+
+  await authService.waitForInitialBootstrap();
+
+  if (!authService.isAuthenticated()) {
+    return router.parseUrl('/auth/login');
+  }
+
+  if (authService.isPlatformAdmin()) {
+    return router.parseUrl('/super-admin');
+  }
+
+  return true;
+};
+
+export const redirectAuthenticatedGuard: CanActivateFn = async () => {
+  const authService = inject(AuthService);
+  const router = inject(Router);
+
+  await authService.waitForInitialBootstrap();
+
+  if (!authService.isAuthenticated()) {
+    return true;
+  }
+
+  return router.parseUrl(
+    authService.isPlatformAdmin() ? '/super-admin' : '/workspace/dashboard'
+  );
+};
 
 export function moduleAccessGuard(moduleKey: string, action: PermissionAction = 'read'): CanMatchFn {
   return async (): Promise<boolean | import('@angular/router').UrlTree> => {

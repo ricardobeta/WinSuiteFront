@@ -11,10 +11,12 @@ export class ReportesContablesPdfApiService {
   private readonly http = inject(HttpClient);
   private readonly baseUrl = `${environment.apiBaseUrl}/api/contabilidad/reportes`;
 
-  descargarEstadoSituacionFinancieraPdf(fechaCorte: string): Promise<Blob> {
+  /** `fechaDesde` activa el modo PERIODO: el PDF trae solo los montos acumulados en el rango. */
+  descargarEstadoSituacionFinancieraPdf(fechaCorte: string, fechaDesde?: string): Promise<Blob> {
     return firstValueFrom(this.http.post(`${this.baseUrl}/estados-financieros/pdf`, {
       tipo: 'ESF',
-      fechaCorte
+      fechaCorte,
+      fechaDesde: fechaDesde?.trim() || null
     }, { responseType: 'blob' }));
   }
 

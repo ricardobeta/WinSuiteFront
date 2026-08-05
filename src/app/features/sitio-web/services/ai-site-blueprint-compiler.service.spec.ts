@@ -217,6 +217,26 @@ describe('AiSiteBlueprintCompilerService', () => {
     }
   });
 
+  it('acepta un valor de plan en texto para negocios que no publican precio', () => {
+    const blocks = bodyBlocks([
+      {
+        type: 'plans',
+        items: [
+          { title: 'Fibra hogar', price: '1000 MB', period: '/mes', features: ['Wifi 6'] },
+          { title: 'Corporativo', price: 'A convenir', features: ['Soporte 24/7'] },
+          { title: 'Basico', price: '19.90', period: '/mes', features: ['Instalacion gratis'] },
+        ],
+      },
+    ]);
+    const plans = blocks[0];
+    if (plans.tipo === 'planes') {
+      expect(plans.planes[0].precio).toBe('1000 MB');
+      expect(plans.planes[1].precio).toBe('A convenir');
+      // Texto numerico puro: se guarda como monto para que se formatee como moneda.
+      expect(plans.planes[2].precio).toBe(19.9);
+    }
+  });
+
   it('clampa countdown a futuro y espaciador al rango del schema', () => {
     const blocks = bodyBlocks([
       { type: 'countdown', title: 'Ya paso', text: 'Fin', countdownDate: '2020-01-01' },

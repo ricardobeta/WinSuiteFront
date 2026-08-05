@@ -172,6 +172,9 @@ export class CrearAsientoBancoDialogComponent {
         referencia: this.data.movimientos[0].referencia || undefined,
         estado: 'BORRADOR',
         origen: 'MANUAL',
+        // Marca el asiento como atado a la conciliacion: al corregirlo se podran reasignar cuentas
+        // pero no cambiar los totales, que deben seguir cuadrando con el movimiento bancario.
+        origenModulo: 'BANCOS',
         lineas,
         totalDebe: monto,
         totalHaber: monto,

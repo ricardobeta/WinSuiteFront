@@ -27,6 +27,7 @@ import {
   FiltrosReporteContable,
   LibroDiarioFila,
   LibroMayorResultado,
+  ModoConsultaEstadoFinanciero,
   TipoCuenta
 } from '../../models/contabilidad.models';
 import { ConfiguracionContableService } from '../../services/configuracion-contable.service';
@@ -400,7 +401,7 @@ type GrupoEstadoFinanciero = {
                 <div>
                   <h3>Estado de Situacion Financiera</h3>
                   <p>
-                    Presenta activos, pasivos y patrimonio a una fecha de corte.
+                    Presenta activos, pasivos y patrimonio acumulados a una fecha de corte, o solo los montos acumulados en un periodo.
                     <button mat-icon-button type="button" matTooltipPosition="above" [matTooltip]="ayudaReportes.esf" aria-label="Ayuda ESF">
                       <mat-icon>help_outline</mat-icon>
                     </button>
@@ -409,10 +410,33 @@ type GrupoEstadoFinanciero = {
 
                 <div class="filters-grid compact">
                   <mat-form-field appearance="outline">
-                    <mat-label>Fecha de corte</mat-label>
+                    <mat-label>Tipo de consulta</mat-label>
+                    <mat-select [ngModel]="esfModo()" (ngModelChange)="cambiarModoEsf($event)">
+                      <mat-option value="ACUMULADO">Acumulado a la fecha</mat-option>
+                      <mat-option value="PERIODO">Solo montos del periodo</mat-option>
+                    </mat-select>
+                    <button mat-icon-button matIconSuffix type="button" matTooltipPosition="above" [matTooltip]="ayudaReportes.modoEsf" aria-label="Ayuda tipo de consulta ESF">
+                      <mat-icon>help_outline</mat-icon>
+                    </button>
+                  </mat-form-field>
+
+                  @if (esfModo() === 'PERIODO') {
+                    <mat-form-field appearance="outline">
+                      <mat-label>Fecha desde</mat-label>
+                      <input matInput [matDatepicker]="esfDesdePicker" [ngModel]="esfFechaDesde()" (ngModelChange)="actualizarFecha('esf', 'desde', $event)" />
+                      <mat-datepicker-toggle matIconSuffix [for]="esfDesdePicker"></mat-datepicker-toggle>
+                      <button mat-icon-button matIconSuffix type="button" matTooltipPosition="above" [matTooltip]="ayudaReportes.fechaDesdePeriodoEsf" aria-label="Ayuda fecha desde ESF">
+                        <mat-icon>help_outline</mat-icon>
+                      </button>
+                      <mat-datepicker #esfDesdePicker></mat-datepicker>
+                    </mat-form-field>
+                  }
+
+                  <mat-form-field appearance="outline">
+                    <mat-label>{{ esfModo() === 'PERIODO' ? 'Fecha hasta' : 'Fecha de corte' }}</mat-label>
                     <input matInput [matDatepicker]="esfCortePicker" [ngModel]="esfFechaCorte()" (ngModelChange)="actualizarFecha('esf', 'hasta', $event)" />
                     <mat-datepicker-toggle matIconSuffix [for]="esfCortePicker"></mat-datepicker-toggle>
-                    <button mat-icon-button matIconSuffix type="button" matTooltipPosition="above" [matTooltip]="ayudaReportes.fechaCorte" aria-label="Ayuda fecha corte ESF">
+                    <button mat-icon-button matIconSuffix type="button" matTooltipPosition="above" [matTooltip]="esfModo() === 'PERIODO' ? ayudaReportes.fechaHastaPeriodoEsf : ayudaReportes.fechaCorte" aria-label="Ayuda fecha corte ESF">
                       <mat-icon>help_outline</mat-icon>
                     </button>
                     <mat-datepicker #esfCortePicker></mat-datepicker>
@@ -434,11 +458,16 @@ type GrupoEstadoFinanciero = {
                   </div>
                 </div>
 
+                <p class="scope-note">
+                  <mat-icon>event_note</mat-icon>
+                  <span>{{ descripcionConsultaEsf() }}</span>
+                </p>
+
                 <div class="summary-row" [class.diff-error]="esf().diferencia !== 0">
                   <span>Total activo: <strong>{{ esf().totalActivo | number:'1.2-2' }}</strong></span>
                   <span>Total pasivo: <strong>{{ esf().totalPasivo | number:'1.2-2' }}</strong></span>
                   <span>Total patrimonio: <strong>{{ esf().totalPatrimonio | number:'1.2-2' }}</strong></span>
-                  <span>Resultado ejercicio: <strong>{{ esf().resultadoEjercicio | number:'1.2-2' }}</strong></span>
+                  <span>{{ esf().modo === 'PERIODO' ? 'Resultado del periodo' : 'Resultado ejercicio' }}: <strong>{{ esf().resultadoEjercicio | number:'1.2-2' }}</strong></span>
                   <span>Diferencia: <strong>{{ esf().diferencia | number:'1.2-2' }}</strong></span>
                 </div>
 
@@ -570,6 +599,10 @@ type GrupoEstadoFinanciero = {
     .span-2 { grid-column: span 2; }
     .actions-row, .summary-row { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .75rem; align-items: center; }
     .inline-actions { justify-content: flex-start; }
+    /* Los botones siempre ocupan su propia fila: el numero de filtros cambia segun el tipo de consulta. */
+    .filters-grid.compact .inline-actions { grid-column: 1 / -1; }
+    .scope-note { display: flex; align-items: center; gap: .5rem; margin: 0; color: var(--muted-foreground); font-size: .875rem; }
+    .scope-note mat-icon { color: var(--primary); font-size: 1.15rem; width: 1.15rem; height: 1.15rem; }
     .summary-row { justify-content: flex-start; padding: .75rem 1rem; border-radius: .5rem; background: var(--tc-surface-container); }
     .summary-row span { color: var(--muted-foreground); }
     .summary-row strong { color: var(--foreground); }
@@ -588,12 +621,15 @@ type GrupoEstadoFinanciero = {
     .financial-group > header { display: flex; justify-content: space-between; gap: 1rem; align-items: center; padding-bottom: .65rem; border-bottom: 2px solid color-mix(in srgb, var(--foreground) 65%, transparent); }
     .financial-group > header h4, .financial-group > header strong { font-weight: 800; color: var(--foreground); }
     .financial-group > header strong { text-align: right; font-variant-numeric: tabular-nums; }
-    .financial-section { display: grid; gap: .45rem; padding: .85rem; border-radius: .5rem; background: var(--tc-surface-container); }
+    .financial-section { display: grid; gap: 0; padding: .85rem; border-radius: .5rem; background: var(--tc-surface-container); }
     .financial-section header, .financial-line { display: flex; justify-content: space-between; gap: 1rem; align-items: center; }
-    .financial-section header { padding-bottom: .4rem; border-bottom: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); }
+    .financial-section header { margin-bottom: .35rem; padding: 0 .55rem .4rem; border-bottom: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); }
     .financial-section header h5, .financial-section header strong { font-weight: 700; color: var(--foreground); }
     .financial-section header strong { text-align: right; font-variant-numeric: tabular-nums; }
-    .financial-line { color: var(--muted-foreground); }
+    .financial-line { padding: .4rem .55rem; border-radius: .25rem; color: var(--muted-foreground); }
+    /* Filas alternas: permiten seguir la cuenta de izquierda a derecha hasta su monto. */
+    .financial-line:nth-of-type(odd) { background: color-mix(in srgb, var(--foreground) 6%, transparent); }
+    .financial-line:hover { background: color-mix(in srgb, var(--primary) 14%, transparent); }
     .financial-line strong { color: var(--foreground); font-variant-numeric: tabular-nums; }
     .calculated-line { color: var(--primary); }
     button[mat-icon-button] { color: var(--muted-foreground); }
@@ -625,7 +661,7 @@ export class ReportesContablesComponent implements OnInit {
     diario: 'Libro cronologico de asientos y lineas contables. Sirve para auditar que se registro, cuando y contra que cuenta.',
     mayor: 'Movimiento detallado por cuenta o grupo, con saldo anterior, debitos, creditos y saldo final.',
     balance: 'Resumen por cuenta para comprobar que el total debe coincide con el total haber en el rango consultado.',
-    esf: 'Foto financiera a una fecha: activos, pasivos, patrimonio y resultado del ejercicio calculado dinamicamente.',
+    esf: 'Foto financiera a una fecha: activos, pasivos, patrimonio y resultado calculado dinamicamente. Con el tipo de consulta se elige entre saldos acumulados historicos o solo los montos acumulados en el periodo.',
     eri: 'Resultado del periodo: ingresos menos costos y gastos. No usa saldos acumulados, usa movimientos del rango.',
     fechaDesde: 'Inicio del rango de movimientos a consultar. Incluye asientos desde esta fecha.',
     fechaHasta: 'Fin del rango de movimientos a consultar. Incluye asientos hasta esta fecha.',
@@ -635,7 +671,10 @@ export class ReportesContablesComponent implements OnInit {
     cuentaMayor: 'Seleccione una cuenta para ver su mayor individual. Si queda vacio se usa el grupo/tipo.',
     grupoMayor: 'Permite consultar mayores por tipo de cuenta cuando no se elige una cuenta especifica.',
     tipoBalance: 'Limita el balance de comprobacion a activos, pasivos, patrimonio, ingresos, costos o gastos.',
+    modoEsf: 'Acumulado a la fecha: saldos arrastrados desde el inicio de operaciones. Solo montos del periodo: unicamente lo acumulado por cada cuenta dentro del rango consultado, listando solo las cuentas con movimiento.',
     fechaCorte: 'Fecha hasta la que se acumulan saldos del Estado de Situacion Financiera.',
+    fechaDesdePeriodoEsf: 'Inicio del periodo. Los saldos anteriores a esta fecha no se arrastran al reporte.',
+    fechaHastaPeriodoEsf: 'Cierre del periodo. Se acumulan solo los movimientos entre la fecha desde y esta fecha.',
     fechaDesdeResultado: 'Inicio del periodo de ingresos, costos y gastos para el Estado de Resultado Integral.',
     fechaHastaResultado: 'Cierre del periodo de ingresos, costos y gastos para calcular el resultado neto.'
   };
@@ -664,10 +703,13 @@ export class ReportesContablesComponent implements OnInit {
   protected readonly mayorFechaHasta = signal<Date | null>(new Date());
   protected readonly balanceFechaDesde = signal<Date | null>(this.inicioMes());
   protected readonly balanceFechaHasta = signal<Date | null>(new Date());
+  protected readonly esfModo = signal<ModoConsultaEstadoFinanciero>('ACUMULADO');
+  protected readonly esfFechaDesde = signal<Date | null>(this.inicioMes());
   protected readonly esfFechaCorte = signal<Date | null>(new Date());
   protected readonly eriFechaDesde = signal<Date | null>(this.inicioMes());
   protected readonly eriFechaHasta = signal<Date | null>(new Date());
 
+  private esfFechaDesdeValue = this.formatFecha(this.inicioMes());
   private esfFechaCorteValue = this.formatFecha(new Date());
   private eriFechaDesdeValue = this.formatFecha(this.inicioMes());
   private eriFechaHastaValue = this.formatFecha(new Date());
@@ -754,7 +796,7 @@ export class ReportesContablesComponent implements OnInit {
     this.error.set(null);
     this.cargandoEsf.set(true);
     try {
-      this.esf.set(await this.service.generarEstadoSituacionFinanciera(this.esfFechaCorteValue));
+      this.esf.set(await this.service.generarEstadoSituacionFinanciera(this.esfFechaCorteValue, this.esfPeriodoDesde()));
     } catch {
       this.error.set('No se pudo generar el Estado de Situacion Financiera.');
     } finally {
@@ -780,7 +822,11 @@ export class ReportesContablesComponent implements OnInit {
     const signalTarget = this.getFechaSignal(reporte, limite);
 
     if (reporte === 'esf') {
-      this.esfFechaCorteValue = formatted;
+      if (limite === 'desde') {
+        this.esfFechaDesdeValue = formatted;
+      } else {
+        this.esfFechaCorteValue = formatted;
+      }
       signalTarget.set(fecha);
       return;
     }
@@ -857,7 +903,11 @@ export class ReportesContablesComponent implements OnInit {
   }
 
   protected exportarEsf(): void {
-    this.service.exportarCsv('estado-situacion-financiera.csv', this.esf().secciones.flatMap((seccion) => [
+    const resultado = this.esf();
+    const nombre = resultado.modo === 'PERIODO' && resultado.fechaDesde
+      ? `estado-situacion-financiera-${resultado.fechaDesde}_${resultado.fechaCorte}.csv`
+      : `estado-situacion-financiera-${resultado.fechaCorte}.csv`;
+    this.service.exportarCsv(nombre, this.esf().secciones.flatMap((seccion) => [
       { seccion: seccion.nombre, codigoCuenta: '', cuenta: 'TOTAL', monto: seccion.total },
       ...seccion.lineas.map((linea) => ({
         seccion: seccion.nombre,
@@ -898,12 +948,29 @@ export class ReportesContablesComponent implements OnInit {
     ]);
   }
 
+  protected cambiarModoEsf(modo: ModoConsultaEstadoFinanciero): void {
+    this.esfModo.set(modo);
+  }
+
+  /** Descripcion del alcance del ESF actualmente mostrado (no del formulario, que puede estar sin consultar). */
+  protected descripcionConsultaEsf(): string {
+    const resultado = this.esf();
+    if (resultado.modo === 'PERIODO' && resultado.fechaDesde) {
+      return `Montos acumulados del ${resultado.fechaDesde} al ${resultado.fechaCorte}. Solo se listan cuentas con movimiento en el periodo.`;
+    }
+    return `Saldos acumulados desde el inicio de operaciones hasta el ${resultado.fechaCorte}.`;
+  }
+
   protected async descargarEsfPdf(): Promise<void> {
     this.error.set(null);
     this.descargandoEsfPdf.set(true);
     try {
-      const blob = await this.pdfApi.descargarEstadoSituacionFinancieraPdf(this.esfFechaCorteValue);
-      this.descargarBlob(blob, `estado-situacion-financiera-${this.esfFechaCorteValue}.pdf`);
+      const desde = this.esfPeriodoDesde();
+      const blob = await this.pdfApi.descargarEstadoSituacionFinancieraPdf(this.esfFechaCorteValue, desde);
+      const nombre = desde
+        ? `estado-situacion-financiera-${desde}_${this.esfFechaCorteValue}.pdf`
+        : `estado-situacion-financiera-${this.esfFechaCorteValue}.pdf`;
+      this.descargarBlob(blob, nombre);
       this.mostrarMensaje('Estado de Situacion Financiera descargado.', 'picture_as_pdf');
     } catch {
       this.error.set('No se pudo descargar el PDF del Estado de Situacion Financiera.');
@@ -974,7 +1041,7 @@ export class ReportesContablesComponent implements OnInit {
       return limite === 'desde' ? this.mayorFechaDesde : this.mayorFechaHasta;
     }
     if (reporte === 'esf') {
-      return this.esfFechaCorte;
+      return limite === 'desde' ? this.esfFechaDesde : this.esfFechaCorte;
     }
     if (reporte === 'eri') {
       return limite === 'desde' ? this.eriFechaDesde : this.eriFechaHasta;
@@ -990,8 +1057,13 @@ export class ReportesContablesComponent implements OnInit {
     return { filas: [], totalDebe: 0, totalHaber: 0, totalSaldoDeudor: 0, totalSaldoAcreedor: 0, diferencia: 0 };
   }
 
+  /** Fecha de inicio a enviar al servicio: solo aplica en modo PERIODO. */
+  private esfPeriodoDesde(): string | undefined {
+    return this.esfModo() === 'PERIODO' ? this.esfFechaDesdeValue : undefined;
+  }
+
   private esfVacio(): EstadoSituacionFinancieraResultado {
-    return { fechaCorte: this.formatFecha(new Date()), secciones: [], totalActivo: 0, totalPasivo: 0, totalPatrimonio: 0, resultadoEjercicio: 0, diferencia: 0 };
+    return { fechaCorte: this.formatFecha(new Date()), modo: 'ACUMULADO', secciones: [], totalActivo: 0, totalPasivo: 0, totalPatrimonio: 0, resultadoEjercicio: 0, diferencia: 0 };
   }
 
   private eriVacio(): EstadoResultadoIntegralResultado {

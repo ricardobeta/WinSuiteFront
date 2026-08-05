@@ -20,6 +20,7 @@ import { SuccessSnackbarComponent } from '../../../../shared/components/success-
 import { PendienteContabilizacionDialogComponent } from '../../components/pendiente-contabilizacion-dialog/pendiente-contabilizacion-dialog.component';
 import { AsientoContable, EstadoAsiento, OrigenAsiento, PendienteContabilizacion } from '../../models/contabilidad.models';
 import { AsientosContablesService, AsientosPageCursor } from '../../services/asientos-contables.service';
+import { ConfiguracionContableService } from '../../services/configuracion-contable.service';
 import { IntegracionContableService } from '../../services/integracion-contable.service';
 import { PeriodoContableService } from '../../services/periodo-contable.service';
 
@@ -188,13 +189,20 @@ import { PeriodoContableService } from '../../services/periodo-contable.service'
                   <mat-chip [class.estado-borrador]="row.estado === 'BORRADOR'" [class.estado-aprobado]="row.estado === 'APROBADO'">
                     {{ row.estado }}
                   </mat-chip>
+                  @if (row.editadoEn) {
+                    <mat-icon
+                      class="marca-editado"
+                      matTooltipPosition="above"
+                      [matTooltip]="'Corregido: ' + (row.motivoUltimaEdicion || 'sin motivo registrado')"
+                    >edit_note</mat-icon>
+                  }
                 </td>
               </ng-container>
 
               <ng-container matColumnDef="acciones">
                 <th mat-header-cell *matHeaderCellDef>Acciones</th>
                 <td mat-cell *matCellDef="let row">
-                  <button mat-button type="button" (click)="editar(row)" matTooltipPosition="above" [matTooltip]="ayuda.editar">{{ row.estado === 'BORRADOR' ? 'Editar' : 'Ver' }}</button>
+                  <button mat-button type="button" (click)="editar(row)" matTooltipPosition="above" [matTooltip]="ayuda.editar">{{ etiquetaAccion(row) }}</button>
                   <button mat-button type="button" (click)="duplicar(row)" [disabled]="!canCreate()" matTooltipPosition="above" [matTooltip]="ayuda.duplicar">Duplicar</button>
                   <button mat-button type="button" (click)="reversar(row)" [disabled]="row.estado !== 'APROBADO' || !canCreate()" matTooltipPosition="above" [matTooltip]="ayuda.reversar">Reversar</button>
                   <button mat-button color="warn" type="button" (click)="eliminar(row)" [disabled]="row.estado !== 'BORRADOR' || !canDelete()" matTooltipPosition="above" [matTooltip]="ayuda.eliminar">Eliminar</button>
@@ -288,6 +296,7 @@ import { PeriodoContableService } from '../../services/periodo-contable.service'
     .empty-state h3 { margin: 0; color: var(--foreground); }
     .empty-state p { margin: 0; }
     .disabled-link { pointer-events: none; opacity: .55; }
+    .marca-editado { vertical-align: middle; margin-left: .35rem; font-size: 1.1rem; width: 1.1rem; height: 1.1rem; color: var(--muted-foreground); }
     button[mat-icon-button] { color: var(--muted-foreground); }
     @media (max-width: 860px) {
       .page-header { flex-direction: column; align-items: flex-start; }
@@ -299,6 +308,7 @@ export class AsientosListComponent implements OnInit {
   private readonly service = inject(AsientosContablesService);
   private readonly integracionService = inject(IntegracionContableService);
   private readonly periodoService = inject(PeriodoContableService);
+  private readonly configuracionService = inject(ConfiguracionContableService);
   private readonly authorization = inject(AuthorizationService);
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
@@ -320,12 +330,14 @@ export class AsientosListComponent implements OnInit {
   private readonly cursors = new Map<number, AsientosPageCursor | null>([[0, null]]);
   protected readonly canCreate = computed(() => this.authorization.canAccess('contabilidad', 'create'));
   protected readonly canDelete = computed(() => this.authorization.canAccess('contabilidad', 'delete'));
+  /** El listado consulta un solo periodo, asi que su estado se resuelve una vez para todas las filas. */
+  protected readonly periodoAbierto = signal(false);
   protected readonly ayuda = {
     submodulo: 'Registro de comprobantes contables manuales y automaticos. Solo los asientos aprobados afectan mayores, balances y estados financieros.',
     nuevo: 'Crea un asiento en borrador para registrar aperturas, ajustes o movimientos que no vienen de POS/compras.',
     buscar: 'Busca por numero, detalle, referencia, origen o documento origen.',
     estado: 'Borrador no afecta reportes; aprobado impacta saldos; reversado conserva trazabilidad del asiento anulado.',
-    editar: 'Permite revisar el detalle. Solo los borradores se pueden modificar.',
+    editar: 'Abre el detalle. Los borradores se editan y los asientos aprobados se pueden corregir mientras su periodo siga abierto: los saldos se ajustan solos.',
     duplicar: 'Copia lineas y datos para acelerar registros similares sin afectar el asiento original.',
     reversar: 'Genera un asiento inverso para anular contablemente un asiento aprobado sin borrar historico.',
     eliminar: 'Solo elimina borradores. Los asientos aprobados deben reversarse para mantener auditoria.'
@@ -400,6 +412,7 @@ export class AsientosListComponent implements OnInit {
 
     this.cargando.set(true);
     this.consultaRealizada.set(true);
+    void this.verificarPeriodo(this.periodo());
     try {
       const page = await this.service.getAsientosPage(
         this.periodo(),
@@ -430,6 +443,23 @@ export class AsientosListComponent implements OnInit {
     this.consultaRealizada.set(false);
     this.cursors.clear();
     this.cursors.set(0, null);
+  }
+
+  private async verificarPeriodo(periodoId: string): Promise<void> {
+    try {
+      const periodo = await this.configuracionService.getPeriodo(periodoId);
+      this.periodoAbierto.set(periodo?.estado === 'ABIERTO');
+    } catch {
+      this.periodoAbierto.set(false);
+    }
+  }
+
+  /** Borrador se edita siempre; un aprobado solo se corrige mientras su periodo siga abierto. */
+  protected etiquetaAccion(asiento: AsientoContable): string {
+    if (asiento.estado === 'BORRADOR') {
+      return 'Editar';
+    }
+    return asiento.estado === 'APROBADO' && this.periodoAbierto() ? 'Corregir' : 'Ver';
   }
 
   protected editar(asiento: AsientoContable): void {

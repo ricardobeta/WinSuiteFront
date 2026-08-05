@@ -9,6 +9,7 @@ import {
   AcumuladoEmpleado,
   AporteAcumuladoNomina,
   CargoNomina,
+  CausalTerminacionNomina,
   ConceptoProvision,
   ConfiguracionNominaContable,
   CuentaNominaKey,
@@ -17,10 +18,12 @@ import {
   DesgloseProvisionesEmpleado,
   EmpleadoNomina,
   LiquidacionEmpleado,
+  LiquidacionNomina,
   MotivoSalidaNomina,
   RepartoUtilidades,
   RepartoUtilidadesEmpleado,
   RubroLiquidacion,
+  SaldoInicialLaboralEmpleado,
   SaldoProvisionEmpleado,
   PreparacionNomina,
   RequisitoNomina,
@@ -48,12 +51,18 @@ import {
   calcularProporcionalMensual
 } from './nomina-calculos.util';
 import { PlanCuentasService } from './plan-cuentas.service';
-import { construirPartidasRolMensual } from './nomina-asiento.util';
+import { construirPartidasLiquidacion, construirPartidasRolMensual } from './nomina-asiento.util';
 import {
   normalizarNombreCatalogoNomina,
   prepararVistaPreviaCatalogosNomina,
   valoresUnicosCatalogoNomina
 } from './nomina-catalogos.util';
+import {
+  calcularDiasFondosReservaHastaSalida,
+  calcularDiasTrabajadosHastaSalida,
+  calcularIndemnizacionesLiquidacion,
+  normalizarCausalTerminacion
+} from './nomina-liquidacion.util';
 
 @Injectable({
   providedIn: 'root'
@@ -82,6 +91,8 @@ export class NominaService {
     { key: 'cuentaGastoFondosReservaId', tipos: ['GASTO', 'COSTO'], patrones: [['fondo', 'reserva'], ['beneficio', 'social']] },
     { key: 'cuentaGastoVacacionesId', tipos: ['GASTO', 'COSTO'], patrones: [['vacacion'], ['beneficio', 'social']] },
     { key: 'cuentaGastoAportePatronalId', tipos: ['GASTO', 'COSTO'], patrones: [['aporte', 'patronal'], ['iess'], ['seguridad', 'social'], ['beneficio', 'social']] },
+    { key: 'cuentaGastoDesahucioId', tipos: ['GASTO', 'COSTO'], patrones: [['desahucio'], ['indemnizacion'], ['beneficio', 'social']] },
+    { key: 'cuentaGastoIndemnizacionId', tipos: ['GASTO', 'COSTO'], patrones: [['indemnizacion', 'laboral'], ['indemnizacion'], ['beneficio', 'social']] },
     { key: 'cuentaSueldosPorPagarId', tipos: ['PASIVO'], patrones: [['sueldo', 'por pagar'], ['remuneracion', 'por pagar'], ['nomina', 'por pagar']] },
     { key: 'cuentaIessPorPagarId', tipos: ['PASIVO'], patrones: [['iess', 'por pagar'], ['iess'], ['seguridad', 'social']] },
     { key: 'cuentaBeneficiosSocialesPorPagarId', tipos: ['PASIVO'], patrones: [['beneficio', 'social', 'por pagar'], ['beneficio', 'por pagar']] },
@@ -92,7 +103,8 @@ export class NominaService {
     { key: 'cuentaDecimoCuartoPorPagarId', tipos: ['PASIVO'], patrones: [['decimo', 'cuart', 'por pagar'], ['decimo', 'cuarto']] },
     { key: 'cuentaFondosReservaPorPagarId', tipos: ['PASIVO'], patrones: [['fondo', 'reserva'], ['beneficio', 'social']] },
     { key: 'cuentaVacacionesPorPagarId', tipos: ['PASIVO'], patrones: [['vacacion'], ['beneficio', 'social']] },
-    { key: 'cuentaUtilidadesPorPagarId', tipos: ['PASIVO'], patrones: [['utilidad', 'por pagar'], ['participacion', 'trabajador'], ['utilidad'], ['beneficio', 'social']] }
+    { key: 'cuentaUtilidadesPorPagarId', tipos: ['PASIVO'], patrones: [['utilidad', 'por pagar'], ['participacion', 'trabajador'], ['utilidad'], ['beneficio', 'social']] },
+    { key: 'cuentaLiquidacionesPorPagarId', tipos: ['PASIVO'], patrones: [['liquidacion', 'por pagar'], ['finiquito', 'por pagar'], ['sueldo', 'por pagar']] }
   ];
 
   private getTenantPath(): string {
@@ -351,6 +363,34 @@ export class NominaService {
   async getEmpleadoById(empleadoId: string): Promise<EmpleadoNomina | null> {
     const snapshot = await get(ref(this.database, `${this.getNominaPath()}/empleados/${empleadoId}`));
     return snapshot.exists() ? { ...snapshot.val() as EmpleadoNomina, id: empleadoId } : null;
+  }
+
+  async getSaldoInicialLaboral(empleadoId: string): Promise<SaldoInicialLaboralEmpleado | null> {
+    const snapshot = await get(ref(this.database, `${this.getNominaPath()}/saldosInicialesLaborales/${empleadoId}`));
+    return snapshot.exists() ? this.normalizarSaldoInicial(empleadoId, snapshot.val()) : null;
+  }
+
+  async guardarSaldoInicialLaboral(saldo: SaldoInicialLaboralEmpleado): Promise<void> {
+    const empleado = await this.getEmpleadoById(saldo.empleadoId);
+    if (!empleado) throw new Error('El empleado ya no existe.');
+    if (!saldo.fechaCorte || saldo.fechaCorte < empleado.fechaIngreso) {
+      throw new Error('La fecha de corte debe ser igual o posterior al ingreso del empleado.');
+    }
+    const normalizado = this.normalizarSaldoInicial(saldo.empleadoId, saldo);
+    const tieneValores = normalizado.decimoTerceroPendiente > 0
+      || normalizado.decimoCuartoPendiente > 0
+      || normalizado.fondosReservaPendiente > 0
+      || normalizado.diasVacacionesPendientes > 0
+      || normalizado.valorVacacionesPendiente > 0;
+    if (!tieneValores && !normalizado.confirmadoSinSaldos) {
+      throw new Error('Confirma expresamente que el empleado no tiene saldos anteriores.');
+    }
+    const timestamp = Date.now();
+    await set(ref(this.database, `${this.getNominaPath()}/saldosInicialesLaborales/${saldo.empleadoId}`), {
+      ...normalizado,
+      creadoEn: saldo.creadoEn ?? timestamp,
+      actualizadoEn: timestamp
+    });
   }
 
   getConfiguracion(): Observable<ConfiguracionNominaContable> {
@@ -630,6 +670,9 @@ export class NominaService {
       nombre,
       tipo: rubro.tipo === 'DESCUENTO' ? 'DESCUENTO' : 'INGRESO',
       afectaIess: rubro.tipo === 'INGRESO' ? !!rubro.afectaIess : false,
+      incluyeBaseIndemnizacion: rubro.tipo === 'INGRESO'
+        ? (rubro.incluyeBaseIndemnizacion ?? !!rubro.afectaIess)
+        : false,
       modoCalculo,
       valorReferencia: modoCalculo === 'MANUAL' ? 0 : this.roundToTwo(rubro.valorReferencia ?? 0),
       cuentaContableId: rubro.cuentaContableId ?? '',
@@ -1065,11 +1108,11 @@ export class NominaService {
    * del historial de acumulados, y suma las indemnizaciones que correspondan al motivo de salida.
    * Devuelve el calculo para revisarlo antes de generar el rol.
    */
-  async calcularLiquidacion(
+  private async calcularLiquidacionLegacy(
     empleadoId: string,
     fechaSalida: string,
     motivoSalida: MotivoSalidaNomina
-  ): Promise<LiquidacionEmpleado> {
+  ): Promise<any> {
     const empleado = await this.getEmpleadoById(empleadoId);
     if (!empleado) {
       throw new Error('El empleado no existe.');
@@ -1140,13 +1183,13 @@ export class NominaService {
    * Genera el rol de finiquito y marca al empleado como inactivo con su fecha y motivo de salida,
    * para que deje de entrar en los roles mensuales siguientes.
    */
-  async generarRolLiquidacion(
+  private async generarRolLiquidacionLegacy(
     empleadoId: string,
     fechaSalida: string,
     motivoSalida: MotivoSalidaNomina,
     fechaPago: string
   ): Promise<string> {
-    const liquidacion = await this.calcularLiquidacion(empleadoId, fechaSalida, motivoSalida);
+    const liquidacion = await this.calcularLiquidacionLegacy(empleadoId, fechaSalida, motivoSalida);
     if (liquidacion.netoPagar <= 0) {
       throw new Error('La liquidacion no tiene valores a pagar.');
     }
@@ -1161,7 +1204,7 @@ export class NominaService {
       empleadoNombre: liquidacion.empleadoNombre,
       cargo: empleado?.cargo ?? '',
       sueldoBase: 0,
-      lineas: liquidacion.rubros.map((rubro) => ({
+      lineas: liquidacion.rubros.map((rubro: RubroLiquidacion) => ({
         rubroId: '',
         codigo: rubro.codigo,
         nombre: rubro.nombre,
@@ -1214,7 +1257,16 @@ export class NominaService {
       return;
     }
     this.cuentaRubroLiquidacion.set(codigo, cuentaContableId ?? '');
-    rubros.push({ codigo, nombre, tipo: 'INGRESO', monto: valor, detalle });
+    rubros.push({
+      codigo,
+      nombre,
+      tipo: 'INGRESO',
+      monto: valor,
+      valorCalculado: valor,
+      origen: 'WINSUITE',
+      cuentaContableId: cuentaContableId ?? '',
+      detalle
+    });
   }
 
   /** Años completos de servicio; el año en curso cuenta solo si ya se cumplio el aniversario. */
@@ -1238,6 +1290,466 @@ export class NominaService {
       anios.push(String(anio));
     }
     return anios;
+  }
+
+  async calcularLiquidacion(
+    empleadoId: string,
+    fechaSalida: string,
+    motivoSalida: MotivoSalidaNomina,
+    ajustes: RubroLiquidacion[] = []
+  ): Promise<LiquidacionEmpleado> {
+    const empleado = await this.getEmpleadoById(empleadoId);
+    if (!empleado) throw new Error('El empleado no existe.');
+    if (!fechaSalida) throw new Error('Ingresa la fecha de salida.');
+    if (fechaSalida < empleado.fechaIngreso) throw new Error('La fecha de salida no puede ser anterior a la fecha de ingreso.');
+
+    const saldoInicial = await this.getSaldoInicialLaboral(empleadoId);
+    if (!saldoInicial) {
+      throw new Error('Configura o confirma en cero los saldos laborales iniciales del empleado antes de liquidarlo.');
+    }
+    if (saldoInicial.fechaCorte > fechaSalida) {
+      throw new Error('La fecha de corte de los saldos iniciales no puede ser posterior a la fecha de salida.');
+    }
+    const causalTerminacion = normalizarCausalTerminacion(motivoSalida);
+    const periodo = fechaSalida.slice(0, 7);
+    const [config, rubrosConfigurados, cargos, departamentos, movimientos, anticipos, conflictoMensual] = await Promise.all([
+      this.getConfiguracionOnce(),
+      this.getRubrosOnce(),
+      this.getCargosOnce(),
+      this.getDepartamentosOnce(),
+      this.getMovimientosProvisionLiquidacion(empleadoId, saldoInicial.fechaCorte, fechaSalida),
+      this.anticiposService.getPendientesPorEmpleado(periodo),
+      this.getRolMensualEmpleado(periodo, empleadoId)
+    ]);
+    if (conflictoMensual?.rol.estado === 'APROBADO') {
+      throw new Error(`El empleado ya consta en el rol mensual aprobado ${conflictoMensual.rol.numero ?? periodo}. Reversa ese rol antes de liquidarlo.`);
+    }
+
+    const cargo = cargos.find((item) => item.id === empleado.cargoId);
+    const departamento = departamentos.find((item) => item.id === empleado.departamentoId);
+    const rubrosAutomaticos = rubrosConfigurados.filter((rubro) => rubro.activo && rubro.modoCalculo !== 'MANUAL');
+    const rubroAnticipo = rubrosConfigurados.find((rubro) => rubro.codigo === NominaService.CODIGO_RUBRO_ANTICIPO) ?? null;
+    const detalleMes = this.calcularDetalle(
+      empleado,
+      rubrosAutomaticos,
+      { ...config, provisionarDecimoTercero: true, provisionarDecimoCuarto: true, provisionarFondosReserva: true, provisionarVacaciones: true },
+      periodo,
+      this.crearLineaAnticipo(anticipos.get(empleadoId) ?? 0, rubroAnticipo, config),
+      cargo,
+      departamento,
+      fechaSalida
+    );
+    const ultimaRemuneracion = this.roundToTwo(empleado.sueldoBase + rubrosAutomaticos
+      .filter((rubro) => rubro.tipo === 'INGRESO' && (rubro.incluyeBaseIndemnizacion ?? rubro.afectaIess))
+      .reduce((total, rubro) => total + (rubro.modoCalculo === 'PORCENTAJE_SUELDO'
+        ? empleado.sueldoBase * Number(rubro.valorReferencia ?? 0) / 100
+        : Number(rubro.valorReferencia ?? 0)), 0));
+    const indemnizaciones = calcularIndemnizacionesLiquidacion(empleado.fechaIngreso, fechaSalida, ultimaRemuneracion, causalTerminacion);
+
+    const rubros: RubroLiquidacion[] = [];
+    for (const linea of detalleMes.lineas.filter((item) => item.origen !== 'SISTEMA')) {
+      this.agregarRubroLiquidacionCompleto(
+        rubros,
+        linea.origen === 'SUELDO' ? 'SUELDO_ULTIMO' : linea.codigo,
+        linea.origen === 'SUELDO' ? 'Sueldo proporcional del ultimo mes' : linea.nombre,
+        linea.monto,
+        linea.tipo,
+        linea.tipo === 'DESCUENTO' ? 'DESCUENTO' : 'ULTIMO_MES',
+        linea.origen === 'SUELDO'
+          ? (cargo?.cuentaGastoSueldosId ?? '')
+          : (linea.cuentaContableId || (linea.tipo === 'DESCUENTO' ? config.cuentaPrestamosEmpleadosId : config.cuentaGastoSueldosId)),
+        linea.origen === 'SUELDO'
+          ? `${detalleMes.diasTrabajadosPeriodo ?? 0} dias de ${empleado.sueldoBase.toFixed(2)}`
+          : 'Rubro automatico proporcional del ultimo mes',
+        linea.afectaIess
+      );
+    }
+    this.agregarRubroLiquidacionCompleto(rubros, 'IESS_PERSONAL', 'Aporte personal IESS', detalleMes.aportePersonalIess, 'DESCUENTO', 'DESCUENTO', config.cuentaIessPorPagarId, 'Aporte sobre la base gravada del ultimo mes');
+    this.agregarBeneficioPorOrigen(rubros, 'D13', 'Decimo tercero', saldoInicial.decimoTerceroPendiente, movimientos.decimoTercero, (detalleMes.decimoTerceroMensualizado ?? 0) + detalleMes.decimoTerceroProvision, config.cuentaDecimoTerceroPorPagarId, config.cuentaGastoDecimoTerceroId);
+    this.agregarBeneficioPorOrigen(rubros, 'D14', 'Decimo cuarto', saldoInicial.decimoCuartoPendiente, movimientos.decimoCuarto, (detalleMes.decimoCuartoMensualizado ?? 0) + detalleMes.decimoCuartoProvision, config.cuentaDecimoCuartoPorPagarId, config.cuentaGastoDecimoCuartoId);
+    this.agregarBeneficioPorOrigen(rubros, 'FRES', 'Fondos de reserva', saldoInicial.fondosReservaPendiente, movimientos.fondosReserva, (detalleMes.fondosReservaMensualizado ?? 0) + detalleMes.fondosReservaProvision, config.cuentaFondosReservaPorPagarId, config.cuentaGastoFondosReservaId);
+    this.agregarBeneficioPorOrigen(rubros, 'VAC', 'Vacaciones no gozadas', saldoInicial.valorVacacionesPendiente, movimientos.vacaciones, detalleMes.vacacionesProvision, config.cuentaVacacionesPorPagarId, config.cuentaGastoVacacionesId);
+    this.agregarRubroLiquidacionCompleto(rubros, 'DESAHUCIO', 'Bonificacion por desahucio', indemnizaciones.bonificacionDesahucio, 'INGRESO', 'INDEMNIZACION', config.cuentaGastoDesahucioId, `25% por ${indemnizaciones.aniosCompletos} anos completos`);
+    this.agregarRubroLiquidacionCompleto(rubros, 'INDEMNIZACION', 'Indemnizacion por terminacion', indemnizaciones.indemnizacionDespido, 'INGRESO', 'INDEMNIZACION', config.cuentaGastoIndemnizacionId, `${Math.min(25, Math.max(3, indemnizaciones.aniosParaDespido))} remuneraciones`);
+
+    const calculoAportes = this.aplicarAjustesYAportes(rubros, ajustes, config);
+    const rubrosAjustados = calculoAportes.rubros;
+    const totalIngresos = this.sumar(rubrosAjustados.filter((rubro) => rubro.tipo === 'INGRESO'), (rubro) => rubro.monto);
+    const totalDescuentos = this.sumar(rubrosAjustados.filter((rubro) => rubro.tipo === 'DESCUENTO'), (rubro) => rubro.monto);
+    const sueldoUltimoMes = rubrosAjustados.find((rubro) => rubro.codigo === 'SUELDO_ULTIMO')?.monto ?? detalleMes.sueldoBase;
+    return {
+      empleadoId,
+      empleadoNombre: `${empleado.apellidos} ${empleado.nombres}`.trim(),
+      fechaIngreso: empleado.fechaIngreso,
+      fechaSalida,
+      motivoSalida: causalTerminacion,
+      causalTerminacion,
+      aniosServicio: indemnizaciones.aniosCompletos,
+      aniosCompletosServicio: indemnizaciones.aniosCompletos,
+      ultimaRemuneracion,
+      diasTrabajadosUltimoMes: detalleMes.diasTrabajadosPeriodo ?? 0,
+      sueldoUltimoMes,
+      baseImponibleIess: calculoAportes.baseImponibleIess,
+      aportePersonalIess: calculoAportes.aportePersonalIess,
+      aportePatronalIess: calculoAportes.aportePatronalIess,
+      contribucionCcc: calculoAportes.contribucionCcc,
+      saldoInicial,
+      rolesConsiderados: movimientos.rolesConsiderados,
+      rubros: rubrosAjustados,
+      totalIngresos,
+      totalDescuentos,
+      netoPagar: this.roundToTwo(totalIngresos - totalDescuentos)
+    };
+  }
+
+  /** Expone respaldos heredados para que la pantalla no los oculte como si fueran cuentas nuevas. */
+  async getRespaldosConfiguracionOnce(): Promise<string[]> {
+    const snapshot = await get(ref(this.database, `${this.getNominaPath()}/configuracion`));
+    if (!snapshot.exists()) return [];
+    const raw = snapshot.val() as Partial<ConfiguracionNominaContable>;
+    const respaldos: string[] = [];
+    if (!raw.cuentaGastoDesahucioId && raw.cuentaGastoBeneficiosSocialesId) {
+      respaldos.push('Gasto por desahucio usa temporalmente Gasto de beneficios sociales.');
+    }
+    if (!raw.cuentaGastoIndemnizacionId && raw.cuentaGastoBeneficiosSocialesId) {
+      respaldos.push('Gasto por indemnizacion usa temporalmente Gasto de beneficios sociales.');
+    }
+    if (!raw.cuentaLiquidacionesPorPagarId && raw.cuentaSueldosPorPagarId) {
+      respaldos.push('Liquidaciones por pagar usa temporalmente Sueldos por pagar.');
+    }
+    return respaldos;
+  }
+
+  async generarRolLiquidacion(empleadoId: string, fechaSalida: string, motivoSalida: MotivoSalidaNomina, fechaPago: string): Promise<string> {
+    return this.guardarBorradorLiquidacion(empleadoId, fechaSalida, motivoSalida, fechaPago);
+  }
+
+  async guardarBorradorLiquidacion(
+    empleadoId: string,
+    fechaSalida: string,
+    motivoSalida: MotivoSalidaNomina,
+    fechaPago: string,
+    ajustes: RubroLiquidacion[] = []
+  ): Promise<string> {
+    if (!fechaPago) throw new Error('Selecciona la fecha de pago.');
+    if (fechaPago < fechaSalida) throw new Error('La fecha de pago no puede ser anterior a la fecha de salida.');
+    const existente = await this.getLiquidacionBorradorEmpleado(empleadoId);
+    if (existente) throw new Error(`Ya existe una liquidacion en borrador para este empleado (${existente.rolId}).`);
+    const liquidacion = await this.calcularLiquidacion(empleadoId, fechaSalida, motivoSalida, ajustes);
+    if (liquidacion.netoPagar <= 0) throw new Error('La liquidacion no tiene valores a pagar.');
+
+    const [config, empleado, cargos] = await Promise.all([this.getConfiguracionOnce(), this.getEmpleadoById(empleadoId), this.getCargosOnce()]);
+    if (!empleado) throw new Error('El empleado ya no existe.');
+    const cargo = cargos.find((item) => item.id === empleado.cargoId);
+    const periodo = fechaSalida.slice(0, 7);
+    const detalle = this.crearDetalleLiquidacion(liquidacion, empleado, cargo?.cuentaGastoSueldosId ?? '');
+    const timestamp = Date.now();
+    const rolId = push(ref(this.database, `${this.getNominaPath()}/rolesPago`)).key!;
+    const rol: RolPago = {
+      periodo,
+      tipo: 'LIQUIDACION',
+      fechaPago,
+      estado: 'BORRADOR',
+      modoAsiento: config.modoAsiento,
+      numero: await this.reservarNumero('LIQUIDACION', periodo.slice(0, 4)),
+      ...this.calcularTotales([detalle]),
+      totalEmpleados: 1,
+      asientoId: null,
+      asientoReversionId: null,
+      creadoEn: timestamp,
+      actualizadoEn: timestamp,
+      aprobadoEn: null,
+      anuladoEn: null,
+      reversadoEn: null
+    };
+    const conflicto = await this.getRolMensualEmpleado(periodo, empleadoId);
+    if (conflicto?.rol.estado === 'APROBADO') throw new Error('El rol mensual del periodo ya esta aprobado; reversalo antes de liquidar.');
+    const expediente: LiquidacionNomina = {
+      ...liquidacion,
+      rolId,
+      fechaPago,
+      estado: 'BORRADOR',
+      asientoId: null,
+      detalleRolMensualRetirado: conflicto?.detalle ?? null,
+      rolMensualId: conflicto?.rol.id ?? null,
+      configuracionCongelada: { ...config, camposPersonalizados: [] },
+      cargoId: empleado.cargoId,
+      cargo: empleado.cargo,
+      departamentoId: empleado.departamentoId,
+      departamento: empleado.departamento,
+      cuentaGastoSueldosId: cargo?.cuentaGastoSueldosId ?? '',
+      creadoEn: timestamp,
+      actualizadoEn: timestamp,
+      aprobadoEn: null,
+      anuladoEn: null
+    };
+    const updates: Record<string, unknown> = {
+      [`${this.getNominaPath()}/rolesPago/${rolId}`]: rol,
+      [`${this.getNominaPath()}/rolesPagoDetalles/${rolId}/${empleadoId}`]: detalle,
+      [`${this.getNominaPath()}/liquidaciones/${rolId}`]: expediente,
+      [`${this.getNominaPath()}/empleados/${empleadoId}/estado`]: 'EN_LIQUIDACION',
+      [`${this.getNominaPath()}/empleados/${empleadoId}/actualizadoEn`]: timestamp
+    };
+    if (conflicto?.rol.id) {
+      updates[`${this.getNominaPath()}/rolesPagoDetalles/${conflicto.rol.id}/${empleadoId}`] = null;
+      Object.assign(updates, this.updatesTotalesRol(conflicto.rol.id, conflicto.detalles.filter((item) => item.empleadoId !== empleadoId), timestamp));
+    }
+    await update(ref(this.database), this.paraFirebase(updates));
+    return rolId;
+  }
+
+  async getLiquidacionByRolId(rolId: string): Promise<LiquidacionNomina | null> {
+    const snapshot = await get(ref(this.database, `${this.getNominaPath()}/liquidaciones/${rolId}`));
+    return snapshot.exists() ? { ...snapshot.val() as LiquidacionNomina, id: rolId, rolId } : null;
+  }
+
+  async actualizarBorradorLiquidacion(rolId: string, fechaPago: string, ajustes: RubroLiquidacion[]): Promise<void> {
+    const [expediente, resumen] = await Promise.all([this.getLiquidacionByRolId(rolId), this.getRolPagoDetalle(rolId)]);
+    if (!expediente || !resumen || expediente.estado !== 'BORRADOR' || resumen.rol.estado !== 'BORRADOR') {
+      throw new Error('La liquidacion ya no esta disponible para editar.');
+    }
+    if (!fechaPago || fechaPago < expediente.fechaSalida) {
+      throw new Error('La fecha de pago no puede ser anterior a la fecha de salida.');
+    }
+    const empleado = await this.getEmpleadoById(expediente.empleadoId);
+    if (!empleado) throw new Error('El empleado ya no existe.');
+
+    const configCongelada = this.normalizarConfiguracion(expediente.configuracionCongelada);
+    const calculados = expediente.rubros.map((rubro) => ({
+      ...rubro,
+      monto: rubro.valorCalculado,
+      ajustado: false,
+      justificacionAjuste: ''
+    }));
+    const aportes = this.aplicarAjustesYAportes(calculados, ajustes, configCongelada);
+    const totalIngresos = this.sumar(aportes.rubros.filter((rubro) => rubro.tipo === 'INGRESO'), (rubro) => rubro.monto);
+    const totalDescuentos = this.sumar(aportes.rubros.filter((rubro) => rubro.tipo === 'DESCUENTO'), (rubro) => rubro.monto);
+    const actualizada: LiquidacionNomina = {
+      ...expediente,
+      fechaPago,
+      sueldoUltimoMes: aportes.rubros.find((rubro) => rubro.codigo === 'SUELDO_ULTIMO')?.monto ?? expediente.sueldoUltimoMes,
+      baseImponibleIess: aportes.baseImponibleIess,
+      aportePersonalIess: aportes.aportePersonalIess,
+      aportePatronalIess: aportes.aportePatronalIess,
+      contribucionCcc: aportes.contribucionCcc,
+      rubros: aportes.rubros,
+      totalIngresos,
+      totalDescuentos,
+      netoPagar: this.roundToTwo(totalIngresos - totalDescuentos),
+      actualizadoEn: Date.now()
+    };
+    if (actualizada.netoPagar <= 0) throw new Error('La liquidacion no tiene valores a pagar.');
+    const detalle = this.crearDetalleLiquidacion(actualizada, empleado, expediente.cuentaGastoSueldosId ?? '');
+    const { id: _id, ...expedientePersistible } = actualizada;
+    const { id: _rolId, ...rolPersistible } = resumen.rol;
+    await update(ref(this.database), this.paraFirebase({
+      [`${this.getNominaPath()}/liquidaciones/${rolId}`]: expedientePersistible,
+      [`${this.getNominaPath()}/rolesPagoDetalles/${rolId}/${expediente.empleadoId}`]: detalle,
+      [`${this.getNominaPath()}/rolesPago/${rolId}`]: {
+        ...rolPersistible,
+        fechaPago,
+        ...this.calcularTotales([detalle]),
+        totalEmpleados: 1,
+        actualizadoEn: actualizada.actualizadoEn
+      }
+    }));
+  }
+
+  private agregarRubroLiquidacionCompleto(
+    rubros: RubroLiquidacion[],
+    codigo: string,
+    nombre: string,
+    monto: number,
+    tipo: RubroLiquidacion['tipo'],
+    origen: RubroLiquidacion['origen'],
+    cuentaContableId: string,
+    detalle: string,
+    afectaIess = false
+  ): void {
+    const valor = this.roundToTwo(monto);
+    if (valor <= 0) return;
+    rubros.push({ codigo, nombre, tipo, monto: valor, valorCalculado: valor, origen, cuentaContableId: cuentaContableId ?? '', afectaIess, detalle });
+  }
+
+  private agregarBeneficioPorOrigen(
+    rubros: RubroLiquidacion[],
+    codigo: string,
+    nombre: string,
+    saldoInicial: number,
+    saldoWinsuite: number,
+    ultimoMes: number,
+    cuentaProvision: string,
+    cuentaGasto: string
+  ): void {
+    this.agregarRubroLiquidacionCompleto(rubros, `${codigo}_INICIAL`, `${nombre} - saldo inicial`, saldoInicial, 'INGRESO', 'SALDO_INICIAL', cuentaProvision, 'Saldo declarado a la fecha de corte');
+    this.agregarRubroLiquidacionCompleto(rubros, `${codigo}_WINSUITE`, `${nombre} - acumulado WinSuite`, saldoWinsuite, 'INGRESO', 'WINSUITE', cuentaProvision, 'Provisiones aprobadas menos pagos posteriores al corte');
+    this.agregarRubroLiquidacionCompleto(rubros, `${codigo}_ULTIMO`, `${nombre} - ultimo mes`, ultimoMes, 'INGRESO', 'ULTIMO_MES', cuentaGasto, 'Proporcional causado hasta la fecha de salida');
+  }
+
+  private aplicarAjustesLiquidacion(calculados: RubroLiquidacion[], ajustes: RubroLiquidacion[]): RubroLiquidacion[] {
+    if (ajustes.length === 0) return calculados;
+    const porCodigo = new Map(ajustes.map((rubro) => [rubro.codigo, rubro]));
+    const resultado = calculados.map((calculado) => {
+      const ajuste = porCodigo.get(calculado.codigo);
+      if (!ajuste) return calculado;
+      const monto = this.roundToTwo(Math.max(0, Number(ajuste.monto) || 0));
+      const modificado = monto !== calculado.valorCalculado;
+      const justificacion = ajuste.justificacionAjuste?.trim() ?? '';
+      if (modificado && !justificacion) throw new Error(`Justifica el ajuste de ${calculado.nombre}.`);
+      return { ...calculado, monto, ajustado: modificado, justificacionAjuste: modificado ? justificacion : '' };
+    });
+    for (const ajuste of ajustes.filter((item) => !calculados.some((calculado) => calculado.codigo === item.codigo))) {
+      const monto = this.roundToTwo(Math.max(0, Number(ajuste.monto) || 0));
+      if (monto <= 0) continue;
+      if (!ajuste.justificacionAjuste?.trim()) throw new Error(`Justifica el rubro adicional ${ajuste.nombre}.`);
+      resultado.push({
+        ...ajuste,
+        codigo: ajuste.codigo || `AJUSTE_${resultado.length + 1}`,
+        origen: ajuste.tipo === 'DESCUENTO' ? 'DESCUENTO' : 'AJUSTE',
+        valorCalculado: 0,
+        monto,
+        ajustado: true,
+        justificacionAjuste: ajuste.justificacionAjuste.trim()
+      });
+    }
+    return resultado;
+  }
+
+  private aplicarAjustesYAportes(
+    calculados: RubroLiquidacion[],
+    ajustes: RubroLiquidacion[],
+    config: ConfiguracionNominaContable
+  ): { rubros: RubroLiquidacion[]; baseImponibleIess: number; aportePersonalIess: number; aportePatronalIess: number; contribucionCcc: number } {
+    const rubrosSinIess = calculados.filter((rubro) => rubro.codigo !== 'IESS_PERSONAL');
+    const ajustesSinIess = ajustes.filter((rubro) => rubro.codigo !== 'IESS_PERSONAL');
+    const rubros = this.aplicarAjustesLiquidacion(rubrosSinIess, ajustesSinIess);
+    const baseImponibleIess = this.sumar(
+      rubros.filter((rubro) => rubro.tipo === 'INGRESO' && rubro.afectaIess),
+      (rubro) => rubro.monto
+    );
+    const aportePersonalCalculado = this.roundToTwo(baseImponibleIess * Number(config.porcentajeAportePersonalIess || 0) / 100);
+    const aportePatronalIess = this.roundToTwo(baseImponibleIess * Number(config.porcentajeAportePatronalIess || 0) / 100);
+    const contribucionCcc = this.roundToTwo(baseImponibleIess * Number(config.porcentajeContribucionCcc || 0) / 100);
+    let aportePersonalIess = aportePersonalCalculado;
+    if (aportePersonalCalculado > 0) {
+      const anterior = calculados.find((rubro) => rubro.codigo === 'IESS_PERSONAL');
+      const esperado: RubroLiquidacion = {
+        codigo: 'IESS_PERSONAL',
+        nombre: anterior?.nombre ?? 'Aporte personal IESS',
+        tipo: 'DESCUENTO',
+        monto: aportePersonalCalculado,
+        detalle: 'Aporte sobre la base gravada ajustada del ultimo mes',
+        origen: 'DESCUENTO',
+        valorCalculado: aportePersonalCalculado,
+        cuentaContableId: anterior?.cuentaContableId ?? config.cuentaIessPorPagarId,
+        afectaIess: false
+      };
+      const candidatoIess = ajustes.find((rubro) => rubro.codigo === 'IESS_PERSONAL');
+      const ajusteIess = candidatoIess && (
+        this.roundToTwo(candidatoIess.monto) !== this.roundToTwo(candidatoIess.valorCalculado)
+        || !!candidatoIess.justificacionAjuste?.trim()
+      ) ? candidatoIess : null;
+      const iessAjustado = this.aplicarAjustesLiquidacion([esperado], ajusteIess ? [ajusteIess] : []);
+      rubros.push(...iessAjustado);
+      aportePersonalIess = iessAjustado[0]?.monto ?? aportePersonalCalculado;
+    }
+    return { rubros, baseImponibleIess, aportePersonalIess, aportePatronalIess, contribucionCcc };
+  }
+
+  private crearDetalleLiquidacion(liquidacion: LiquidacionEmpleado, empleado: EmpleadoNomina, cuentaGastoSueldosId: string): RolPagoDetalle {
+    return {
+      id: empleado.id ?? liquidacion.empleadoId,
+      empleadoId: liquidacion.empleadoId,
+      empleadoNombre: liquidacion.empleadoNombre,
+      cargoId: empleado.cargoId,
+      cargo: empleado.cargo,
+      departamentoId: empleado.departamentoId,
+      departamento: empleado.departamento,
+      cuentaGastoSueldosId,
+      sueldoMensual: empleado.sueldoBase,
+      diasTrabajadosPeriodo: liquidacion.diasTrabajadosUltimoMes,
+      sueldoBase: liquidacion.sueldoUltimoMes,
+      baseImponibleIess: liquidacion.baseImponibleIess,
+      modoDecimoTercero: empleado.modoDecimoTercero,
+      modoDecimoCuarto: empleado.modoDecimoCuarto,
+      modoFondosReserva: empleado.modoFondosReserva,
+      regimenFondosReserva: empleado.regimenFondosReserva,
+      lineas: liquidacion.rubros.map((rubro: RubroLiquidacion) => ({
+        rubroId: '', codigo: rubro.codigo, nombre: rubro.nombre, tipo: rubro.tipo,
+        afectaIess: !!rubro.afectaIess,
+        cuentaContableId: rubro.cuentaContableId, monto: rubro.monto, origen: 'SISTEMA', editable: false,
+        origenLiquidacion: rubro.origen, valorCalculadoLiquidacion: rubro.valorCalculado,
+        justificacionAjuste: rubro.justificacionAjuste
+      })),
+      ingresosAdicionales: this.roundToTwo(liquidacion.totalIngresos - liquidacion.sueldoUltimoMes),
+      aportePersonalIess: liquidacion.aportePersonalIess,
+      aportePatronalIess: liquidacion.aportePatronalIess,
+      contribucionCcc: liquidacion.contribucionCcc,
+      anticipos: this.sumar(liquidacion.rubros.filter((rubro) => rubro.codigo === NominaService.CODIGO_RUBRO_ANTICIPO), (rubro) => rubro.monto),
+      prestamos: 0,
+      otrosDescuentos: this.roundToTwo(liquidacion.totalDescuentos - liquidacion.aportePersonalIess),
+      decimoTerceroProvision: 0,
+      decimoCuartoProvision: 0,
+      fondosReservaProvision: 0,
+      vacacionesProvision: 0,
+      totalIngresos: liquidacion.totalIngresos,
+      totalDescuentos: liquidacion.totalDescuentos,
+      totalBeneficios: this.sumar(liquidacion.rubros.filter((rubro) => /^(D13|D14|FRES|VAC)_/.test(rubro.codigo)), (rubro) => rubro.monto),
+      netoPagar: liquidacion.netoPagar
+    };
+  }
+
+  private async getMovimientosProvisionLiquidacion(empleadoId: string, fechaCorte: string, fechaSalida: string): Promise<{
+    decimoTercero: number;
+    decimoCuarto: number;
+    fondosReserva: number;
+    vacaciones: number;
+    rolesConsiderados: string[];
+  }> {
+    const snapshot = await get(ref(this.database, `${this.getNominaPath()}/acumulados/${empleadoId}`));
+    const aportes = snapshot.exists()
+      ? Object.values(snapshot.val() as Record<string, Record<string, AporteAcumuladoNomina>>).flatMap((porAnio) => Object.values(porAnio ?? {}))
+      : [];
+    const aplicables = aportes.filter((aporte) => {
+      const fecha = aporte.fechaPago || `${aporte.periodo}-30`;
+      return fecha > fechaCorte && fecha <= fechaSalida && aporte.tipo !== 'LIQUIDACION';
+    });
+    const mensuales = aplicables.filter((aporte) => aporte.tipo === 'MENSUAL');
+    const d13Pagado = this.sumar(aplicables, (aporte) => aporte.tipo === 'DECIMO_TERCERO' ? aporte.totalIngresos : (aporte.decimoTerceroPagado ?? 0));
+    const d14Pagado = this.sumar(aplicables, (aporte) => aporte.tipo === 'DECIMO_CUARTO' ? aporte.totalIngresos : (aporte.decimoCuartoPagado ?? 0));
+    return {
+      decimoTercero: Math.max(0, this.roundToTwo(this.sumar(mensuales, (aporte) => aporte.decimoTerceroProvision) - d13Pagado)),
+      decimoCuarto: Math.max(0, this.roundToTwo(this.sumar(mensuales, (aporte) => aporte.decimoCuartoProvision) - d14Pagado)),
+      fondosReserva: Math.max(0, this.roundToTwo(this.sumar(mensuales, (aporte) => aporte.fondosReservaProvision) - this.sumar(aplicables, (aporte) => aporte.fondosReservaPagado ?? 0))),
+      vacaciones: Math.max(0, this.roundToTwo(this.sumar(mensuales, (aporte) => aporte.vacacionesProvision) - this.sumar(aplicables, (aporte) => aporte.vacacionesPagado ?? 0))),
+      rolesConsiderados: aplicables.map((aporte) => aporte.rolId)
+    };
+  }
+
+  private async getRolMensualEmpleado(periodo: string, empleadoId: string): Promise<{
+    rol: RolPago;
+    detalle: RolPagoDetalle;
+    detalles: RolPagoDetalle[];
+  } | null> {
+    const rol = await this.buscarRolPorPeriodo(periodo, 'MENSUAL');
+    if (!rol?.id) return null;
+    const resumen = await this.getRolPagoDetalle(rol.id);
+    const detalle = resumen?.detalles.find((item) => item.empleadoId === empleadoId);
+    return resumen && detalle ? { rol: resumen.rol, detalle, detalles: resumen.detalles } : null;
+  }
+
+  async getLiquidacionBorradorEmpleado(empleadoId: string): Promise<LiquidacionNomina | null> {
+    const snapshot = await get(ref(this.database, `${this.getNominaPath()}/liquidaciones`));
+    if (!snapshot.exists()) return null;
+    const match = Object.entries(snapshot.val() as Record<string, LiquidacionNomina>)
+      .find(([, liquidacion]) => liquidacion.empleadoId === empleadoId && liquidacion.estado === 'BORRADOR');
+    return match ? { ...match[1], id: match[0], rolId: match[0] } : null;
+  }
+
+  private updatesTotalesRol(rolId: string, detalles: RolPagoDetalle[], timestamp: number): Record<string, unknown> {
+    const totales = this.calcularTotales(detalles);
+    return Object.fromEntries(Object.entries({ ...totales, totalEmpleados: detalles.length, actualizadoEn: timestamp })
+      .map(([campo, valor]) => [`${this.getNominaPath()}/rolesPago/${rolId}/${campo}`, valor]));
   }
 
   /** Crea el rol y sus detalles. Comun a todos los tipos de rol (mensual, decimos, utilidades, liquidacion). */
@@ -1288,7 +1800,14 @@ export class NominaService {
     }
 
     const config = await this.getConfiguracionOnce();
-    const recalculados = detalles.map((detalle) => this.recalcularDetalle(detalle, config));
+    // La liquidacion queda congelada en su flujo especializado. El editor generico no conoce
+    // saldos iniciales, conciliacion ni indemnizaciones y no debe reconstruirla como rol mensual.
+    const actuales = rol.tipo === 'LIQUIDACION'
+      ? (await this.getRolPagoDetalle(rolId))?.detalles ?? []
+      : detalles;
+    const recalculados = rol.tipo === 'LIQUIDACION'
+      ? actuales
+      : actuales.map((detalle) => this.recalcularDetalle(detalle, config));
     const detallesUpdates: Record<string, RolPagoDetalle> = {};
     for (const detalle of recalculados) {
       detallesUpdates[detalle.id] = detalle;
@@ -1373,12 +1892,28 @@ export class NominaService {
    */
   private async marcarAprobado(resumen: ResumenRolPago, patch: Record<string, unknown>): Promise<void> {
     const timestamp = Date.now();
-    await update(ref(this.database, `${this.getNominaPath()}/rolesPago/${resumen.rol.id}`), {
-      ...patch,
-      estado: 'APROBADO',
-      actualizadoEn: timestamp,
-      aprobadoEn: timestamp
-    });
+    if ((resumen.rol.tipo ?? 'MENSUAL') === 'LIQUIDACION') {
+      const liquidacion = await this.getLiquidacionByRolId(resumen.rol.id ?? '');
+      if (!liquidacion) throw new Error('No se encontro el expediente de la liquidacion.');
+      await update(ref(this.database), this.paraFirebase({
+        [`${this.getNominaPath()}/rolesPago/${resumen.rol.id}`]: { ...resumen.rol, ...patch, estado: 'APROBADO', actualizadoEn: timestamp, aprobadoEn: timestamp },
+        [`${this.getNominaPath()}/liquidaciones/${resumen.rol.id}/estado`]: 'APROBADA',
+        [`${this.getNominaPath()}/liquidaciones/${resumen.rol.id}/asientoId`]: patch['asientoId'] ?? null,
+        [`${this.getNominaPath()}/liquidaciones/${resumen.rol.id}/actualizadoEn`]: timestamp,
+        [`${this.getNominaPath()}/liquidaciones/${resumen.rol.id}/aprobadoEn`]: timestamp,
+        [`${this.getNominaPath()}/empleados/${liquidacion.empleadoId}/estado`]: 'INACTIVO',
+        [`${this.getNominaPath()}/empleados/${liquidacion.empleadoId}/fechaSalida`]: liquidacion.fechaSalida,
+        [`${this.getNominaPath()}/empleados/${liquidacion.empleadoId}/motivoSalida`]: liquidacion.causalTerminacion,
+        [`${this.getNominaPath()}/empleados/${liquidacion.empleadoId}/actualizadoEn`]: timestamp
+      }));
+    } else {
+      await update(ref(this.database, `${this.getNominaPath()}/rolesPago/${resumen.rol.id}`), {
+        ...patch,
+        estado: 'APROBADO',
+        actualizadoEn: timestamp,
+        aprobadoEn: timestamp
+      });
+    }
     await this.registrarAcumulados(resumen);
     await this.descontarAnticipos(resumen);
   }
@@ -1389,7 +1924,7 @@ export class NominaService {
    * sigue pendiente y reaparece en el siguiente rol en lugar de darse por cobrado.
    */
   private async descontarAnticipos(resumen: ResumenRolPago): Promise<void> {
-    if ((resumen.rol.tipo ?? 'MENSUAL') !== 'MENSUAL') {
+    if (!['MENSUAL', 'LIQUIDACION'].includes(resumen.rol.tipo ?? 'MENSUAL')) {
       return;
     }
     const cubierto = new Map<string, number>();
@@ -1437,6 +1972,10 @@ export class NominaService {
         decimoCuartoProvision: detalle.decimoCuartoProvision,
         fondosReservaProvision: detalle.fondosReservaProvision,
         vacacionesProvision: detalle.vacacionesProvision,
+        decimoTerceroPagado: this.sumar((detalle.lineas ?? []).filter((linea) => linea.codigo.startsWith('D13_')), (linea) => linea.monto),
+        decimoCuartoPagado: this.sumar((detalle.lineas ?? []).filter((linea) => linea.codigo.startsWith('D14_')), (linea) => linea.monto),
+        fondosReservaPagado: this.sumar((detalle.lineas ?? []).filter((linea) => linea.codigo.startsWith('FRES_')), (linea) => linea.monto),
+        vacacionesPagado: this.sumar((detalle.lineas ?? []).filter((linea) => linea.codigo.startsWith('VAC_')), (linea) => linea.monto),
         // Solo el rol mensual aporta tiempo de servicio; los demas liquidan lo ya acumulado.
         diasTrabajados: (rol.tipo ?? 'MENSUAL') === 'MENSUAL'
           ? detalle.diasTrabajadosPeriodo
@@ -1502,10 +2041,10 @@ export class NominaService {
       // Lo pagado sale de los roles de decimos ya aprobados. Fondos y vacaciones aun no tienen rol
       // propio de pago: se liquidan en el finiquito, asi que hoy su pagado es cero.
       const pagadoPorConcepto: Record<ConceptoProvision, number> = {
-        DECIMO_TERCERO: this.sumar(acumulado.aportes.filter((a) => a.tipo === 'DECIMO_TERCERO'), (a) => a.totalIngresos),
-        DECIMO_CUARTO: this.sumar(acumulado.aportes.filter((a) => a.tipo === 'DECIMO_CUARTO'), (a) => a.totalIngresos),
-        FONDOS_RESERVA: 0,
-        VACACIONES: 0
+        DECIMO_TERCERO: this.sumar(acumulado.aportes, (a) => (a.tipo === 'DECIMO_TERCERO' ? a.totalIngresos : 0) + (a.decimoTerceroPagado ?? 0)),
+        DECIMO_CUARTO: this.sumar(acumulado.aportes, (a) => (a.tipo === 'DECIMO_CUARTO' ? a.totalIngresos : 0) + (a.decimoCuartoPagado ?? 0)),
+        FONDOS_RESERVA: this.sumar(acumulado.aportes, (a) => a.fondosReservaPagado ?? 0),
+        VACACIONES: this.sumar(acumulado.aportes, (a) => a.vacacionesPagado ?? 0)
       };
 
       return {
@@ -1563,12 +2102,43 @@ export class NominaService {
     if (resumen.rol.estado === 'APROBADO') {
       throw new Error('El rol aprobado debe reversarse contablemente antes de anularse.');
     }
+    if ((resumen.rol.tipo ?? 'MENSUAL') === 'LIQUIDACION') {
+      throw new Error('Cancela la liquidacion desde su pantalla para restaurar correctamente al empleado.');
+    }
     await update(ref(this.database, `${this.getNominaPath()}/rolesPago/${rolId}`), {
       estado: 'ANULADO',
       actualizadoEn: Date.now(),
       anuladoEn: Date.now()
     });
     await this.anticiposService.liberarDescontados(rolId, resumen.rol.periodo);
+  }
+
+  async cancelarLiquidacionBorrador(rolId: string): Promise<void> {
+    const [liquidacion, resumen] = await Promise.all([this.getLiquidacionByRolId(rolId), this.getRolPagoDetalle(rolId)]);
+    if (!liquidacion || !resumen || liquidacion.estado !== 'BORRADOR' || resumen.rol.estado !== 'BORRADOR') {
+      throw new Error('Solo se puede cancelar una liquidacion en borrador.');
+    }
+    const timestamp = Date.now();
+    const updates: Record<string, unknown> = {
+      [`${this.getNominaPath()}/rolesPago/${rolId}/estado`]: 'ANULADO',
+      [`${this.getNominaPath()}/rolesPago/${rolId}/actualizadoEn`]: timestamp,
+      [`${this.getNominaPath()}/rolesPago/${rolId}/anuladoEn`]: timestamp,
+      [`${this.getNominaPath()}/liquidaciones/${rolId}/estado`]: 'ANULADA',
+      [`${this.getNominaPath()}/liquidaciones/${rolId}/actualizadoEn`]: timestamp,
+      [`${this.getNominaPath()}/liquidaciones/${rolId}/anuladoEn`]: timestamp,
+      [`${this.getNominaPath()}/empleados/${liquidacion.empleadoId}/estado`]: 'ACTIVO',
+      [`${this.getNominaPath()}/empleados/${liquidacion.empleadoId}/actualizadoEn`]: timestamp
+    };
+    if (liquidacion.rolMensualId && liquidacion.detalleRolMensualRetirado) {
+      const mensual = await this.getRolPagoDetalle(liquidacion.rolMensualId);
+      if (!mensual || mensual.rol.estado !== 'BORRADOR') {
+        throw new Error('El rol mensual relacionado ya no esta en borrador; reversalo antes de cancelar la liquidacion.');
+      }
+      const detalles = [...mensual.detalles.filter((item) => item.empleadoId !== liquidacion.empleadoId), liquidacion.detalleRolMensualRetirado];
+      updates[`${this.getNominaPath()}/rolesPagoDetalles/${liquidacion.rolMensualId}/${liquidacion.empleadoId}`] = liquidacion.detalleRolMensualRetirado;
+      Object.assign(updates, this.updatesTotalesRol(liquidacion.rolMensualId, detalles, timestamp));
+    }
+    await update(ref(this.database), this.paraFirebase(updates));
   }
 
   /**
@@ -1617,6 +2187,19 @@ export class NominaService {
       anuladoEn: timestamp,
       reversadoEn: timestamp
     });
+    if ((resumen.rol.tipo ?? 'MENSUAL') === 'LIQUIDACION') {
+      const liquidacion = await this.getLiquidacionByRolId(rolId);
+      if (liquidacion) {
+        await update(ref(this.database), {
+          [`${this.getNominaPath()}/liquidaciones/${rolId}/estado`]: 'ANULADA',
+          [`${this.getNominaPath()}/liquidaciones/${rolId}/asientoId`]: null,
+          [`${this.getNominaPath()}/liquidaciones/${rolId}/actualizadoEn`]: timestamp,
+          [`${this.getNominaPath()}/liquidaciones/${rolId}/anuladoEn`]: timestamp,
+          [`${this.getNominaPath()}/empleados/${liquidacion.empleadoId}/estado`]: 'EN_LIQUIDACION',
+          [`${this.getNominaPath()}/empleados/${liquidacion.empleadoId}/actualizadoEn`]: timestamp
+        });
+      }
+    }
   }
 
   getDefaultConfiguracion(): ConfiguracionNominaContable {
@@ -1639,6 +2222,8 @@ export class NominaService {
       cuentaGastoFondosReservaId: '',
       cuentaGastoVacacionesId: '',
       cuentaGastoAportePatronalId: '',
+      cuentaGastoDesahucioId: '',
+      cuentaGastoIndemnizacionId: '',
       cuentaSueldosPorPagarId: '',
       cuentaIessPorPagarId: '',
       cuentaBeneficiosSocialesPorPagarId: '',
@@ -1650,6 +2235,7 @@ export class NominaService {
       cuentaFondosReservaPorPagarId: '',
       cuentaVacacionesPorPagarId: '',
       cuentaUtilidadesPorPagarId: '',
+      cuentaLiquidacionesPorPagarId: '',
       camposPersonalizados: []
     };
   }
@@ -1723,17 +2309,26 @@ export class NominaService {
     periodo: string,
     lineaAnticipo: RolPagoLinea | null = null,
     cargo?: CargoNomina,
-    departamento?: DepartamentoNomina
+    departamento?: DepartamentoNomina,
+    fechaSalida?: string
   ): RolPagoDetalle {
     const sueldoMensual = this.roundToTwo(empleado.sueldoBase);
-    const diasTrabajadosPeriodo = calcularDiasTrabajadosPeriodo(empleado.fechaIngreso, periodo);
+    const diasTrabajadosPeriodo = fechaSalida
+      ? calcularDiasTrabajadosHastaSalida(empleado.fechaIngreso, fechaSalida)
+      : calcularDiasTrabajadosPeriodo(empleado.fechaIngreso, periodo);
     const factorProporcional = diasTrabajadosPeriodo / 30;
     const sueldoBase = calcularProporcionalMensual(sueldoMensual, diasTrabajadosPeriodo);
-    const diasFondosReservaPeriodo = calcularDiasFondosReservaPeriodo(
-      empleado.fechaIngreso,
-      periodo,
-      empleado.regimenFondosReserva ?? 'GENERAL'
-    );
+    const diasFondosReservaPeriodo = fechaSalida
+      ? calcularDiasFondosReservaHastaSalida(
+        empleado.fechaIngreso,
+        fechaSalida,
+        empleado.regimenFondosReserva ?? 'GENERAL'
+      )
+      : calcularDiasFondosReservaPeriodo(
+        empleado.fechaIngreso,
+        periodo,
+        empleado.regimenFondosReserva ?? 'GENERAL'
+      );
     const lineas: RolPagoLinea[] = [this.crearLineaSueldo(sueldoBase)];
 
     for (const rubro of rubrosAutomaticos) {
@@ -2024,23 +2619,9 @@ export class NominaService {
     // Finiquito: cada rubro se imputa a la cuenta que le corresponde (provision acumulada o gasto
     // nuevo por indemnizaciones) y el neto queda como sueldos por pagar.
     if (tipoRol === 'LIQUIDACION') {
-      const porCuenta = this.agruparLineasPorCuenta(
-        detalles,
-        (linea) => linea.tipo === 'INGRESO',
-        config.cuentaGastoBeneficiosSocialesId
-      );
-      for (const [cuentaId, monto] of porCuenta) {
-        this.addLinea(lineas, cuentasPorId, cuentaId, 'Liquidacion de haberes', monto, 0, lenient);
+      for (const partida of construirPartidasLiquidacion(detalles, config)) {
+        this.addLinea(lineas, cuentasPorId, partida.cuentaId, partida.descripcion, partida.debe, partida.haber, lenient);
       }
-      const descuentos = this.agruparLineasPorCuenta(
-        detalles,
-        (linea) => linea.tipo === 'DESCUENTO',
-        config.cuentaPrestamosEmpleadosId
-      );
-      for (const [cuentaId, monto] of descuentos) {
-        this.addLinea(lineas, cuentasPorId, cuentaId, 'Descuentos en liquidacion', 0, monto, lenient);
-      }
-      this.addLinea(lineas, cuentasPorId, config.cuentaSueldosPorPagarId, 'Liquidacion por pagar', 0, totals.totalNetoPagar, lenient);
       return lineas;
     }
 
@@ -2179,6 +2760,8 @@ export class NominaService {
     ['cuentaGastoFondosReservaId', 'gasto fondos de reserva'],
     ['cuentaGastoVacacionesId', 'gasto vacaciones'],
     ['cuentaGastoAportePatronalId', 'gasto aporte patronal'],
+    ['cuentaGastoDesahucioId', 'gasto desahucio'],
+    ['cuentaGastoIndemnizacionId', 'gasto indemnizaciones'],
     ['cuentaSueldosPorPagarId', 'sueldos por pagar'],
     ['cuentaIessPorPagarId', 'IESS por pagar'],
     ['cuentaBeneficiosSocialesPorPagarId', 'beneficios sociales por pagar'],
@@ -2188,6 +2771,7 @@ export class NominaService {
     ['cuentaDecimoCuartoPorPagarId', 'decimo cuarto por pagar'],
     ['cuentaFondosReservaPorPagarId', 'fondos reserva por pagar'],
     ['cuentaVacacionesPorPagarId', 'vacaciones por pagar']
+    , ['cuentaLiquidacionesPorPagarId', 'liquidaciones por pagar']
   ];
 
   private async validarCuentasConfiguracion(config: ConfiguracionNominaContable): Promise<void> {
@@ -2266,8 +2850,11 @@ export class NominaService {
       cuentaGastoDecimoCuartoId: raw?.cuentaGastoDecimoCuartoId ?? raw?.cuentaGastoBeneficiosSocialesId ?? '',
       cuentaGastoFondosReservaId: raw?.cuentaGastoFondosReservaId ?? raw?.cuentaGastoBeneficiosSocialesId ?? '',
       cuentaGastoVacacionesId: raw?.cuentaGastoVacacionesId ?? raw?.cuentaGastoBeneficiosSocialesId ?? '',
+      cuentaGastoDesahucioId: raw?.cuentaGastoDesahucioId ?? raw?.cuentaGastoBeneficiosSocialesId ?? '',
+      cuentaGastoIndemnizacionId: raw?.cuentaGastoIndemnizacionId ?? raw?.cuentaGastoBeneficiosSocialesId ?? '',
       cuentaDecimoTerceroPorPagarId: raw?.cuentaDecimoTerceroPorPagarId ?? raw?.cuentaDecimosPorPagarId ?? '',
       cuentaDecimoCuartoPorPagarId: raw?.cuentaDecimoCuartoPorPagarId ?? raw?.cuentaDecimosPorPagarId ?? '',
+      cuentaLiquidacionesPorPagarId: raw?.cuentaLiquidacionesPorPagarId ?? raw?.cuentaSueldosPorPagarId ?? '',
       camposPersonalizados: this.normalizarCampos(raw?.camposPersonalizados)
     };
   }
@@ -2290,6 +2877,28 @@ export class NominaService {
             .map((opcion) => ({ clave: opcion.clave, valor: opcion.valor }))
           : undefined
       }));
+  }
+
+  private normalizarSaldoInicial(empleadoId: string, value: unknown): SaldoInicialLaboralEmpleado {
+    const raw = value as Partial<SaldoInicialLaboralEmpleado> | null;
+    return {
+      empleadoId,
+      fechaCorte: raw?.fechaCorte ?? '',
+      decimoTerceroPendiente: this.roundToTwo(Math.max(0, Number(raw?.decimoTerceroPendiente) || 0)),
+      decimoCuartoPendiente: this.roundToTwo(Math.max(0, Number(raw?.decimoCuartoPendiente) || 0)),
+      fondosReservaPendiente: this.roundToTwo(Math.max(0, Number(raw?.fondosReservaPendiente) || 0)),
+      diasVacacionesPendientes: this.roundToTwo(Math.max(0, Number(raw?.diasVacacionesPendientes) || 0)),
+      valorVacacionesPendiente: this.roundToTwo(Math.max(0, Number(raw?.valorVacacionesPendiente) || 0)),
+      confirmadoSinSaldos: !!raw?.confirmadoSinSaldos,
+      observacion: raw?.observacion?.trim() ?? '',
+      referenciaDocumental: raw?.referenciaDocumental?.trim() ?? '',
+      creadoEn: raw?.creadoEn,
+      actualizadoEn: raw?.actualizadoEn
+    };
+  }
+
+  private paraFirebase<T>(value: T): T {
+    return JSON.parse(JSON.stringify(value)) as T;
   }
 
   private observarCatalogo<T extends { id?: string; nombre: string }>(coleccion: 'cargos' | 'departamentos'): Observable<T[]> {

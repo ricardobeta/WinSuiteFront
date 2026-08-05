@@ -12,16 +12,13 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { firstValueFrom } from 'rxjs';
 
+import { AuthorizationService } from '../../../../core/services/authorization.service';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { TwoDecimalInputDirective } from '../../../../shared/directives/two-decimal-input.directive';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
-import {
-  RevisarAsientoData,
-  RevisarAsientoDialogComponent
-} from '../../../contabilidad/components/revisar-asiento-dialog/revisar-asiento-dialog.component';
-import { AsientoContableLinea } from '../../../contabilidad/models/contabilidad.models';
 import {
   ConceptoProvision,
   ConfiguracionNominaContable,
@@ -32,10 +29,11 @@ import {
 } from '../../../contabilidad/models/nomina.models';
 import { AnticiposNominaService } from '../../../contabilidad/services/anticipos-nomina.service';
 import { calcularDiasFondosReservaPeriodo } from '../../../contabilidad/services/nomina-calculos.util';
+import { TasasIess } from '../../../contabilidad/services/nomina-calculos.util';
 import { IntegracionContableService } from '../../../contabilidad/services/integracion-contable.service';
 import { NominaPdfApiService } from '../../../contabilidad/services/nomina-pdf-api.service';
 import { NominaService } from '../../../contabilidad/services/nomina.service';
-import { PlanCuentasService } from '../../../contabilidad/services/plan-cuentas.service';
+import { RevisionAsientoService } from '../../../contabilidad/services/revision-asiento.service';
 import {
   FilaDesglose,
   aportesIessDetalle,
@@ -44,6 +42,7 @@ import {
   desgloseIngresos,
   desgloseOtrosDescuentos
 } from './rol-detalle-desglose.util';
+import { NominaRolConsolidadoComponent } from './nomina-rol-consolidado.component';
 
 type NombreSeccion = 'INGRESOS' | 'DESCUENTOS' | 'PROVISIONES' | 'IESS';
 
@@ -108,6 +107,8 @@ interface EmpleadoEdit {
     MatSelectModule,
     MatSnackBarModule,
     MatTooltipModule,
+    MatButtonToggleModule,
+    NominaRolConsolidadoComponent,
     TwoDecimalInputDirective
   ],
   template: `
@@ -122,10 +123,35 @@ interface EmpleadoEdit {
           <span class="pill" [class.ok]="rol()?.estado === 'APROBADO'" [class.off]="rol()?.estado === 'ANULADO'">
             {{ rol()?.estado }}
           </span>
-          <button mat-stroked-button type="button" (click)="descargarComprobantes()" [disabled]="descargando()">
+          <button
+            mat-stroked-button
+            type="button"
+            (click)="descargarComprobantes()"
+            [disabled]="exportacionBloqueada()"
+            [attr.aria-describedby]="cambiosSinGuardar() ? 'save-export-note' : null"
+            [matTooltip]="cambiosSinGuardar() ? 'Guarda el borrador para exportar' : 'Un comprobante por empleado'"
+          >
             <mat-icon>picture_as_pdf</mat-icon>
-            Comprobantes
+            {{ descargando() ? 'Generando...' : 'PDF comprobantes' }}
           </button>
+          <button
+            mat-raised-button
+            color="primary"
+            type="button"
+            (click)="descargarConsolidado()"
+            [disabled]="exportacionBloqueada()"
+            [attr.aria-describedby]="cambiosSinGuardar() ? 'save-export-note' : null"
+            [matTooltip]="cambiosSinGuardar() ? 'Guarda el borrador para exportar' : 'Matriz completa del rol'"
+          >
+            <mat-icon>table_view</mat-icon>
+            {{ descargandoConsolidado() ? 'Generando...' : 'PDF consolidado' }}
+          </button>
+          @if (cambiosSinGuardar()) {
+            <span id="save-export-note" class="export-warning" role="status">
+              <mat-icon>save</mat-icon>
+              Guarda el borrador para exportar
+            </span>
+          }
           <a mat-button routerLink="/workspace/contabilidad/nomina/roles">
             <mat-icon>arrow_back</mat-icon>
             Volver
@@ -160,14 +186,36 @@ interface EmpleadoEdit {
         </article>
       </section>
 
-      @if (editable()) {
+      <section class="view-switcher" aria-label="Vista del rol de pago">
+        <div>
+          <strong>Forma de revisión</strong>
+          <span>{{ vista() === 'INDIVIDUAL' ? 'Edita y revisa cada empleado.' : 'Compara el rol completo en una matriz.' }}</span>
+        </div>
+        <mat-button-toggle-group
+          [value]="vista()"
+          (change)="vista.set($event.value)"
+          aria-label="Seleccionar vista del rol"
+          hideSingleSelectionIndicator
+        >
+          <mat-button-toggle value="INDIVIDUAL">
+            <mat-icon>person</mat-icon>
+            Por empleado
+          </mat-button-toggle>
+          <mat-button-toggle value="CONSOLIDADO">
+            <mat-icon>table_view</mat-icon>
+            Consolidado
+          </mat-button-toggle>
+        </mat-button-toggle-group>
+      </section>
+
+      @if (vista() === 'INDIVIDUAL' && editable()) {
         <section class="hint">
           <mat-icon>info</mat-icon>
           Ajusta ingresos y descuentos por empleado. El IESS, las provisiones y el neto se recalculan automaticamente. Guarda el borrador y aprueba para generar el asiento contable.
         </section>
       }
 
-      @if (editable() && empleadosConAnticipoPendiente() > 0) {
+      @if (vista() === 'INDIVIDUAL' && editable() && empleadosConAnticipoPendiente() > 0) {
         <section class="hint aviso">
           <mat-icon>account_balance_wallet</mat-icon>
           <span>
@@ -181,6 +229,7 @@ interface EmpleadoEdit {
         </section>
       }
 
+      @if (vista() === 'INDIVIDUAL') {
       <section class="empleados">
         @for (item of empleados(); track item.id; let i = $index) {
           <mat-expansion-panel class="surface-card">
@@ -336,6 +385,15 @@ interface EmpleadoEdit {
         }
       </section>
 
+      } @else {
+        <section class="surface-card consolidado-card">
+          <app-nomina-rol-consolidado
+            [detalles]="detallesConsolidado()"
+            [tasasIess]="tasasConsolidado()"
+          />
+        </section>
+      }
+
       <!-- Tabla comun de los tres desgloses del resumen: ingresos, otros descuentos y provisiones. -->
       <ng-template #desglose let-seccion>
         <div class="desglose-detalle">
@@ -383,7 +441,13 @@ interface EmpleadoEdit {
       </ng-template>
 
       <footer class="surface-card actions-bar">
-        @if (editable()) {
+        @if (rol()?.tipo === 'LIQUIDACION' && rol()?.estado === 'BORRADOR') {
+          <p class="muted">La conciliacion y sus ajustes se administran desde la liquidacion del empleado.</p>
+          <a mat-raised-button color="primary" [routerLink]="['/workspace/contabilidad/nomina/empleados', empleados()[0]?.empleadoId, 'liquidar']">
+            <mat-icon>fact_check</mat-icon>
+            Continuar liquidacion
+          </a>
+        } @else if (editable()) {
           <button mat-raised-button color="primary" type="button" (click)="guardar()" [disabled]="procesando()">
             <mat-icon>save</mat-icon>
             Guardar borrador
@@ -412,7 +476,7 @@ interface EmpleadoEdit {
             @if (rol()?.reversadoEn) { Fue reversado contablemente. }
           </p>
           @if (rol()?.estado === 'APROBADO') {
-            <button mat-stroked-button color="warn" type="button" (click)="reversar()" [disabled]="procesando()">
+            <button mat-stroked-button color="warn" type="button" (click)="reversar()" [disabled]="procesando() || !canUpdate()">
               <mat-icon>undo</mat-icon>
               Reversar rol
             </button>
@@ -429,6 +493,8 @@ interface EmpleadoEdit {
     h2, p { margin: 0; }
     .page-header p, .muted { color: var(--muted-foreground); }
     .header-actions { display: flex; gap: .75rem; align-items: center; }
+    .export-warning { display: inline-flex; align-items: center; gap: .35rem; color: var(--tc-warning); font-size: .78rem; font-weight: 700; }
+    .export-warning mat-icon { width: 1rem; height: 1rem; font-size: 1rem; }
     .pill { display: inline-flex; padding: .3rem .75rem; border-radius: 999px; background: color-mix(in srgb, #f59e0b 18%, transparent); font-weight: 700; }
     .pill.ok { background: color-mix(in srgb, var(--primary) 18%, transparent); }
     .pill.off { background: color-mix(in srgb, var(--muted-foreground) 18%, transparent); color: var(--muted-foreground); }
@@ -439,6 +505,12 @@ interface EmpleadoEdit {
     .kpi-card.highlight { outline: 2px solid color-mix(in srgb, var(--primary) 40%, transparent); }
     .hint { display: flex; gap: .5rem; align-items: center; padding: .75rem 1rem; border-radius: .6rem; background: color-mix(in srgb, var(--primary) 10%, transparent); color: var(--foreground); }
     .hint.aviso { flex-wrap: wrap; background: color-mix(in srgb, #f59e0b 14%, transparent); }
+    .view-switcher { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .8rem 1rem; border-radius: var(--tc-radius-lg); background: var(--tc-surface-container-low); }
+    .view-switcher > div { display: grid; gap: .12rem; }
+    .view-switcher > div span { color: var(--muted-foreground); font-size: .84rem; }
+    .view-switcher mat-button-toggle { min-height: 44px; }
+    .view-switcher mat-icon { margin-right: .35rem; }
+    .consolidado-card { min-width: 0; padding: 1rem; background: var(--tc-surface-container-lowest); }
     .hint.aviso span { flex: 1 1 320px; }
     .empleados { display: grid; gap: .6rem; }
     .desc-cargo { color: var(--muted-foreground); }
@@ -481,13 +553,18 @@ interface EmpleadoEdit {
     @media (max-width: 900px) {
       .kpi-row { grid-template-columns: repeat(2, 1fr); }
       .linea-row { grid-template-columns: 1fr 1fr auto; }
+      .header-actions { align-items: stretch; flex-wrap: wrap; }
+      .view-switcher { align-items: stretch; flex-direction: column; }
+      .view-switcher mat-button-toggle-group { width: 100%; }
+      .view-switcher mat-button-toggle { flex: 1; }
     }
   `]
 })
 export class NominaRolDetalleComponent implements OnInit {
   private readonly nominaService = inject(NominaService);
+  private readonly authorization = inject(AuthorizationService);
   private readonly anticiposService = inject(AnticiposNominaService);
-  private readonly planCuentasService = inject(PlanCuentasService);
+  private readonly revisionAsiento = inject(RevisionAsientoService);
   private readonly pdfApi = inject(NominaPdfApiService);
   private readonly integracionContable = inject(IntegracionContableService);
   private readonly route = inject(ActivatedRoute);
@@ -498,10 +575,15 @@ export class NominaRolDetalleComponent implements OnInit {
 
   protected readonly rol = signal<RolPago | null>(null);
   protected readonly empleados = signal<EmpleadoEdit[]>([]);
+  protected readonly vista = signal<'INDIVIDUAL' | 'CONSOLIDADO'>('INDIVIDUAL');
+  protected readonly cambiosSinGuardar = signal(false);
+  protected readonly detallesConsolidado = computed(() => this.empleados().map((item) => item.resumen));
+  protected readonly tasasConsolidado = signal<TasasIess>({ personal: 0, patronal: 0, ccc: 0 });
   protected readonly rubros = signal<RubroNomina[]>([]);
   protected readonly procesando = signal(false);
   protected readonly error = signal<string | null>(null);
-  protected readonly editable = computed(() => this.rol()?.estado === 'BORRADOR');
+  protected readonly canUpdate = computed(() => this.authorization.canAccess('contabilidad', 'update'));
+  protected readonly editable = computed(() => this.rol()?.estado === 'BORRADOR' && this.rol()?.tipo !== 'LIQUIDACION' && this.canUpdate());
   protected readonly etiquetaTipo = computed(
     () => this.nominaService.etiquetasTipoRol[this.rol()?.tipo ?? 'MENSUAL']
   );
@@ -511,11 +593,17 @@ export class NominaRolDetalleComponent implements OnInit {
    */
   private readonly seccionAbierta = signal<string | null>(null);
   protected readonly descargando = signal(false);
+  protected readonly descargandoConsolidado = signal(false);
+  protected readonly exportacionBloqueada = computed(
+    () => !this.rol() || this.empleados().length === 0 || this.descargando() || this.descargandoConsolidado()
+      || this.procesando() || this.cambiosSinGuardar()
+  );
   /** Anticipos del periodo pendientes por empleado, para ofrecer traerlos al borrador. */
   private readonly anticiposPendientes = signal<Map<string, number>>(new Map());
 
   private config: ConfiguracionNominaContable = this.nominaService.getDefaultConfiguracion();
   private rolId = '';
+  private vistaInicializada = false;
 
   protected readonly totales = computed(() => {
     const acc = {
@@ -567,6 +655,7 @@ export class NominaRolDetalleComponent implements OnInit {
       .subscribe((params) => {
         const id = params.get('id');
         if (id) {
+          if (id !== this.rolId) this.vistaInicializada = false;
           this.rolId = id;
           void this.cargar(id);
         }
@@ -575,20 +664,30 @@ export class NominaRolDetalleComponent implements OnInit {
 
   /** Descarga el juego de comprobantes del rol: una pagina por empleado, para firmar como recibo. */
   protected async descargarComprobantes(): Promise<void> {
+    if (this.exportacionBloqueada()) return;
     this.error.set(null);
     this.descargando.set(true);
     try {
       const blob = await this.pdfApi.descargarComprobantes(this.rolId);
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement('a');
-      anchor.href = url;
-      anchor.download = `comprobantes-${this.rol()?.numero || this.rol()?.periodo || this.rolId}.pdf`;
-      anchor.click();
-      URL.revokeObjectURL(url);
+      this.guardarBlob(blob, `comprobantes-${this.rol()?.numero || this.rol()?.periodo || this.rolId}.pdf`);
     } catch (error) {
-      this.error.set(await this.mensajeErrorDescarga(error));
+      this.error.set(await this.mensajeErrorDescarga(error, 'No se pudieron descargar los comprobantes.'));
     } finally {
       this.descargando.set(false);
+    }
+  }
+
+  protected async descargarConsolidado(): Promise<void> {
+    if (this.exportacionBloqueada()) return;
+    this.error.set(null);
+    this.descargandoConsolidado.set(true);
+    try {
+      const blob = await this.pdfApi.descargarConsolidado(this.rolId);
+      this.guardarBlob(blob, `rol-consolidado-${this.rol()?.numero || this.rol()?.periodo || this.rolId}.pdf`);
+    } catch (error) {
+      this.error.set(await this.mensajeErrorDescarga(error, 'No se pudo generar el PDF consolidado.'));
+    } finally {
+      this.descargandoConsolidado.set(false);
     }
   }
 
@@ -596,7 +695,7 @@ export class NominaRolDetalleComponent implements OnInit {
    * Con `responseType: 'blob'` el cuerpo de error tambien llega como blob, asi que el mensaje del
    * backend queda escondido detras de un "Http failure response". Aqui se lee para mostrarlo.
    */
-  private async mensajeErrorDescarga(error: unknown): Promise<string> {
+  private async mensajeErrorDescarga(error: unknown, fallback: string): Promise<string> {
     const cuerpo = (error as { error?: unknown })?.error;
     if (cuerpo instanceof Blob) {
       try {
@@ -610,7 +709,16 @@ export class NominaRolDetalleComponent implements OnInit {
         // Cuerpo no JSON: se cae al mensaje generico.
       }
     }
-    return error instanceof Error ? error.message : 'No se pudieron descargar los comprobantes.';
+    return error instanceof Error ? error.message : fallback;
+  }
+
+  private guardarBlob(blob: Blob, nombre: string): void {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = nombre;
+    anchor.click();
+    URL.revokeObjectURL(url);
   }
 
   protected alternarSeccion(empleadoDetalleId: string, seccion: NombreSeccion): void {
@@ -801,6 +909,7 @@ export class NominaRolDetalleComponent implements OnInit {
     this.procesando.set(true);
     try {
       await this.nominaService.actualizarDetallesRol(this.rolId, this.empleados().map((item) => this.aDetalle(item)));
+      this.cambiosSinGuardar.set(false);
       this.toast('Borrador guardado.', 'save');
       await this.cargar(this.rolId);
     } catch (error) {
@@ -831,6 +940,7 @@ export class NominaRolDetalleComponent implements OnInit {
       await this.refrescarReglasEmpleados();
       // actualizarDetallesRol relee la configuracion y recalcula cada detalle antes de escribir.
       await this.nominaService.actualizarDetallesRol(this.rolId, this.empleados().map((item) => this.aDetalle(item)));
+      this.cambiosSinGuardar.set(false);
       await this.cargar(this.rolId);
 
       const despues = this.totales();
@@ -857,10 +967,12 @@ export class NominaRolDetalleComponent implements OnInit {
    * asiento que revisar y se cae al dialogo de confirmacion simple.
    */
   protected async aprobar(): Promise<void> {
+    if (!this.canUpdate() || this.rol()?.tipo === 'LIQUIDACION') return;
     this.error.set(null);
     this.procesando.set(true);
     try {
       await this.nominaService.actualizarDetallesRol(this.rolId, this.empleados().map((item) => this.aDetalle(item)));
+      this.cambiosSinGuardar.set(false);
 
       if (!(await this.integracionContable.contabilidadActiva())) {
         this.procesando.set(false);
@@ -868,25 +980,14 @@ export class NominaRolDetalleComponent implements OnInit {
         return;
       }
 
-      const [propuesta, cuentas] = await Promise.all([
-        this.nominaService.construirLineasRolPago(this.rolId),
-        this.planCuentasService.getCuentasOnce()
-      ]);
+      const propuesta = await this.nominaService.construirLineasRolPago(this.rolId);
       const rol = this.rol();
-      const data: RevisarAsientoData = {
+      this.procesando.set(false);
+      const lineas = await this.revisionAsiento.revisar({
         titulo: 'Revisar asiento del rol de pago',
         subtitulo: `${rol?.numero || rol?.periodo} · ${this.empleados().length} empleados · Neto ${this.totales().netoPagar.toFixed(2)}`,
-        lineas: propuesta,
-        cuentas
-      };
-      this.procesando.set(false);
-
-      const lineas = await firstValueFrom(
-        this.dialog.open<RevisarAsientoDialogComponent, RevisarAsientoData, AsientoContableLinea[] | undefined>(
-          RevisarAsientoDialogComponent,
-          { maxWidth: '96vw', data }
-        ).afterClosed()
-      );
+        lineas: propuesta
+      });
       if (!lineas) {
         return;
       }
@@ -930,6 +1031,7 @@ export class NominaRolDetalleComponent implements OnInit {
   }
 
   protected reversar(): void {
+    if (!this.canUpdate()) return;
     const dialogRef = this.dialog.open(ConfirmDialogComponent, {
       width: '460px',
       data: {
@@ -958,6 +1060,7 @@ export class NominaRolDetalleComponent implements OnInit {
   }
 
   protected anular(): void {
+    if (!this.canUpdate() || this.rol()?.tipo === 'LIQUIDACION') return;
     const dialogRef = this.dialog.open(ConfirmDialogComponent, {
       width: '420px',
       data: {
@@ -986,6 +1089,7 @@ export class NominaRolDetalleComponent implements OnInit {
 
   private async cargar(id: string): Promise<void> {
     this.config = await this.nominaService.getConfiguracionOnce();
+    this.tasasConsolidado.set(this.nominaService.tasasIess(this.config));
     const resumen = await this.nominaService.getRolPagoDetalle(id);
     if (!resumen) {
       this.error.set('El rol de pago no existe.');
@@ -993,6 +1097,11 @@ export class NominaRolDetalleComponent implements OnInit {
     }
     this.rol.set(resumen.rol);
     this.empleados.set(resumen.detalles.map((detalle) => this.aEdit(detalle)));
+    this.cambiosSinGuardar.set(false);
+    if (!this.vistaInicializada) {
+      this.vista.set(resumen.rol.estado === 'BORRADOR' ? 'INDIVIDUAL' : 'CONSOLIDADO');
+      this.vistaInicializada = true;
+    }
     await this.cargarAnticiposPendientes();
   }
 
@@ -1089,6 +1198,31 @@ export class NominaRolDetalleComponent implements OnInit {
   }
 
   private aEdit(detalle: RolPagoDetalle): EmpleadoEdit {
+    if (detalle.lineas?.some((linea) => !!linea.origenLiquidacion)) {
+      return {
+        id: detalle.id,
+        empleadoId: detalle.empleadoId,
+        empleadoNombre: detalle.empleadoNombre,
+        cargo: detalle.cargo,
+        sueldoBase: detalle.sueldoBase,
+        lineas: detalle.lineas.filter((linea) => linea.codigo !== 'SUELDO_ULTIMO').map((linea) => ({ ...linea })),
+        reglas: {
+          modoDecimoTercero: detalle.modoDecimoTercero,
+          modoDecimoCuarto: detalle.modoDecimoCuarto,
+          modoFondosReserva: detalle.modoFondosReserva,
+          regimenFondosReserva: detalle.regimenFondosReserva,
+          aplicaFondosReserva: detalle.aplicaFondosReserva,
+          sueldoMensual: detalle.sueldoMensual,
+          diasTrabajadosPeriodo: detalle.diasTrabajadosPeriodo,
+          diasFondosReservaPeriodo: detalle.diasFondosReservaPeriodo,
+          cargoId: detalle.cargoId,
+          departamentoId: detalle.departamentoId,
+          departamento: detalle.departamento,
+          cuentaGastoSueldosId: detalle.cuentaGastoSueldosId
+        },
+        resumen: detalle
+      };
+    }
     const sueldoLinea = detalle.lineas?.find((linea) => linea.origen === 'SUELDO');
     const item: EmpleadoEdit = {
       id: detalle.id,
@@ -1120,6 +1254,7 @@ export class NominaRolDetalleComponent implements OnInit {
   private actualizarResumen(item: EmpleadoEdit): void {
     item.resumen = this.calcularResumen(item);
     this.empleados.set([...this.empleados()]);
+    this.cambiosSinGuardar.set(true);
   }
 
   private calcularResumen(item: EmpleadoEdit): RolPagoDetalle {

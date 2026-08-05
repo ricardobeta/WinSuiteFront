@@ -8,6 +8,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTableModule } from '@angular/material/table';
 import { PageEvent } from '@angular/material/paginator';
 
+import { AuthorizationService } from '../../../../core/services/authorization.service';
 import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { EmpleadoNomina } from '../../../contabilidad/models/nomina.models';
@@ -33,7 +34,7 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
           <h2>Empleados</h2>
           <p>Consulta empleados activos e inactivos usados para generar roles de pago.</p>
         </div>
-        <a mat-raised-button color="primary" routerLink="/workspace/contabilidad/nomina/empleados/nuevo">
+        <a mat-raised-button color="primary" routerLink="/workspace/contabilidad/nomina/empleados/nuevo" [class.disabled-link]="!canUpdate()" [attr.aria-disabled]="!canUpdate()">
           <mat-icon>person_add</mat-icon>
           Nuevo empleado
         </a>
@@ -113,7 +114,7 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
               <ng-container matColumnDef="estado">
                 <th mat-header-cell *matHeaderCellDef>Estado</th>
                 <td mat-cell *matCellDef="let row">
-                  <span class="pill" [class.off]="row.estado === 'INACTIVO'">{{ row.estado }}</span>
+                  <span class="pill" [class.off]="row.estado === 'INACTIVO'" [class.pending]="row.estado === 'EN_LIQUIDACION'">{{ etiquetaEstado(row.estado) }}</span>
                 </td>
               </ng-container>
 
@@ -122,11 +123,13 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
                 <td mat-cell *matCellDef="let row" class="num">
                   <button mat-button type="button" (click)="editar(row)">Editar</button>
                   @if (row.estado === 'ACTIVO') {
-                    <button mat-button type="button" (click)="liquidar(row)">Liquidar</button>
+                    <button mat-button type="button" (click)="liquidar(row)" [disabled]="!canUpdate()">Liquidar</button>
                   }
-                  <button mat-button type="button" (click)="cambiarEstado(row)">
-                    {{ row.estado === 'ACTIVO' ? 'Inactivar' : 'Activar' }}
-                  </button>
+                  @if (row.estado === 'EN_LIQUIDACION') {
+                    <button mat-button type="button" (click)="liquidar(row)" [disabled]="!canUpdate()">Continuar liquidacion</button>
+                  } @else {
+                    <button mat-button type="button" (click)="cambiarEstado(row)" [disabled]="!canUpdate()">{{ row.estado === 'ACTIVO' ? 'Inactivar' : 'Activar' }}</button>
+                  }
                 </td>
               </ng-container>
 
@@ -156,20 +159,24 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
     .num { text-align: right; }
     .pill { display: inline-flex; padding: .25rem .65rem; border-radius: 999px; background: color-mix(in srgb, var(--primary) 16%, transparent); font-weight: 700; }
     .pill.off { background: color-mix(in srgb, var(--muted-foreground) 18%, transparent); color: var(--muted-foreground); }
+    .pill.pending { background: color-mix(in srgb, #f59e0b 18%, transparent); color: #7a4900; }
     .construction-kpi { background: color-mix(in srgb, var(--primary) 7%, var(--tc-surface-container-lowest)); }
     .regimen-pill { display: inline-flex; padding: .25rem .6rem; border-radius: 999px; background: var(--tc-surface-container-low, var(--background)); font-size: .78rem; font-weight: 700; }
     .regimen-pill.construction { background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
     .empty-state { min-height: 190px; display: grid; place-items: center; align-content: center; gap: .35rem; color: var(--muted-foreground); text-align: center; }
+    .disabled-link { pointer-events: none; opacity: .5; }
   `]
 })
 export class NominaEmpleadosListComponent {
   private readonly nominaService = inject(NominaService);
+  private readonly authorization = inject(AuthorizationService);
   private readonly destroyRef = inject(DestroyRef);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
 
   protected readonly columnas = ['empleado', 'cargo', 'ingreso', 'sueldo', 'fondos', 'estado', 'acciones'];
   protected readonly empleados = signal<EmpleadoNomina[]>([]);
+  protected readonly canUpdate = computed(() => this.authorization.canAccess('contabilidad', 'update'));
   protected readonly empleadosActivos = computed(() => this.empleados().filter((empleado) => empleado.estado === 'ACTIVO'));
   protected readonly empleadosDesdePrimerDia = computed(() =>
     this.empleados().filter((empleado) => this.causaDesdePrimerDia(empleado.regimenFondosReserva))
@@ -195,6 +202,11 @@ export class NominaEmpleadosListComponent {
 
   protected causaDesdePrimerDia(regimen: EmpleadoNomina['regimenFondosReserva']): boolean {
     return regimen === 'CONSTRUCCION' || regimen === 'SERVICIOS_COMPLEMENTARIOS';
+  }
+
+  protected etiquetaEstado(estado: EmpleadoNomina['estado']): string {
+    if (estado === 'EN_LIQUIDACION') return 'En liquidacion';
+    return estado === 'ACTIVO' ? 'Activo' : 'Inactivo';
   }
 
   protected actualizarBusqueda(value: string): void {
@@ -231,7 +243,7 @@ export class NominaEmpleadosListComponent {
   }
 
   protected async cambiarEstado(empleado: EmpleadoNomina): Promise<void> {
-    if (!empleado.id) {
+    if (!empleado.id || !this.canUpdate()) {
       return;
     }
     await this.nominaService.cambiarEstadoEmpleado(empleado.id, empleado.estado === 'ACTIVO' ? 'INACTIVO' : 'ACTIVO');

@@ -17,9 +17,10 @@ import { dateAIso, isoADate } from '../../../../shared/utils/fecha-input.util';
 import { Proveedor } from '../../../inventario/models/inventario.models';
 import { ProveedoresService } from '../../../inventario/services/proveedores.service';
 import { CuentaContableAutocompleteComponent } from '../../components/cuenta-contable-autocomplete/cuenta-contable-autocomplete.component';
-import { AsientoContable, AsientoContableLinea, CuentaContable, CuentaPorPagarManualAsiento, EstadoAsiento, TipoAsiento } from '../../models/contabilidad.models';
+import { AsientoContable, AsientoContableLinea, CuentaContable, CuentaPorPagarManualAsiento, EstadoAsiento, OrigenAsiento, OrigenModuloContable, TipoAsiento } from '../../models/contabilidad.models';
 import { ConfiguracionCuentasPorPagar } from '../../models/cuentas-por-pagar.models';
 import { AsientosContablesService } from '../../services/asientos-contables.service';
+import { ConfiguracionContableService } from '../../services/configuracion-contable.service';
 import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service';
 import { PlanCuentasService } from '../../services/plan-cuentas.service';
 
@@ -55,6 +56,49 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
         <section class="error-box">{{ error() }}</section>
       }
 
+      @if (periodoCerrado()) {
+        <section class="surface-card notice-box notice-locked">
+          <mat-icon>lock</mat-icon>
+          <div>
+            <strong>Periodo {{ periodo() }} cerrado.</strong>
+            <p>Este asiento solo se puede consultar. Reabre el periodo en configuracion contable para corregirlo.</p>
+          </div>
+        </section>
+      }
+
+      @if (modoCorreccion()) {
+        <section class="surface-card notice-box notice-fix">
+          <mat-icon>edit_note</mat-icon>
+          <div>
+            <strong>Correccion del asiento aprobado {{ numero() }}</strong>
+            <p>
+              Al guardar, los saldos contables se ajustan solos: el importe sale de las cuentas anteriores
+              y entra en las nuevas.
+              @if (totalesBloqueados()) {
+                Este asiento lo genero otro modulo, asi que puedes reasignar cuentas y repartir el importe
+                en otras lineas, pero los totales deben seguir en
+                <strong>{{ totalDebeOriginal() | number:'1.2-2' }} / {{ totalHaberOriginal() | number:'1.2-2' }}</strong>
+                y la fecha no se puede cambiar.
+              }
+            </p>
+          </div>
+        </section>
+
+        <section class="surface-card form-card">
+          <mat-form-field appearance="outline">
+            <mat-label>Motivo de la correccion</mat-label>
+            <textarea
+              matInput
+              rows="2"
+              [ngModel]="motivoEdicion()"
+              (ngModelChange)="motivoEdicion.set($event)"
+              placeholder="Ej: la compra se cargo a Suministros en lugar de Mantenimiento."
+            ></textarea>
+            <mat-hint>Obligatorio. Queda en la auditoria junto con el detalle anterior y el nuevo.</mat-hint>
+          </mat-form-field>
+        </section>
+      }
+
       <section class="surface-card form-card">
         <div class="grid-4">
           <mat-form-field appearance="outline">
@@ -65,7 +109,7 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
               [ngModel]="fechaComoDate()"
               (ngModelChange)="actualizarFecha($event)"
               (input)="limpiarFechaSiVacia('asiento', $event)"
-              [disabled]="!editable()"
+              [disabled]="!editable() || totalesBloqueados()"
             />
             <mat-datepicker-toggle matIconSuffix [for]="pickerFecha"></mat-datepicker-toggle>
             <button mat-icon-button matIconSuffix type="button" matTooltipPosition="above" [matTooltip]="ayuda.fecha" aria-label="Ayuda fecha">
@@ -116,12 +160,16 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
         <section class="surface-card cxp-card">
           <div>
             <h3>Cuenta por pagar vinculada</h3>
-            <p>El asiento acredita la cuenta configurada de CxP. Completa los datos del auxiliar antes de aprobar.</p>
+            @if (modoCorreccion()) {
+              <p>Los datos del auxiliar no se modifican desde aqui: para cambiarlos, anula el documento por pagar.</p>
+            } @else {
+              <p>El asiento acredita la cuenta configurada de CxP. Completa los datos del auxiliar antes de aprobar.</p>
+            }
           </div>
           <div class="grid-4">
             <mat-form-field appearance="outline">
               <mat-label>Proveedor</mat-label>
-              <mat-select [ngModel]="cxpProveedorId()" (ngModelChange)="seleccionarProveedorCxP($event)" [disabled]="!editable()">
+              <mat-select [ngModel]="cxpProveedorId()" (ngModelChange)="seleccionarProveedorCxP($event)" [disabled]="!cxpEditable()">
                 <mat-option value="">Selecciona un proveedor</mat-option>
                 @for (proveedor of proveedores(); track proveedor.id) {
                   <mat-option [value]="proveedor.id">{{ proveedor.nombre }}</mat-option>
@@ -134,13 +182,13 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
             </mat-form-field>
             <mat-form-field appearance="outline">
               <mat-label>Fecha de vencimiento</mat-label>
-              <input matInput [matDatepicker]="cxpVencimientoPicker" [ngModel]="cxpFechaVencimientoDate()" (ngModelChange)="actualizarFechaVencimientoCxP($event)" (input)="limpiarFechaSiVacia('cxp', $event)" [disabled]="!editable()" />
+              <input matInput [matDatepicker]="cxpVencimientoPicker" [ngModel]="cxpFechaVencimientoDate()" (ngModelChange)="actualizarFechaVencimientoCxP($event)" (input)="limpiarFechaSiVacia('cxp', $event)" [disabled]="!cxpEditable()" />
               <mat-datepicker-toggle matIconSuffix [for]="cxpVencimientoPicker"></mat-datepicker-toggle>
               <mat-datepicker #cxpVencimientoPicker></mat-datepicker>
             </mat-form-field>
             <mat-form-field appearance="outline">
               <mat-label>Referencia de la obligacion</mat-label>
-              <input matInput [ngModel]="cxpReferencia()" (ngModelChange)="cxpReferencia.set($event)" [readonly]="!editable()" />
+              <input matInput [ngModel]="cxpReferencia()" (ngModelChange)="cxpReferencia.set($event)" [readonly]="!cxpEditable()" />
             </mat-form-field>
           </div>
           <p class="cxp-total">Monto de la obligacion: <strong>{{ montoCxP() | number:'1.2-2' }}</strong></p>
@@ -248,11 +296,22 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
           <span>Total haber: <strong>{{ totalHaber() | number:'1.2-2' }}</strong></span>
           <span [class.diff-error]="diferencia() !== 0">Diferencia: <strong>{{ diferencia() | number:'1.2-2' }}</strong></span>
         </footer>
+
+        @if (totalesDesalineados()) {
+          <p class="diff-error totals-locked">
+            Los totales deben mantenerse en {{ totalDebeOriginal() | number:'1.2-2' }} / {{ totalHaberOriginal() | number:'1.2-2' }}
+            para no descuadrar el documento que origino este asiento.
+          </p>
+        }
       </section>
 
       <section class="actions-row">
         <a mat-button routerLink="/workspace/contabilidad/asientos">Cancelar</a>
-        @if (editable()) {
+        @if (modoCorreccion()) {
+          <button mat-raised-button color="primary" type="button" (click)="guardarCorreccion()" [disabled]="!puedeGuardarCorreccion()">
+            Guardar correccion
+          </button>
+        } @else if (editable()) {
           <button mat-stroked-button type="button" (click)="guardarBorrador()" [disabled]="guardando()">Guardar borrador</button>
           <button mat-raised-button color="primary" type="button" (click)="aprobar()" [disabled]="guardando() || diferencia() !== 0">
             Aprobar
@@ -283,6 +342,13 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
     .readonly-account span { color: var(--muted-foreground); }
     .totals { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 1rem; padding-top: .75rem; border-top: 1px solid color-mix(in srgb, var(--outline) 50%, transparent); }
     .diff-error { color: #b3261e; }
+    .totals-locked { margin: .5rem 0 0; text-align: right; font-size: .85rem; }
+    .notice-box { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1.1rem; }
+    .notice-box p { margin: .25rem 0 0; color: var(--muted-foreground); }
+    .notice-fix { border-left: 4px solid var(--primary); }
+    .notice-fix mat-icon { color: var(--primary); }
+    .notice-locked { border-left: 4px solid var(--muted-foreground); }
+    .notice-locked mat-icon { color: var(--muted-foreground); }
     .actions-row { display: flex; justify-content: flex-end; gap: .5rem; }
     .error-box { padding: .8rem 1rem; border-radius: .5rem; background: color-mix(in srgb, #b3261e 12%, transparent); color: #b3261e; }
     button[mat-icon-button] { color: var(--muted-foreground); }
@@ -299,6 +365,7 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
 })
 export class AsientoFormComponent implements OnInit {
   private readonly service = inject(AsientosContablesService);
+  private readonly configuracionService = inject(ConfiguracionContableService);
   private readonly planCuentasService = inject(PlanCuentasService);
   private readonly cuentasPorPagarService = inject(CuentasPorPagarService);
   private readonly proveedoresService = inject(ProveedoresService);
@@ -330,6 +397,13 @@ export class AsientoFormComponent implements OnInit {
   protected readonly guardando = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly asientoReversadoId = signal<string | null>(null);
+  protected readonly origen = signal<OrigenAsiento>('MANUAL');
+  protected readonly origenModulo = signal<OrigenModuloContable | null>(null);
+  protected readonly periodoAbierto = signal(false);
+  protected readonly periodoVerificado = signal(false);
+  protected readonly motivoEdicion = signal('');
+  protected readonly totalDebeOriginal = signal(0);
+  protected readonly totalHaberOriginal = signal(0);
   protected readonly ayuda = {
     fecha: 'Fecha contable del asiento. Define el periodo y el corte en reportes financieros.',
     periodo: 'Periodo mensual calculado desde la fecha. Si el periodo esta cerrado no se permite guardar ni aprobar.',
@@ -345,7 +419,24 @@ export class AsientoFormComponent implements OnInit {
   };
 
   protected readonly periodo = computed(() => this.service.periodoDesdeFecha(this.fecha()));
-  protected readonly editable = computed(() => this.estado() === 'BORRADOR');
+  /** Correccion de un asiento ya aprobado: solo se habilita mientras su periodo siga abierto. */
+  protected readonly modoCorreccion = computed(() => this.estado() === 'APROBADO' && this.periodoAbierto());
+  protected readonly editable = computed(() => this.estado() === 'BORRADOR' || this.modoCorreccion());
+  /**
+   * Los asientos generados por otro modulo estan apuntados desde su documento origen: se pueden
+   * reasignar cuentas y repartir el importe en otras lineas, pero los totales y la fecha no se tocan.
+   */
+  protected readonly totalesBloqueados = computed(() =>
+    this.modoCorreccion() && (this.origen() !== 'MANUAL' || this.origenModulo() === 'BANCOS')
+  );
+  /**
+   * El auxiliar de CxP solo se define al crear el asiento: la correccion no lo toca porque el
+   * documento por pagar ya existe y puede tener abonos.
+   */
+  protected readonly cxpEditable = computed(() => this.editable() && !this.modoCorreccion());
+  protected readonly periodoCerrado = computed(() =>
+    this.estado() === 'APROBADO' && this.periodoVerificado() && !this.periodoAbierto()
+  );
   protected readonly totalDebe = computed(() => {
     return this.service.roundToTwo(this.lineas().reduce((total, linea) => total + Number(linea.debe || 0), 0));
   });
@@ -353,6 +444,13 @@ export class AsientoFormComponent implements OnInit {
     return this.service.roundToTwo(this.lineas().reduce((total, linea) => total + Number(linea.haber || 0), 0));
   });
   protected readonly diferencia = computed(() => this.service.roundToTwo(this.totalDebe() - this.totalHaber()));
+  protected readonly totalesDesalineados = computed(() =>
+    this.totalesBloqueados()
+    && (this.totalDebe() !== this.totalDebeOriginal() || this.totalHaber() !== this.totalHaberOriginal())
+  );
+  protected readonly puedeGuardarCorreccion = computed(() =>
+    !this.guardando() && this.diferencia() === 0 && !this.totalesDesalineados() && !!this.motivoEdicion().trim()
+  );
   protected readonly fechaComoDate = computed(() => this.parseFecha(this.fecha()));
   protected readonly cxpFechaVencimientoDate = computed(() => isoADate(this.cxpFechaVencimiento()));
   protected readonly montoCxP = computed(() => {
@@ -394,6 +492,24 @@ export class AsientoFormComponent implements OnInit {
     const asiento = await this.service.getAsientoById(id);
     if (asiento) {
       this.cargarAsiento(asiento);
+      await this.verificarPeriodo(asiento.periodo || this.service.periodoDesdeFecha(asiento.fecha));
+    }
+  }
+
+  /** Resuelve si el periodo del asiento sigue abierto: es lo que habilita la correccion. */
+  private async verificarPeriodo(periodoId: string): Promise<void> {
+    if (this.estado() !== 'APROBADO') {
+      this.periodoVerificado.set(true);
+      return;
+    }
+
+    try {
+      const periodo = await this.configuracionService.getPeriodo(periodoId);
+      this.periodoAbierto.set(periodo?.estado === 'ABIERTO');
+    } catch {
+      this.periodoAbierto.set(false);
+    } finally {
+      this.periodoVerificado.set(true);
     }
   }
 
@@ -546,12 +662,24 @@ export class AsientoFormComponent implements OnInit {
     await this.persistir('APROBADO');
   }
 
-  private async persistir(accion: 'BORRADOR' | 'APROBADO'): Promise<void> {
+  protected async guardarCorreccion(): Promise<void> {
+    await this.persistir('CORRECCION');
+  }
+
+  private async persistir(accion: 'BORRADOR' | 'APROBADO' | 'CORRECCION'): Promise<void> {
     this.error.set(null);
     this.guardando.set(true);
 
     try {
       const asiento = this.construirAsiento();
+
+      if (accion === 'CORRECCION') {
+        await this.service.actualizarAsientoAprobado({ asiento, motivo: this.motivoEdicion() });
+        this.mostrarMensaje('Asiento corregido. Los saldos se ajustaron.', 'check_circle');
+        await this.router.navigate(['/workspace/contabilidad/asientos']);
+        return;
+      }
+
       if (accion === 'APROBADO' && this.requiereCxP() && !this.datosCxPCompletos()) {
         throw new Error('Completa proveedor, vencimiento y referencia de la cuenta por pagar.');
       }
@@ -614,6 +742,11 @@ export class AsientoFormComponent implements OnInit {
     this.referencia.set(asiento.referencia ?? '');
     this.estado.set(asiento.estado);
     this.asientoReversadoId.set(asiento.asientoReversadoId ?? null);
+    this.origen.set(asiento.origen ?? 'MANUAL');
+    this.origenModulo.set(asiento.origenModulo ?? null);
+    this.totalDebeOriginal.set(this.service.roundToTwo(asiento.totalDebe ?? 0));
+    this.totalHaberOriginal.set(this.service.roundToTwo(asiento.totalHaber ?? 0));
+    this.motivoEdicion.set('');
     this.lineas.set(asiento.lineas.length > 0 ? asiento.lineas : [this.service.crearLineaVacia(), this.service.crearLineaVacia()]);
     const cxp = asiento.cuentaPorPagarManual;
     this.cxpProveedorId.set(cxp?.proveedorId ?? '');

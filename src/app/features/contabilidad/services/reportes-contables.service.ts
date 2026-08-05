@@ -207,15 +207,21 @@ export class ReportesContablesService {
     };
   }
 
-  async generarEstadoSituacionFinanciera(fechaCorte: string): Promise<EstadoSituacionFinancieraResultado> {
+  /**
+   * @param fechaCorte fecha hasta la que se acumulan los movimientos.
+   * @param fechaDesde si se envia, el estado se calcula en modo PERIODO: solo se acumulan
+   *        los movimientos del rango y se listan unicamente las cuentas con movimiento.
+   */
+  async generarEstadoSituacionFinanciera(fechaCorte: string, fechaDesde?: string): Promise<EstadoSituacionFinancieraResultado> {
     const [asientos, cuentas] = await Promise.all([
       this.getAsientosReportables(),
       this.getCuentas()
     ]);
+    const desde = fechaDesde?.trim() || undefined;
     const cuentasPorId = new Map(cuentas.map((cuenta) => [cuenta.id, cuenta]));
     const acumulado = new Map<string, number>();
 
-    for (const asiento of asientos.filter((item) => item.fecha <= fechaCorte)) {
+    for (const asiento of asientos.filter((item) => item.fecha <= fechaCorte && (!desde || item.fecha >= desde))) {
       for (const linea of asiento.lineas) {
         const cuenta = cuentasPorId.get(linea.cuentaId);
         if (!cuenta || !['ACTIVO', 'PASIVO', 'PATRIMONIO'].includes(cuenta.tipo) || cuenta.incluyeEnEstadoFinanciero === false) {
@@ -241,16 +247,19 @@ export class ReportesContablesService {
           monto,
           orden: cuenta.ordenReporte ?? this.ordenDesdeCodigo(cuenta.codigo)
         };
-      });
+      })
+      // En modo PERIODO solo interesan las cuentas que se movieron dentro del rango.
+      .filter((linea) => !desde || linea.monto !== 0);
 
-    const inicioEjercicio = `${fechaCorte.slice(0, 4)}-01-01`;
-    const resultadoIntegral = await this.generarEstadoResultadoIntegral(inicioEjercicio, fechaCorte);
+    // En modo PERIODO el resultado que cuadra el estado es el del mismo rango, no el del ejercicio completo.
+    const inicioResultado = desde ?? `${fechaCorte.slice(0, 4)}-01-01`;
+    const resultadoIntegral = await this.generarEstadoResultadoIntegral(inicioResultado, fechaCorte);
     const resultadoEjercicio = resultadoIntegral.resultadoNeto;
 
     if (resultadoEjercicio !== 0) {
       lineas.push({
         codigoCuenta: '3.5',
-        nombreCuenta: 'Resultado del ejercicio',
+        nombreCuenta: desde ? 'Resultado del periodo' : 'Resultado del ejercicio',
         seccion: 'PATRIMONIO',
         monto: resultadoEjercicio,
         orden: 3050000,
@@ -265,6 +274,8 @@ export class ReportesContablesService {
 
     return {
       fechaCorte,
+      fechaDesde: desde,
+      modo: desde ? 'PERIODO' : 'ACUMULADO',
       secciones,
       totalActivo,
       totalPasivo,
