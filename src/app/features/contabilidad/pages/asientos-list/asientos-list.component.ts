@@ -135,6 +135,8 @@ import { PeriodoContableService } from '../../services/periodo-contable.service'
           </div>
         } @else {
           <app-data-table-frame
+            tableModule="contabilidad"
+            tableId="asientos"
             [showSearch]="false"
             [total]="totalPaginador()"
             [pageIndex]="pageIndex()"

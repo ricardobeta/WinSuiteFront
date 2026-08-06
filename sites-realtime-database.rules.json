@@ -22,6 +22,12 @@
         ".write": "auth != null && auth.token.tenantId === $tenantId"
       }
     },
+    "sitios_catalogo_config": {
+      "$tenantId": {
+        ".read": "auth != null && auth.token.tenantId === $tenantId",
+        ".write": "auth != null && auth.token.tenantId === $tenantId"
+      }
+    },
     "sitios_resumen": {
       "$tenantId": {
         ".read": "auth != null && auth.token.tenantId === $tenantId",

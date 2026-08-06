@@ -109,6 +109,64 @@
         ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
       }
     },
+    "tablePreferences": {
+      "$tenantId": {
+        "company": {
+          "$moduleId": {
+            "$tableId": {
+              ".read": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+              ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true && root.child('tenant_users').child($tenantId).child(auth.uid).child('role').val() === 'ADMIN'",
+              ".validate": "!newData.exists() || (newData.hasChildren(['version', 'visibleColumnIds', 'updatedAt', 'updatedBy']) && newData.child('version').val() === 1 && newData.child('visibleColumnIds').hasChildren() && newData.child('updatedAt').isNumber() && newData.child('updatedBy').val() === auth.uid)",
+              "visibleColumnIds": {
+                "$index": {
+                  ".validate": "$index.matches(/^(0|[1-9][0-9]?)$/) && newData.isString() && newData.val().length > 0 && newData.val().length <= 128"
+                }
+              },
+              "version": {
+                ".validate": "newData.val() === 1"
+              },
+              "updatedAt": {
+                ".validate": "newData.isNumber()"
+              },
+              "updatedBy": {
+                ".validate": "newData.val() === auth.uid"
+              },
+              "$other": {
+                ".validate": false
+              }
+            }
+          }
+        },
+        "users": {
+          "$userId": {
+            "$moduleId": {
+              "$tableId": {
+                ".read": "auth != null && auth.uid === $userId && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+                ".write": "auth != null && auth.uid === $userId && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+                ".validate": "!newData.exists() || (newData.hasChildren(['version', 'visibleColumnIds', 'updatedAt', 'updatedBy']) && newData.child('version').val() === 1 && newData.child('visibleColumnIds').hasChildren() && newData.child('updatedAt').isNumber() && newData.child('updatedBy').val() === auth.uid)",
+                "visibleColumnIds": {
+                  "$index": {
+                    ".validate": "$index.matches(/^(0|[1-9][0-9]?)$/) && newData.isString() && newData.val().length > 0 && newData.val().length <= 128"
+                  }
+                },
+                "version": {
+                  ".validate": "newData.val() === 1"
+                },
+                "updatedAt": {
+                  ".validate": "newData.isNumber()"
+                },
+                "updatedBy": {
+                  ".validate": "newData.val() === auth.uid"
+                },
+                "$other": {
+                  ".validate": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "auditoria": {
       "$tenantId": {
         ".read": false,

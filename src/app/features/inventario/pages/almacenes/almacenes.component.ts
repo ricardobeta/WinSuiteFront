@@ -80,6 +80,8 @@ import { AlmacenesService } from '../../services/almacenes.service';
           </div>
 
           <app-data-table-frame
+            tableModule="inventario"
+            tableId="existencias-almacen"
             searchPlaceholder="Buscar producto en este almacén"
             [total]="stockFiltrado().length"
             [pageIndex]="pageIndex()"

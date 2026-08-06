@@ -226,7 +226,7 @@ export class ReglaConciliacionDialogComponent {
             <p>Crea una regla para clasificar automáticamente movimientos recurrentes.</p>
           </div>
         } @else {
-          <app-data-table-frame [showSearch]="false" [showPaginator]="false">
+          <app-data-table-frame tableModule="bancos" tableId="reglas" [showSearch]="false" [showPaginator]="false">
             <table mat-table [dataSource]="reglas()" class="reglas-table">
               <ng-container matColumnDef="nombre">
                 <th mat-header-cell *matHeaderCellDef>Regla</th>

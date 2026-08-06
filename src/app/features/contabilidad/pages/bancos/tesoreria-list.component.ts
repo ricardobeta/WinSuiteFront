@@ -115,7 +115,7 @@ import { MovimientoTesoreriaDialogComponent } from './movimiento-tesoreria-dialo
             <h3>Sin movimientos de tesorería</h3>
           </div>
         } @else {
-          <app-data-table-frame [showSearch]="false" [showPaginator]="false">
+          <app-data-table-frame tableModule="bancos" tableId="tesoreria" [showSearch]="false" [showPaginator]="false">
             <table mat-table [dataSource]="movimientos()" class="tes-table">
               <ng-container matColumnDef="fecha">
                 <th mat-header-cell *matHeaderCellDef>Fecha</th>

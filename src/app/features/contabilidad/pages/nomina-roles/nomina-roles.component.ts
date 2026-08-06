@@ -18,6 +18,7 @@ import { SuccessSnackbarComponent } from '../../../../shared/components/success-
 import { dateAIso } from '../../../../shared/utils/fecha-input.util';
 import { PreparacionNomina, RequisitoNomina, RolPago } from '../../models/nomina.models';
 import { NominaService } from '../../services/nomina.service';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 
 @Component({
   selector: 'app-nomina-roles',
@@ -34,7 +35,8 @@ import { NominaService } from '../../services/nomina.service';
     MatSelectModule,
     MatSnackBarModule,
     MatTableModule,
-    MatTooltipModule
+    MatTooltipModule,
+    DataTableFrameComponent
   ],
   template: `
     <section class="roles-page">
@@ -166,7 +168,7 @@ import { NominaService } from '../../services/nomina.service';
             <p>Configura cuentas y rubros, registra empleados activos y genera el primer rol mensual.</p>
           </div>
         } @else {
-          <div class="table-wrap">
+          <app-data-table-frame tableModule="nomina" tableId="roles-pago" [showSearch]="false" [showPaginator]="false">
             <table mat-table [dataSource]="roles()">
               <ng-container matColumnDef="numero">
                 <th mat-header-cell *matHeaderCellDef>Rol</th>
@@ -215,7 +217,7 @@ import { NominaService } from '../../services/nomina.service';
               <tr mat-header-row *matHeaderRowDef="columnas"></tr>
               <tr mat-row *matRowDef="let row; columns: columnas"></tr>
             </table>
-          </div>
+          </app-data-table-frame>
         }
       </section>
     </section>

@@ -10,6 +10,7 @@ import {
   EstilosTexto,
   FuenteId,
   PaginaDoc,
+  SCHEMA_VERSION_SITIO,
   TemaSitio,
   contenidoSitioSchema,
   slugify,
@@ -82,7 +83,7 @@ export class AiSiteBlueprintCompilerService {
         ...body,
         { id: nuevoIdBloque(), ancla: 'pie', visible: true, tipo: 'footer', variante: 'columnas', texto: typeof blueprint?.concept === 'string' ? blueprint.concept.trim() : 'Conoce mas sobre nuestra propuesta.', redes: [], estilos: { paddingY: 'normal', fondo: theme.colorTexto }, estilosTexto: { texto: { color: theme.colorFondo } } },
       ];
-      pages[id] = { schemaVersion: 2, id, slug: index === 0 ? '' : id, titulo: page.title, bloques: blocks, actualizadoEn: Date.now() };
+      pages[id] = { schemaVersion: SCHEMA_VERSION_SITIO, id, slug: index === 0 ? '' : id, titulo: page.title, bloques: blocks, actualizadoEn: Date.now() };
     });
     // Firebase RTDB rechaza cualquier propiedad undefined, incluso si esta
     // profundamente anidada en un bloque generado por IA.
@@ -191,9 +192,10 @@ export class AiSiteBlueprintCompilerService {
           }),
         };
       }
-      case 'paycta': return ecommerce
-        ? { ...base, tipo: 'pago', titulo: title, texto: text, textoBoton: (section.ctaText || 'Pagar ahora').slice(0, 200) }
-        : { ...base, tipo: 'cta', titulo: title, texto: text, textoBoton: section.ctaText || 'Contactar', enlace: this.link(section.ctaLink) };
+      case 'paycta': return {
+        ...base, tipo: 'pago', modoPago: 'fijo', concepto: title, monto: 10, moneda: 'USD',
+        titulo: title, texto: text, textoBoton: (section.ctaText || 'Pagar ahora').slice(0, 200),
+      };
       case 'countdown': {
         const parsed = Date.parse(section.countdownDate ?? '');
         const fecha = Number.isFinite(parsed) && parsed > Date.now() ? parsed : Date.now() + 7 * 24 * 60 * 60 * 1000;

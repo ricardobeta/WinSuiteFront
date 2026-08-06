@@ -24,6 +24,7 @@ import { ArchivoSelectorDialogComponent } from '../../../../shared/components/ar
 import { ArchivoUploaderComponent } from '../../../../shared/components/archivo-uploader/archivo-uploader.component';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { ARCHIVO_MAX_TOTAL_BYTES, ArchivoItem, ArchivosUsage } from '../../../../shared/models/archivos.models';
 import { PlanService } from '../../../../core/services/plan.service';
 import { SitioMediaService } from '../../../sitio-web/services/sitio-media.service';
@@ -49,7 +50,8 @@ import { SitioMediaService } from '../../../sitio-web/services/sitio-media.servi
     MatSortModule,
     MatTableModule,
     MatTooltipModule,
-    ArchivoUploaderComponent
+    ArchivoUploaderComponent,
+    DataTableFrameComponent
   ],
   template: `
     <section class="archivos-page">
@@ -169,7 +171,7 @@ import { SitioMediaService } from '../../../sitio-web/services/sitio-media.servi
             <p>Sube un archivo o ajusta los filtros para ver resultados.</p>
           </div>
         } @else {
-          <div class="table-wrap">
+          <app-data-table-frame tableModule="archivos" tableId="lista" [showSearch]="false" [showPaginator]="false">
             <table mat-table [dataSource]="dataSource" matSort>
               <ng-container matColumnDef="archivo">
                 <th mat-header-cell *matHeaderCellDef mat-sort-header>Archivo</th>
@@ -236,7 +238,7 @@ import { SitioMediaService } from '../../../sitio-web/services/sitio-media.servi
               <tr mat-header-row *matHeaderRowDef="displayedColumns()"></tr>
               <tr mat-row *matRowDef="let row; columns: displayedColumns()"></tr>
             </table>
-          </div>
+          </app-data-table-frame>
 
           <mat-paginator [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons></mat-paginator>
         }

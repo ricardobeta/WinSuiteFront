@@ -5,12 +5,14 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { FormulariosService } from '../../services/formularios.service';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
+import { TableColumnDefinition } from '../../../../shared/models/table-preferences.models';
 
 /** Respuestas recibidas de un formulario prehecho (form_submissions/{t}/{formularioId}). */
 @Component({
   selector: 'app-respuestas-page',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, RouterLink, MatButtonModule, MatIconModule],
+  imports: [DatePipe, RouterLink, MatButtonModule, MatIconModule, DataTableFrameComponent],
   template: `
     <div class="pagina">
       <header class="cabecera">
@@ -39,30 +41,38 @@ import { FormulariosService } from '../../services/formularios.service';
           <p>Aun no hay respuestas. Publica tu sitio con el bloque Formulario para recibirlas.</p>
         </div>
       } @else {
+        <app-data-table-frame
+          tableModule="sitio-web"
+          [tableId]="tablePreferenceId()"
+          [columns]="columnDefinitions()"
+          [showSearch]="false"
+          [showPaginator]="false"
+        >
         <div class="tabla-scroll">
           <table>
             <thead>
               <tr>
-                <th>Fecha</th>
+                <th data-column-id="fecha">Fecha</th>
                 @for (columna of columnas(); track columna) {
-                  <th>{{ columna }}</th>
+                  <th [attr.data-column-id]="fieldColumnId(columna)">{{ columna }}</th>
                 }
-                <th>Sitio</th>
+                <th data-column-id="sitio">Sitio</th>
               </tr>
             </thead>
             <tbody>
               @for (respuesta of respuestas(); track respuesta.id) {
                 <tr>
-                  <td class="fecha">{{ respuesta.creadoEn | date: 'dd/MM/yy HH:mm' }}</td>
+                  <td class="fecha" data-column-id="fecha">{{ respuesta.creadoEn | date: 'dd/MM/yy HH:mm' }}</td>
                   @for (columna of columnas(); track columna) {
-                    <td>{{ respuesta.valores[columna] }}</td>
+                    <td [attr.data-column-id]="fieldColumnId(columna)">{{ respuesta.valores[columna] }}</td>
                   }
-                  <td class="sitio">{{ respuesta.sitioId }}</td>
+                  <td class="sitio" data-column-id="sitio">{{ respuesta.sitioId }}</td>
                 </tr>
               }
             </tbody>
           </table>
         </div>
+        </app-data-table-frame>
         @if (hayMas()) {
           <button mat-stroked-button type="button" [disabled]="cargando()" (click)="cargarMas()">
             {{ cargando() ? 'Cargando...' : 'Cargar más respuestas' }}
@@ -203,6 +213,19 @@ export class RespuestasPageComponent {
     }
     return columnas;
   });
+  readonly tablePreferenceId = computed(() => {
+    const safeFormId = this.formId().toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+    return `respuestas-${safeFormId || 'formulario'}`.slice(0, 120);
+  });
+  readonly columnDefinitions = computed<TableColumnDefinition[]>(() => [
+    { id: 'fecha', label: 'Fecha' },
+    ...this.columnas().map((column) => ({ id: this.fieldColumnId(column), label: column })),
+    { id: 'sitio', label: 'Sitio' }
+  ]);
+
+  fieldColumnId(column: string): string {
+    return `field:${column}`.slice(0, 128);
+  }
 
   exportarCsv(): void {
     const columnas = this.columnas();

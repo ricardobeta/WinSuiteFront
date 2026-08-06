@@ -105,7 +105,17 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
               [url]="seoOgImage() || undefined"
               (urlChange)="seoOgImage.set($event)"
             />
+            <p class="nota">
+              Recomendado: 1200 × 630 px en WebP o JPG, URL publica HTTPS y menos de 300 KB.
+              Se usa al compartir en WhatsApp, Facebook, LinkedIn y X.
+            </p>
           </div>
+          @if (seoOgImage()) {
+            <label>
+              Texto alternativo de la imagen
+              <input [(ngModel)]="seoOgImageAlt" maxlength="200" />
+            </label>
+          }
         </section>
 
         <section>
@@ -300,6 +310,7 @@ export class ConfiguracionPageComponent {
   dominioNuevo = '';
   seoTitle = '';
   seoDescription = '';
+  seoOgImageAlt = '';
   facebookPixelId = '';
   gaMeasurementId = '';
   whatsappNumero = '';
@@ -325,6 +336,7 @@ export class ConfiguracionPageComponent {
     this.seoTitle = config.seo.title;
     this.seoDescription = config.seo.description;
     this.seoOgImage.set(config.seo.ogImageUrl ?? '');
+    this.seoOgImageAlt = config.seo.ogImageAlt ?? '';
     this.facebookPixelId = config.tracking.facebookPixelId ?? '';
     this.gaMeasurementId = config.tracking.gaMeasurementId ?? '';
     this.whatsappNumero = config.whatsapp.numero;
@@ -354,7 +366,13 @@ export class ConfiguracionPageComponent {
         seo: {
           title: this.seoTitle.trim(),
           description: this.seoDescription.trim(),
-          ...(this.seoOgImage() ? { ogImageUrl: this.seoOgImage() } : {}),
+          ...(this.seoOgImage()
+            ? {
+                ogImageUrl: this.seoOgImage(),
+                ogImageAlt:
+                  this.seoOgImageAlt.trim() || this.seoDescription.trim() || this.nombre.trim(),
+              }
+            : {}),
         },
         tracking: {
           ...(this.facebookPixelId.trim() ? { facebookPixelId: this.facebookPixelId.trim() } : {}),

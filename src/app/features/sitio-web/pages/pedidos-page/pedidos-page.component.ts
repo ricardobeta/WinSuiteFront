@@ -19,7 +19,7 @@ import { PedidosWebService } from '../../services/pedidos-web.service';
       @if (pedidos().length === 0 && !cargando()) {
         <div class="vacio">
           <mat-icon>receipt_long</mat-icon>
-          <p>Aun no hay pedidos. Cuando publiques tu tienda y recibas pedidos, apareceran aqui.</p>
+          <p>Aun no hay pedidos. Las compras de tu tienda y de tus landing pages apareceran aqui.</p>
         </div>
       } @else {
         <div class="tabla">
@@ -49,6 +49,9 @@ import { PedidosWebService } from '../../services/pedidos-web.service';
                   }
                   · {{ pago.pagadoEn | date: 'dd/MM/yyyy HH:mm' }}
                 </div>
+              }
+              @if (!pedido.pago && pedido.metodoPagoSeleccionado; as metodo) {
+                <div class="pago-pendiente">Pago {{ metodo }} reportado · pendiente de verificacion</div>
               }
               <div class="detalle">
                 <span>📞 {{ pedido.cliente.telefono }}</span>
@@ -137,6 +140,15 @@ import { PedidosWebService } from '../../services/pedidos-web.service';
       border-radius: 8px;
       padding: 5px 10px;
       display: inline-block;
+    }
+    .pago-pendiente {
+      margin-top: 6px;
+      display: inline-block;
+      padding: 5px 10px;
+      border-radius: 8px;
+      background: var(--tc-warning-container);
+      color: var(--tc-on-warning-container);
+      font-size: 0.82rem;
     }
     .estado-confirmado {
       background: var(--tc-info-container);

@@ -408,6 +408,7 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
       id,
       visible: true,
       tipo: 'caracteristicas',
+      variante: 'iconos',
       titulo: '¿Por que elegirnos?',
       columnas: 3,
       items: [
@@ -511,6 +512,10 @@ export const BLOQUES_CATALOGO: DefinicionBloque[] = [
       id,
       visible: true,
       tipo: 'pago',
+      modoPago: 'fijo',
+      concepto: 'Producto o servicio',
+      monto: 10,
+      moneda: 'USD',
       titulo: 'Paga en linea',
       texto: 'Elige tu metodo de pago preferido: tarjeta, transferencia o QR.',
       textoBoton: 'Pagar ahora',

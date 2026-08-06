@@ -1,4 +1,4 @@
-import { ContenidoSitio, PaginaDoc, TemaSitio, TipoSitio } from '@winsuite/bloques';
+import { ContenidoSitio, PaginaDoc, SCHEMA_VERSION_SITIO, TemaSitio, TipoSitio } from '@winsuite/bloques';
 import { mockupFoto, mockupTinte } from '../services/ai-site-mockups';
 import { nuevoIdBloque } from './bloques-catalogo';
 
@@ -26,7 +26,7 @@ function pagina(
   titulo: string,
   bloques: PaginaDoc['bloques'],
 ): PaginaDoc {
-  return { schemaVersion: 1, id, slug, titulo, bloques, actualizadoEn: Date.now() };
+  return { schemaVersion: SCHEMA_VERSION_SITIO, id, slug, titulo, bloques, actualizadoEn: Date.now() };
 }
 
 const temaBase: TemaSitio = {

@@ -21,7 +21,7 @@
       <p>Crea el primer servicio para comenzar.</p>
     </div>
   } @else {
-    <div class="table-wrap">
+    <app-data-table-frame tableModule="servicios" tableId="lista" [showSearch]="false" [showPaginator]="false">
       <table mat-table [dataSource]="dataSource" matSort>
         <ng-container matColumnDef="nombre">
           <th mat-header-cell *matHeaderCellDef mat-sort-header>Nombre</th>
@@ -84,7 +84,7 @@
         <tr mat-header-row *matHeaderRowDef="displayedColumns()"></tr>
         <tr mat-row *matRowDef="let row; columns: displayedColumns()"></tr>
       </table>
-    </div>
+    </app-data-table-frame>
 
     <mat-paginator [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons></mat-paginator>
   }

@@ -103,6 +103,8 @@ import { PeriodoContableService } from '../../services/periodo-contable.service'
           <div class="empty-state"><mat-icon>receipt_long</mat-icon><h3>Sin documentos por pagar</h3><p>No existen documentos con los filtros seleccionados.</p></div>
         } @else {
           <app-data-table-frame
+            tableModule="contabilidad"
+            tableId="cuentas-por-pagar"
             [showSearch]="false"
             [total]="totalPaginador()"
             [pageIndex]="pageIndex()"

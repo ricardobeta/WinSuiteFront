@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { AfterViewInit, Component, DestroyRef, OnInit, ViewChild, inject, signal } from '@angular/core';
+import { AfterViewInit, Component, DestroyRef, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { MatTableDataSource, MatTableModule } from '@angular/material/table';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatSort, MatSortModule } from '@angular/material/sort';
@@ -16,6 +16,9 @@ import { ConfiguracionClientesService } from '../../../../core/services/configur
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { ClienteFormDialogComponent } from '../../../../shared/components/cliente-form-dialog/cliente-form-dialog.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { CustomFieldValueComponent } from '../../../../shared/components/custom-field-value/custom-field-value.component';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
+import { TableColumnDefinition } from '../../../../shared/models/table-preferences.models';
 
 @Component({
   selector: 'app-lista-clientes',
@@ -29,7 +32,9 @@ import { SuccessSnackbarComponent } from '../../../../shared/components/success-
     MatIconModule,
     MatDialogModule,
     MatTooltipModule,
-    MatSnackBarModule
+    MatSnackBarModule,
+    CustomFieldValueComponent,
+    DataTableFrameComponent
   ],
   template: `
     <section class="clientes-card surface-card">
@@ -46,7 +51,13 @@ import { SuccessSnackbarComponent } from '../../../../shared/components/success-
         </button>
       </div>
 
-      <div class="table-wrap">
+      <app-data-table-frame
+        tableModule="clientes"
+        tableId="lista"
+        [columns]="columnDefinitions()"
+        [showSearch]="false"
+        [showPaginator]="false"
+      >
         <table mat-table [dataSource]="dataSource" matSort>
           <ng-container matColumnDef="nombreCompleto">
             <th mat-header-cell *matHeaderCellDef mat-sort-header>Nombre completo</th>
@@ -70,6 +81,30 @@ import { SuccessSnackbarComponent } from '../../../../shared/components/success-
             </td>
           </ng-container>
 
+          <ng-container matColumnDef="direccion">
+            <th mat-header-cell *matHeaderCellDef>Dirección</th>
+            <td mat-cell *matCellDef="let row">{{ row.direccion || '—' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="etiquetas">
+            <th mat-header-cell *matHeaderCellDef>Etiquetas</th>
+            <td mat-cell *matCellDef="let row">{{ row.etiquetas?.join(', ') || '—' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="creadoEn">
+            <th mat-header-cell *matHeaderCellDef>Creado</th>
+            <td mat-cell *matCellDef="let row">{{ row.creadoEn ? (row.creadoEn | date:'shortDate') : '—' }}</td>
+          </ng-container>
+
+          @for (campo of camposActivos(); track campo.idCampo) {
+            <ng-container [matColumnDef]="customColumnId(campo.idCampo)">
+              <th mat-header-cell *matHeaderCellDef>{{ campo.nombreMostrar }}</th>
+              <td mat-cell *matCellDef="let row">
+                <app-custom-field-value [field]="campo" [value]="row.camposPersonalizados?.[campo.idCampo]" />
+              </td>
+            </ng-container>
+          }
+
           <ng-container matColumnDef="acciones">
             <th mat-header-cell *matHeaderCellDef>Acciones</th>
             <td mat-cell *matCellDef="let row">
@@ -85,7 +120,7 @@ import { SuccessSnackbarComponent } from '../../../../shared/components/success-
           <tr mat-header-row *matHeaderRowDef="columnasVisibles"></tr>
           <tr mat-row *matRowDef="let row; columns: columnasVisibles"></tr>
         </table>
-      </div>
+      </app-data-table-frame>
 
       <mat-paginator
         [length]="totalEstimado()"
@@ -121,7 +156,26 @@ export class ListaClientesComponent implements OnInit, AfterViewInit {
 
   protected readonly dataSource = new MatTableDataSource<Cliente>([]);
   protected readonly camposPersonalizados = signal<CampoPersonalizado[]>([]);
-  protected readonly columnasFijas = ['nombreCompleto', 'email', 'telefono', 'identificacion'];
+  protected readonly camposActivos = computed(() =>
+    this.camposPersonalizados().filter((campo) => campo.activo !== false)
+  );
+  protected readonly columnasFijas = ['nombreCompleto', 'email', 'telefono', 'identificacion', 'direccion', 'etiquetas', 'creadoEn'];
+  protected readonly columnDefinitions = computed<TableColumnDefinition[]>(() => [
+    { id: 'nombreCompleto', label: 'Nombre completo' },
+    { id: 'email', label: 'Email' },
+    { id: 'telefono', label: 'Teléfono' },
+    { id: 'identificacion', label: 'Identificación' },
+    { id: 'direccion', label: 'Dirección', defaultVisible: false },
+    { id: 'etiquetas', label: 'Etiquetas', defaultVisible: false },
+    { id: 'creadoEn', label: 'Fecha de creación', defaultVisible: false },
+    ...this.camposActivos().map((campo) => ({
+      id: this.customColumnId(campo.idCampo),
+      label: campo.nombreMostrar,
+      group: 'custom' as const,
+      defaultVisible: campo.visibleEnLista === true
+    })),
+    { id: 'acciones', label: 'Acciones', locked: true }
+  ]);
   protected readonly cargando = signal(false);
   protected readonly pageIndex = signal(0);
   protected readonly pageSize = signal(25);
@@ -142,7 +196,15 @@ export class ListaClientesComponent implements OnInit, AfterViewInit {
   }
 
   protected get columnasVisibles(): string[] {
-    return [...this.columnasFijas, 'acciones'];
+    return [
+      ...this.columnasFijas,
+      ...this.camposActivos().map((campo) => this.customColumnId(campo.idCampo)),
+      'acciones'
+    ];
+  }
+
+  protected customColumnId(idCampo: string): string {
+    return `custom_${idCampo}`;
   }
 
   protected abrirFormularioCreacion(): void {

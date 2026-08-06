@@ -147,6 +147,8 @@ import { BancosMovimientosService } from '../../services/bancos-movimientos.serv
           </div>
         } @else {
           <app-data-table-frame
+            tableModule="bancos"
+            tableId="movimientos"
             [showSearch]="false"
             [total]="totalPaginador()"
             [pageIndex]="pageIndex()"

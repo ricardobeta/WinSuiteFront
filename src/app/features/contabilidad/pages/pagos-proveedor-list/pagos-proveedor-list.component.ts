@@ -35,6 +35,8 @@ import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service
       } @else {
         <section class="surface-card table-card">
           <app-data-table-frame
+            tableModule="contabilidad"
+            tableId="pagos-proveedor"
             searchPlaceholder="Buscar pago, proveedor o referencia"
             [total]="pagosFiltrados().length"
             [pageIndex]="pageIndex()"

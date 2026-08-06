@@ -170,6 +170,8 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
           </div>
         } @else {
           <app-data-table-frame
+            tableModule="contabilidad"
+            tableId="plan-cuentas"
             [showSearch]="false"
             [total]="gruposRaizFiltrados().length"
             [pageIndex]="pageIndexActual()"

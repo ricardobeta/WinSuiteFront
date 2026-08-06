@@ -11,7 +11,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatTabsModule } from '@angular/material/tabs';
 import { SitiosService } from '../../services/sitios.service';
 
-/** Shell del sitio seleccionado: tabs Editor | Catalogo* | Pedidos* | Configuracion (*solo ecommerce). */
+/** Shell del sitio seleccionado: Productos solo ecommerce; Pedidos disponible tambien en landing. */
 @Component({
   selector: 'app-sitio-web-shell',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -39,17 +39,17 @@ import { SitiosService } from '../../services/sitios.service';
               routerLinkActive
               #rlCatalogo="routerLinkActive"
               [active]="rlCatalogo.isActive"
-              ><mat-icon>sell</mat-icon>&nbsp;Catalogo</a
-            >
-            <a
-              mat-tab-link
-              routerLink="pedidos"
-              routerLinkActive
-              #rlPedidos="routerLinkActive"
-              [active]="rlPedidos.isActive"
-              ><mat-icon>receipt_long</mat-icon>&nbsp;Pedidos</a
+              ><mat-icon>sell</mat-icon>&nbsp;Productos</a
             >
           }
+          <a
+            mat-tab-link
+            routerLink="pedidos"
+            routerLinkActive
+            #rlPedidos="routerLinkActive"
+            [active]="rlPedidos.isActive"
+            ><mat-icon>receipt_long</mat-icon>&nbsp;Pedidos</a
+          >
           <a
             mat-tab-link
             routerLink="formularios"

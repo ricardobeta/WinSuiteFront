@@ -95,6 +95,8 @@ import { FirmaDigitalConfig } from '../../../../shared/models/facturacion.models
 					</mat-card-header>
 					<mat-card-content>
 						<app-data-table-frame
+							tableModule="facturacion"
+							tableId="firmas"
 							searchPlaceholder="Buscar firma, RUC o empresa"
 							[total]="firmasFiltradas().length"
 							[pageIndex]="pageIndex()"

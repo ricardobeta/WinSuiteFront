@@ -25,6 +25,7 @@ import {
   CATALOGO_PRODUCTOS,
   ContenidoSitio,
   MODO_RENDER,
+  MarcaWinsuiteComponent,
   PICKER_IMAGEN,
   PaginaDoc,
   PickerImagen,
@@ -59,6 +60,11 @@ import { CanvasEditorComponent } from '../../components/canvas-editor/canvas-edi
 import { PanelPropiedadesComponent } from '../../components/panel-propiedades/panel-propiedades.component';
 import { PanelTemaComponent } from '../../components/panel-tema/panel-tema.component';
 import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-sitio.component';
+import { PlanService } from '../../../../core/services/plan.service';
+import {
+  DialogoSeoPaginaComponent,
+  DialogoSeoPaginaData,
+} from '../../components/dialogo-seo-pagina/dialogo-seo-pagina.component';
 
 const AUTOSAVE_MS = 1500;
 
@@ -111,6 +117,7 @@ const AUTOSAVE_MS = 1500;
     PanelPropiedadesComponent,
     PanelTemaComponent,
     BarraTextoComponent,
+    MarcaWinsuiteComponent,
   ],
   host: {
     '(document:keydown)': 'alTeclear($event)',
@@ -126,6 +133,11 @@ const AUTOSAVE_MS = 1500;
         <button mat-icon-button matTooltip="Nueva pagina" (click)="nuevaPagina()">
           <mat-icon>note_add</mat-icon>
         </button>
+        @if (!paginaActualId().startsWith('__')) {
+          <button mat-icon-button matTooltip="SEO de esta pagina" (click)="editarSeoPagina()">
+            <mat-icon>manage_search</mat-icon>
+          </button>
+        }
 
         <span class="separador"></span>
 
@@ -236,6 +248,9 @@ const AUTOSAVE_MS = 1500;
                   (eliminar)="eliminarBloque($event)"
                   (toggleVisible)="alternarVisible($event)"
                 />
+                @if (esPlanFree()) {
+                  <div class="marca-sistema"><span>Incluido por tu plan · no editable</span><ws-marca-winsuite /></div>
+                }
               </div>
             } @else {
               <div class="cargando">Cargando borrador...</div>
@@ -371,7 +386,6 @@ const AUTOSAVE_MS = 1500;
     .marco {
       margin-inline: auto;
       max-width: 1180px;
-      transition: max-width 0.2s ease;
     }
     .marco.tablet {
       max-width: 768px;
@@ -389,6 +403,8 @@ const AUTOSAVE_MS = 1500;
       text-align: center;
       opacity: 0.55;
     }
+    .marca-sistema { position:relative; }
+    .marca-sistema>span { position:absolute;z-index:2;inset-block-start:4px;inset-inline-end:6px;padding:2px 7px;border-radius:7px;background:rgba(255,255,255,.16);color:#ccfbf1;font-size:.65rem; }
     @media (max-width: 960px) {
       .cuerpo { grid-template-columns: 1fr; }
       .lateral { position: relative; top: auto; height: auto; max-height: 46vh; border: 0 !important; }
@@ -397,6 +413,7 @@ const AUTOSAVE_MS = 1500;
   `,
 })
 export class EditorPageComponent {
+  private readonly planService = inject(PlanService);
   private readonly sitiosService = inject(SitiosService);
   private readonly borradorService = inject(SitioBorradorService);
   private readonly publicacionService = inject(SitioPublicacionService);
@@ -408,6 +425,7 @@ export class EditorPageComponent {
   protected readonly historial = inject(EditorHistorialService);
 
   readonly sitioId = input.required<string>();
+  readonly esPlanFree = computed(() => (this.planService.plan()?.planId ?? 'free') === 'free');
 
   private readonly panelDerecho = viewChild<ElementRef<HTMLElement>>('panelDerecho');
 
@@ -831,6 +849,37 @@ export class EditorPageComponent {
     };
     this.mutar((contenido) => ({ ...contenido, paginas: { ...contenido.paginas, [id]: pagina } }));
     this.paginaActualId.set(id);
+  }
+
+  async editarSeoPagina(): Promise<void> {
+    const contenido = this.contenido();
+    const config = this.config();
+    const pagina = contenido?.paginas[this.paginaActualId()];
+    if (!pagina || !config || pagina.slug.startsWith('__')) return;
+    const data: DialogoSeoPaginaData = {
+      pagina,
+      tituloGlobal: config.seo.title,
+      descripcionGlobal: config.seo.description,
+      imagenGlobal: config.seo.ogImageUrl,
+      urlBase: config.dominioCustom?.verificado
+        ? `https://${config.dominioCustom.dominio}`
+        : `https://${config.subdominio}.winsuit.app`,
+    };
+    const seo = await firstValueFrom(
+      this.dialog.open<DialogoSeoPaginaComponent, DialogoSeoPaginaData, PaginaDoc['seo']>(
+        DialogoSeoPaginaComponent,
+        { data, width: '680px', maxWidth: '96vw', autoFocus: 'first-tabbable' },
+      ).afterClosed(),
+    );
+    if (!seo) return;
+    this.mutar((actual) => ({
+      ...actual,
+      paginas: {
+        ...actual.paginas,
+        [pagina.id]: { ...actual.paginas[pagina.id], seo, actualizadoEn: Date.now() },
+      },
+    }));
+    this.snackBar.open('SEO de la pagina actualizado', 'OK', { duration: 3000 });
   }
 
   deshacer(): void {

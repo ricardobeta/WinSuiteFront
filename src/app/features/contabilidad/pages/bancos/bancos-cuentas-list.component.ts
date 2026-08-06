@@ -96,7 +96,7 @@ import { CuentaBancariaDialogComponent } from './cuenta-bancaria-dialog.componen
             <p>Crea tu primera cuenta y vincúlala a una cuenta contable de activo.</p>
           </div>
         } @else {
-          <app-data-table-frame [showSearch]="false" [showPaginator]="false">
+          <app-data-table-frame tableModule="bancos" tableId="cuentas" [showSearch]="false" [showPaginator]="false">
             <table mat-table [dataSource]="cuentas()" class="bancos-table">
               <ng-container matColumnDef="nombre">
                 <th mat-header-cell *matHeaderCellDef>Cuenta</th>

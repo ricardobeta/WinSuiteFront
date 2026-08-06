@@ -7,13 +7,17 @@ import { MatTableModule } from '@angular/material/table';
 import { PageEvent } from '@angular/material/paginator';
 
 import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
+import { CustomFieldValueComponent } from '../../../../shared/components/custom-field-value/custom-field-value.component';
+import { CampoPersonalizado } from '../../../../shared/models/clientes.models';
+import { TableColumnDefinition } from '../../../../shared/models/table-preferences.models';
 import { Proveedor } from '../../models/inventario.models';
+import { CamposInventarioService } from '../../services/campos-inventario.service';
 import { ProveedoresService } from '../../services/proveedores.service';
 
 @Component({
   selector: 'app-proveedores-list',
   standalone: true,
-  imports: [CommonModule, RouterLink, MatButtonModule, MatTableModule, DataTableFrameComponent],
+  imports: [CommonModule, RouterLink, MatButtonModule, MatTableModule, DataTableFrameComponent, CustomFieldValueComponent],
   template: `
     <section class="surface-card page-card">
       <div class="header">
@@ -26,6 +30,9 @@ import { ProveedoresService } from '../../services/proveedores.service';
       </div>
 
       <app-data-table-frame
+        tableModule="inventario"
+        tableId="proveedores"
+        [columns]="columnDefinitions()"
         searchPlaceholder="Buscar proveedor"
         [total]="proveedoresFiltrados().length"
         [pageIndex]="pageIndex()"
@@ -59,6 +66,35 @@ import { ProveedoresService } from '../../services/proveedores.service';
             <td mat-cell *matCellDef="let row">{{ row.activo ? 'Activo' : 'Inactivo' }}</td>
           </ng-container>
 
+          <ng-container matColumnDef="ruc">
+            <th mat-header-cell *matHeaderCellDef>RUC</th>
+            <td mat-cell *matCellDef="let row">{{ row.ruc || '—' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="contacto">
+            <th mat-header-cell *matHeaderCellDef>Contacto</th>
+            <td mat-cell *matCellDef="let row">{{ row.nombreContacto || '—' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="direccion">
+            <th mat-header-cell *matHeaderCellDef>Dirección</th>
+            <td mat-cell *matCellDef="let row">{{ row.direccion || '—' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="credito">
+            <th mat-header-cell *matHeaderCellDef>Crédito</th>
+            <td mat-cell *matCellDef="let row">{{ row.diasCredito }} días · {{ row.moneda }}</td>
+          </ng-container>
+
+          @for (campo of camposDisponibles(); track campo.idCampo) {
+            <ng-container [matColumnDef]="customColumnId(campo.idCampo)">
+              <th mat-header-cell *matHeaderCellDef>{{ campo.nombreMostrar }}</th>
+              <td mat-cell *matCellDef="let row">
+                <app-custom-field-value [field]="campo" [value]="row.camposPersonalizados?.[campo.idCampo]" />
+              </td>
+            </ng-container>
+          }
+
           <ng-container matColumnDef="acciones">
             <th mat-header-cell *matHeaderCellDef>Acciones</th>
             <td mat-cell *matCellDef="let row">
@@ -66,8 +102,8 @@ import { ProveedoresService } from '../../services/proveedores.service';
             </td>
           </ng-container>
 
-          <tr mat-header-row *matHeaderRowDef="columnas"></tr>
-          <tr mat-row *matRowDef="let row; columns: columnas"></tr>
+          <tr mat-header-row *matHeaderRowDef="columnas()"></tr>
+          <tr mat-row *matRowDef="let row; columns: columnas()"></tr>
         </table>
       </app-data-table-frame>
     </section>
@@ -85,9 +121,11 @@ import { ProveedoresService } from '../../services/proveedores.service';
 })
 export class ProveedoresListComponent implements OnInit {
   private readonly proveedoresService = inject(ProveedoresService);
+  private readonly camposService = inject(CamposInventarioService);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly proveedores = signal<Proveedor[]>([]);
+  protected readonly camposDisponibles = signal<CampoPersonalizado[]>([]);
   protected readonly busqueda = signal('');
   protected readonly pageIndex = signal(0);
   protected readonly pageSize = signal(10);
@@ -102,7 +140,37 @@ export class ProveedoresListComponent implements OnInit {
     const start = this.pageIndex() * this.pageSize();
     return this.proveedoresFiltrados().slice(start, start + this.pageSize());
   });
-  protected readonly columnas = ['codigo', 'nombre', 'email', 'telefono', 'estado', 'acciones'];
+  protected readonly columnas = computed(() => [
+    'codigo',
+    'nombre',
+    'email',
+    'telefono',
+    'ruc',
+    'contacto',
+    'direccion',
+    'credito',
+    'estado',
+    ...this.camposDisponibles().map((campo) => this.customColumnId(campo.idCampo)),
+    'acciones'
+  ]);
+  protected readonly columnDefinitions = computed<TableColumnDefinition[]>(() => [
+    { id: 'codigo', label: 'Código' },
+    { id: 'nombre', label: 'Nombre' },
+    { id: 'email', label: 'Email' },
+    { id: 'telefono', label: 'Teléfono' },
+    { id: 'ruc', label: 'RUC', defaultVisible: false },
+    { id: 'contacto', label: 'Persona de contacto', defaultVisible: false },
+    { id: 'direccion', label: 'Dirección', defaultVisible: false },
+    { id: 'credito', label: 'Crédito y moneda', defaultVisible: false },
+    { id: 'estado', label: 'Estado' },
+    ...this.camposDisponibles().map((campo) => ({
+      id: this.customColumnId(campo.idCampo),
+      label: campo.nombreMostrar,
+      group: 'custom' as const,
+      defaultVisible: campo.visibleEnLista === true
+    })),
+    { id: 'acciones', label: 'Acciones', locked: true }
+  ]);
 
   ngOnInit(): void {
     this.proveedoresService
@@ -111,6 +179,14 @@ export class ProveedoresListComponent implements OnInit {
       .subscribe((proveedores) => {
         this.proveedores.set(proveedores);
       });
+    this.camposService
+      .getCampos('proveedor')
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((campos) => this.camposDisponibles.set(campos.filter((campo) => campo.activo !== false)));
+  }
+
+  protected customColumnId(idCampo: string): string {
+    return `custom_${idCampo}`;
   }
 
   protected actualizarBusqueda(value: string): void {

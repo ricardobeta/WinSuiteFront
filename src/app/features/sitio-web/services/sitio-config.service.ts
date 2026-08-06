@@ -1,6 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { Database, ref, update } from 'firebase/database';
-import { SitioConfig } from '@winsuite/bloques';
+import { SCHEMA_VERSION_SITIO, SitioConfig } from '@winsuite/bloques';
 import { AuthService } from '../../../core/services/auth.service';
 import { SitiosService } from './sitios.service';
 import { SITES_DATABASE } from '../../../core/firebase/sites-firebase.tokens';
@@ -22,6 +22,8 @@ export class SitioConfigService {
     const tenantId = this.authService.getTenantId();
     const actualizadoEn = Date.now();
     const updates: Record<string, unknown> = {
+      [`${this.configPath(sitioId)}/schemaVersion`]: SCHEMA_VERSION_SITIO,
+      [`sitios_resumen/${tenantId}/${sitioId}/config/schemaVersion`]: SCHEMA_VERSION_SITIO,
       [`${this.configPath(sitioId)}/actualizadoEn`]: actualizadoEn,
       [`sitios_resumen/${tenantId}/${sitioId}/config/actualizadoEn`]: actualizadoEn,
     };

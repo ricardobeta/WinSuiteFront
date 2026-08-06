@@ -11,6 +11,8 @@ import { PageEvent } from '@angular/material/paginator';
 
 import { CampoPersonalizado } from '../../../../shared/models/clientes.models';
 import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
+import { CustomFieldValueComponent } from '../../../../shared/components/custom-field-value/custom-field-value.component';
+import { TableColumnDefinition } from '../../../../shared/models/table-preferences.models';
 import { Almacen, Producto } from '../../models/inventario.models';
 import { AlmacenesService } from '../../services/almacenes.service';
 import { CamposInventarioService } from '../../services/campos-inventario.service';
@@ -20,7 +22,7 @@ import { ProductosService } from '../../services/productos.service';
 @Component({
   selector: 'app-productos-list',
   standalone: true,
-  imports: [CommonModule, RouterLink, MatButtonModule, MatTableModule, MatChipsModule, MatFormFieldModule, MatSelectModule, DataTableFrameComponent],
+  imports: [CommonModule, RouterLink, MatButtonModule, MatTableModule, MatChipsModule, MatFormFieldModule, MatSelectModule, DataTableFrameComponent, CustomFieldValueComponent],
   template: `
     <section class="surface-card page-card">
       <div class="header">
@@ -55,6 +57,9 @@ import { ProductosService } from '../../services/productos.service';
         </section>
       } @else {
         <app-data-table-frame
+          tableModule="inventario"
+          tableId="productos"
+          [columns]="columnDefinitions()"
           searchPlaceholder="Buscar por SKU o nombre"
           [total]="productosFiltrados().length"
           [pageIndex]="pageIndex()"
@@ -78,6 +83,16 @@ import { ProductosService } from '../../services/productos.service';
             </td>
           </ng-container>
 
+          <ng-container matColumnDef="codigoBarras">
+            <th mat-header-cell *matHeaderCellDef>Código de barras</th>
+            <td mat-cell *matCellDef="let row">{{ row.codigoBarras || '—' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="descripcion">
+            <th mat-header-cell *matHeaderCellDef>Descripción</th>
+            <td mat-cell *matCellDef="let row">{{ row.descripcion || '—' }}</td>
+          </ng-container>
+
           <ng-container matColumnDef="stockAlmacen">
             <th mat-header-cell *matHeaderCellDef>Stock ({{ nombreAlmacenSeleccionado() }})</th>
             <td mat-cell *matCellDef="let row">
@@ -93,6 +108,26 @@ import { ProductosService } from '../../services/productos.service';
           <ng-container matColumnDef="precioVenta">
             <th mat-header-cell *matHeaderCellDef>P. Venta</th>
             <td mat-cell *matCellDef="let row">{{ row.precioVenta | number:'1.2-2' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="iva">
+            <th mat-header-cell *matHeaderCellDef>IVA</th>
+            <td mat-cell *matCellDef="let row">{{ row.ivaPorcentaje | number:'1.0-2' }}%</td>
+          </ng-container>
+
+          <ng-container matColumnDef="stockMinimo">
+            <th mat-header-cell *matHeaderCellDef>Stock mínimo</th>
+            <td mat-cell *matCellDef="let row">{{ row.stockMinimo | number:'1.0-2' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="stockMaximo">
+            <th mat-header-cell *matHeaderCellDef>Stock máximo</th>
+            <td mat-cell *matCellDef="let row">{{ row.stockMaximo == null ? '—' : (row.stockMaximo | number:'1.0-2') }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="inventarioNegativo">
+            <th mat-header-cell *matHeaderCellDef>Inventario negativo</th>
+            <td mat-cell *matCellDef="let row">{{ row.permitirInventarioNegativo ? 'Sí' : 'No' }}</td>
           </ng-container>
 
           <ng-container matColumnDef="estado">
@@ -116,10 +151,12 @@ import { ProductosService } from '../../services/productos.service';
             </td>
           </ng-container>
 
-          @for (campo of camposVisibles(); track campo.idCampo) {
-            <ng-container [matColumnDef]="campo.idCampo">
+          @for (campo of camposDisponibles(); track campo.idCampo) {
+            <ng-container [matColumnDef]="customColumnId(campo.idCampo)">
               <th mat-header-cell *matHeaderCellDef>{{ campo.nombreMostrar }}</th>
-              <td mat-cell *matCellDef="let row">{{ valorCampo(row, campo.idCampo) }}</td>
+              <td mat-cell *matCellDef="let row">
+                <app-custom-field-value [field]="campo" [value]="row.camposPersonalizados?.[campo.idCampo]" />
+              </td>
             </ng-container>
           }
 
@@ -165,7 +202,7 @@ export class ProductosListComponent implements OnInit {
   protected readonly almacenSeleccionadoId = signal<string | null>(null);
   protected readonly stockTotales = signal<Record<string, number>>({});
   protected readonly stockPorProductoAlmacen = signal<Record<string, Record<string, number>>>({});
-  protected readonly camposVisibles = signal<CampoPersonalizado[]>([]);
+  protected readonly camposDisponibles = signal<CampoPersonalizado[]>([]);
   protected readonly busqueda = signal('');
   protected readonly pageIndex = signal(0);
   protected readonly pageSize = signal(10);
@@ -192,12 +229,39 @@ export class ProductosListComponent implements OnInit {
   protected readonly displayedColumns = computed(() => [
     'sku',
     'nombre',
+    'codigoBarras',
+    'descripcion',
     'stockAlmacen',
-    ...this.camposVisibles().map((campo) => campo.idCampo),
+    ...this.camposDisponibles().map((campo) => this.customColumnId(campo.idCampo)),
     'precioCosto',
     'precioVenta',
+    'iva',
+    'stockMinimo',
+    'stockMaximo',
+    'inventarioNegativo',
     'estado',
     'acciones'
+  ]);
+  protected readonly columnDefinitions = computed<TableColumnDefinition[]>(() => [
+    { id: 'sku', label: 'SKU' },
+    { id: 'nombre', label: 'Nombre' },
+    { id: 'codigoBarras', label: 'Código de barras', defaultVisible: false },
+    { id: 'descripcion', label: 'Descripción', defaultVisible: false },
+    { id: 'stockAlmacen', label: 'Stock del almacén' },
+    ...this.camposDisponibles().map((campo) => ({
+      id: this.customColumnId(campo.idCampo),
+      label: campo.nombreMostrar,
+      group: 'custom' as const,
+      defaultVisible: campo.visibleEnLista === true
+    })),
+    { id: 'precioCosto', label: 'Precio de costo' },
+    { id: 'precioVenta', label: 'Precio de venta' },
+    { id: 'iva', label: 'IVA', defaultVisible: false },
+    { id: 'stockMinimo', label: 'Stock mínimo', defaultVisible: false },
+    { id: 'stockMaximo', label: 'Stock máximo', defaultVisible: false },
+    { id: 'inventarioNegativo', label: 'Permite inventario negativo', defaultVisible: false },
+    { id: 'estado', label: 'Estado' },
+    { id: 'acciones', label: 'Acciones', locked: true }
   ]);
 
   ngOnInit(): void {
@@ -243,7 +307,7 @@ export class ProductosListComponent implements OnInit {
       .getCampos('producto')
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((campos) => {
-        this.camposVisibles.set(campos.filter((campo) => campo.visibleEnLista));
+        this.camposDisponibles.set(campos.filter((campo) => campo.activo !== false));
       });
   }
 
@@ -252,12 +316,8 @@ export class ProductosListComponent implements OnInit {
     return stock < Number(producto.stockMinimo ?? 0);
   }
 
-  protected valorCampo(producto: Producto, idCampo: string): string {
-    const value = producto.camposPersonalizados?.[idCampo];
-    if (Array.isArray(value)) {
-      return value.join(', ');
-    }
-    return value === undefined || value === null || value === '' ? '-' : String(value);
+  protected customColumnId(idCampo: string): string {
+    return `custom_${idCampo}`;
   }
 
   protected seleccionarAlmacen(almacenId: string | null): void {

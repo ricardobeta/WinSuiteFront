@@ -227,6 +227,8 @@ import { SRI_TIPOS_COMPROBANTE, SRI_TIPO_COMPROBANTE_DEFAULT, SriDownloadJob } f
         </mat-card-header>
         <mat-card-content>
           <app-data-table-frame
+            tableModule="facturacion"
+            tableId="sri-descargas"
             searchPlaceholder="Buscar ejecución o diagnóstico"
             [total]="jobsFiltrados().length"
             [pageIndex]="pageIndex()"

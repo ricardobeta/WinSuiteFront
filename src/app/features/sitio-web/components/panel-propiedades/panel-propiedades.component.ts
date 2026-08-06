@@ -566,9 +566,23 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
         }
         @case ('pago') {
           <p class="ayuda">
-            Este boton lleva a la pagina de pago de tu sitio (/pago), que muestra los metodos que
-            configures en la pestaña <b>Pagos</b>.
+            La oferta fija crea un pedido con el valor publicado y luego abre los metodos configurados en <b>Pagos</b>.
           </p>
+          <label>Tipo de cobro
+            <select [ngModel]="b.modoPago ?? 'libre'" (ngModelChange)="patch({ modoPago: $event })">
+              <option value="fijo">Producto o servicio con precio fijo</option>
+              <option value="libre">Monto ingresado por el visitante (compatibilidad)</option>
+            </select>
+          </label>
+          @if ((b.modoPago ?? 'libre') === 'fijo') {
+            <label>Concepto<input maxlength="200" [ngModel]="b.concepto ?? b.titulo ?? ''"
+              (ngModelChange)="patch({ concepto: $event })" /></label>
+            <div class="fila">
+              <label>Monto USD<input type="number" min="0.01" max="999999.99" step="0.01"
+                [ngModel]="b.monto" (ngModelChange)="patch({ monto: numero($event), moneda: 'USD' })" /></label>
+              <label>Moneda<input value="USD" disabled /></label>
+            </div>
+          }
           <label
             >Titulo<input [ngModel]="b.titulo" (ngModelChange)="patch({ titulo: $event })"
           /></label>
@@ -596,15 +610,6 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
                 (ngModelChange)="patch({ colorBotonTexto: $event })" />
             </label>
           </div>
-          <label class="check">
-            <input type="checkbox" [ngModel]="b.mostrarDescripcion ?? false"
-              (ngModelChange)="patch({ mostrarDescripcion: $event })" />
-            Mostrar descripcion corta
-          </label>
-          <label>Texto del boton
-            <input [ngModel]="b.textoBoton ?? 'Agregar al carrito'"
-              (ngModelChange)="patchOpcional('textoBoton', $event)" />
-          </label>
           @if (b.colorBotonFondo || b.colorBotonTexto) {
             <button type="button" class="agregar"
               (click)="patch({ colorBotonFondo: undefined, colorBotonTexto: undefined })">
@@ -775,6 +780,18 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
               <option [ngValue]="4">4</option>
             </select>
           </label>
+          @if ((b.variante ?? 'iconos') === 'bento') {
+            <p class="ayuda medida"><mat-icon>image</mat-icon><span>Portada: 1600 × 900 px. Tarjetas: 960 × 720 px. WebP/AVIF, idealmente menos de 250 KB.</span></p>
+            @for (item of b.items; track $index; let i = $index) {
+              <div class="item-lista columna">
+                <span class="mini-titulo">{{ i === 0 ? 'Caracteristica destacada' : 'Caracteristica ' + (i + 1) }}</span>
+                <app-selector-imagen [url]="item.imagenUrl"
+                  (urlChange)="patchItem('items', i, { imagenUrl: $event || undefined })" />
+                <input placeholder="Texto alternativo" [ngModel]="item.imagenAlt ?? item.texto ?? item.titulo"
+                  (ngModelChange)="patchItem('items', i, { imagenAlt: $event || item.texto || item.titulo })" />
+              </div>
+            }
+          }
           <p class="ayuda">
             El icono es un emoji: haz click sobre el y cambialo (Win + . abre el selector de
             emojis). Textos editables sobre el bloque.
@@ -1307,6 +1324,15 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
           </button>
         }
         @case ('footer') {
+          @if ((b.variante ?? 'centrado') === 'columnas') {
+            <label>Titulo del negocio<input [ngModel]="b.tituloNegocio ?? ''" placeholder="Usa el nombre del sitio"
+              (ngModelChange)="patch({ tituloNegocio: $event })" /></label>
+            <label>Titulo de paginas<input [ngModel]="b.tituloPaginas ?? 'Paginas'"
+              (ngModelChange)="patch({ tituloPaginas: $event })" /></label>
+            <label>Titulo de redes<input [ngModel]="b.tituloRedes ?? 'Siguenos'"
+              (ngModelChange)="patch({ tituloRedes: $event })" /></label>
+            <p class="ayuda">Selecciona estos titulos en el bloque o en Tipografia individual para cambiar color, fuente, tamaño y alineacion.</p>
+          }
           <label
             >Texto<textarea
               rows="2"
@@ -1770,8 +1796,8 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
       opacity: 1;
       color: #475569;
       background: rgba(37, 99, 235, 0.07);
-      border-left: 3px solid rgba(37, 99, 235, 0.55);
-      border-radius: 4px;
+      border: 1px solid rgba(37, 99, 235, 0.2);
+      border-radius: 8px;
       padding: 7px 9px;
     }
     .ayuda.medida mat-icon {
@@ -1931,7 +1957,15 @@ export class PanelPropiedadesComponent {
 
   private readonly formulariosService = inject(FormulariosService);
 
-  readonly categorias = toSignal(this.categoriasService.getCategorias(), { initialValue: [] });
+  private readonly categoriasInventario = toSignal(this.categoriasService.getCategorias(), { initialValue: [] });
+  readonly categorias = computed(() => {
+    const mapa = new Map<string, { id: string; nombre: string }>();
+    for (const categoria of this.categoriasInventario()) {
+      if (categoria.id) mapa.set(categoria.id, { id: categoria.id, nombre: categoria.nombre });
+    }
+    for (const categoria of this.catalogo.categorias?.() ?? []) mapa.set(categoria.id, categoria);
+    return [...mapa.values()];
+  });
   readonly productosCatalogo = computed(() => this.catalogo.productos());
   readonly formulariosEmpresa = toSignal(this.formulariosService.getFormularios(), {
     initialValue: [],
@@ -1974,7 +2008,12 @@ export class PanelPropiedadesComponent {
         { id: 'boton', nombre: 'Boton' },
       ],
       header: [{ id: 'marca', nombre: 'Nombre del negocio' }, { id: 'enlaces', nombre: 'Enlaces del menu' }],
-      footer: [{ id: 'texto', nombre: 'Texto legal' }],
+      footer: [
+        { id: 'texto', nombre: 'Texto legal' },
+        { id: 'titulo-negocio', nombre: 'Titulo del negocio' },
+        { id: 'titulo-paginas', nombre: 'Titulo de paginas' },
+        { id: 'titulo-redes', nombre: 'Titulo de redes' },
+      ],
       pago: [{ id: 'titulo', nombre: 'Titulo' }, { id: 'texto', nombre: 'Descripcion' }, { id: 'boton', nombre: 'Boton' }],
       planes: [{ id: 'titulo', nombre: 'Titulo' }],
       faq: [{ id: 'titulo', nombre: 'Titulo' }],
@@ -2030,6 +2069,10 @@ export class PanelPropiedadesComponent {
     footer: [
       { id: 'centrado', nombre: 'Centrado', icono: 'align_horizontal_center' },
       { id: 'columnas', nombre: 'Columnas', icono: 'view_column' },
+    ],
+    caracteristicas: [
+      { id: 'iconos', nombre: 'Iconos', icono: 'stars' },
+      { id: 'bento', nombre: 'Bento visual', icono: 'view_quilt' },
     ],
     productos: [
       { id: 'tarjetas', nombre: 'Tarjetas', icono: 'grid_view' },

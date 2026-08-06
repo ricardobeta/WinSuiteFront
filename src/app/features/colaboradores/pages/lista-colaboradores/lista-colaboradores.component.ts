@@ -14,6 +14,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { AppUserProfile } from '../../../../core/models/auth.models';
 import { AuthorizationService } from '../../../../core/services/authorization.service';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { ColaboradoresService } from '../../services/colaboradores.service';
 
 @Component({
@@ -29,7 +30,8 @@ import { ColaboradoresService } from '../../services/colaboradores.service';
     MatIconModule,
     MatTooltipModule,
     MatChipsModule,
-    MatSnackBarModule
+    MatSnackBarModule,
+    DataTableFrameComponent
   ],
   template: `
     <section class="surface-card page-card">
@@ -47,7 +49,7 @@ import { ColaboradoresService } from '../../services/colaboradores.service';
         }
       </div>
 
-      <div class="table-wrap">
+      <app-data-table-frame tableModule="empresa" tableId="colaboradores" [showSearch]="false" [showPaginator]="false">
         <table mat-table [dataSource]="dataSource" matSort>
           <ng-container matColumnDef="fullName">
             <th mat-header-cell *matHeaderCellDef mat-sort-header>Nombre</th>
@@ -93,7 +95,7 @@ import { ColaboradoresService } from '../../services/colaboradores.service';
           <tr mat-header-row *matHeaderRowDef="columns"></tr>
           <tr mat-row *matRowDef="let row; columns: columns"></tr>
         </table>
-      </div>
+      </app-data-table-frame>
 
       <mat-paginator [pageSizeOptions]="[10, 25, 50]" showFirstLastButtons></mat-paginator>
     </section>

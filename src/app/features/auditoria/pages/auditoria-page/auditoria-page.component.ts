@@ -75,6 +75,8 @@ import { DataTableFrameComponent } from '../../../../shared/components/data-tabl
           </div>
         } @else {
           <app-data-table-frame
+            tableModule="auditoria"
+            tableId="eventos"
             [showSearch]="false"
             [total]="filteredEvents().length"
             [pageIndex]="pageIndexActual()"

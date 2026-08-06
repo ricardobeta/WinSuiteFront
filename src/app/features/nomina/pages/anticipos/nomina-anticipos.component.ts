@@ -16,6 +16,8 @@ import { AuthService } from '../../../../core/services/auth.service';
 import { AuthorizationService } from '../../../../core/services/authorization.service';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
+import { TableColumnDefinition } from '../../../../shared/models/table-preferences.models';
 import {
   AnticipoNomina,
   AnticipoNominaDetalle,
@@ -36,7 +38,8 @@ import { AnticiposNominaService } from '../../../contabilidad/services/anticipos
     MatInputModule,
     MatSelectModule,
     MatSnackBarModule,
-    MatTooltipModule
+    MatTooltipModule,
+    DataTableFrameComponent
   ],
   template: `
     <section class="anticipos-page">
@@ -114,42 +117,43 @@ import { AnticiposNominaService } from '../../../contabilidad/services/anticipos
             <p>Registra el primer anticipo y se descontara solo en el rol del periodo que elijas.</p>
           </div>
         } @else {
+          <app-data-table-frame tableModule="nomina" tableId="anticipos" [columns]="columnDefinitions" [showSearch]="false" [showPaginator]="false">
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Documento</th>
-                  <th>Periodo</th>
-                  <th>Entrega</th>
-                  <th>Concepto</th>
-                  <th class="num">Empleados</th>
-                  <th class="num">Total</th>
-                  <th>Estado</th>
-                  <th>Rol</th>
-                  <th></th>
+                  <th data-column-id="documento">Documento</th>
+                  <th data-column-id="periodo">Periodo</th>
+                  <th data-column-id="entrega">Entrega</th>
+                  <th data-column-id="concepto">Concepto</th>
+                  <th data-column-id="empleados" class="num">Empleados</th>
+                  <th data-column-id="total" class="num">Total</th>
+                  <th data-column-id="estado">Estado</th>
+                  <th data-column-id="rol">Rol</th>
+                  <th data-column-id="acciones"></th>
                 </tr>
               </thead>
               <tbody>
                 @for (anticipo of anticiposFiltrados(); track anticipo.id) {
                   <tr>
-                    <td>
+                    <td data-column-id="documento">
                       <button class="row-link" type="button" (click)="alternar(anticipo)" [attr.aria-expanded]="expandidoId() === anticipo.id">
                         <mat-icon>{{ expandidoId() === anticipo.id ? 'expand_less' : 'expand_more' }}</mat-icon>
                         <strong>{{ anticipo.numero }}</strong>
                       </button>
                     </td>
-                    <td>{{ anticipo.periodo }}</td>
-                    <td>{{ anticipo.fecha | date:'dd/MM/yyyy' }}</td>
-                    <td class="concepto">{{ anticipo.concepto }}</td>
-                    <td class="num">{{ anticipo.totalEmpleados }}</td>
-                    <td class="num">{{ anticipo.total | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
-                    <td>
+                    <td data-column-id="periodo">{{ anticipo.periodo }}</td>
+                    <td data-column-id="entrega">{{ anticipo.fecha | date:'dd/MM/yyyy' }}</td>
+                    <td data-column-id="concepto" class="concepto">{{ anticipo.concepto }}</td>
+                    <td data-column-id="empleados" class="num">{{ anticipo.totalEmpleados }}</td>
+                    <td data-column-id="total" class="num">{{ anticipo.total | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
+                    <td data-column-id="estado">
                       <span class="pill" [class.ok]="anticipo.estado === 'DESCONTADO'" [class.off]="anticipo.estado === 'ANULADO'">
                         {{ etiquetaEstado(anticipo.estado) }}
                       </span>
                     </td>
-                    <td>{{ anticipo.rolNumero || '—' }}</td>
-                    <td class="acciones">
+                    <td data-column-id="rol">{{ anticipo.rolNumero || '—' }}</td>
+                    <td data-column-id="acciones" class="acciones">
                       @if (anticipo.asientoId) {
                         <a
                           mat-icon-button
@@ -227,6 +231,7 @@ import { AnticiposNominaService } from '../../../contabilidad/services/anticipos
               </tbody>
             </table>
           </div>
+          </app-data-table-frame>
         }
       </section>
     </section>
@@ -296,6 +301,17 @@ export class NominaAnticiposComponent implements OnInit {
   protected readonly periodo = signal(new Date().toISOString().slice(0, 7));
   protected readonly filtroEstado = signal<'TODOS' | EstadoAnticipoNomina>('TODOS');
   protected readonly busqueda = signal('');
+  protected readonly columnDefinitions: readonly TableColumnDefinition[] = [
+    { id: 'documento', label: 'Documento' },
+    { id: 'periodo', label: 'Periodo' },
+    { id: 'entrega', label: 'Entrega' },
+    { id: 'concepto', label: 'Concepto' },
+    { id: 'empleados', label: 'Empleados' },
+    { id: 'total', label: 'Total' },
+    { id: 'estado', label: 'Estado' },
+    { id: 'rol', label: 'Rol' },
+    { id: 'acciones', label: 'Acciones', locked: true }
+  ];
 
   protected readonly canCreate = computed(() => this.authorization.canAccess('contabilidad', 'create'));
   protected readonly canUpdate = computed(() => this.authorization.canAccess('contabilidad', 'update'));

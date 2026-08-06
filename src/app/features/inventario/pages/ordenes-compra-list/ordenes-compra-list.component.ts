@@ -44,6 +44,8 @@ import { OrdenesCompraService } from '../../services/ordenes-compra.service';
         </section>
       } @else {
         <app-data-table-frame
+          tableModule="inventario"
+          tableId="ordenes-compra"
           searchPlaceholder="Buscar orden de compra"
           [total]="ordenesFiltradas().length"
           [pageIndex]="pageIndex()"

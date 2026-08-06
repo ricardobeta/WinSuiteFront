@@ -10,7 +10,10 @@ import { PageEvent } from '@angular/material/paginator';
 
 import { AuthorizationService } from '../../../../core/services/authorization.service';
 import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
+import { CustomFieldValueComponent } from '../../../../shared/components/custom-field-value/custom-field-value.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { CampoPersonalizado } from '../../../../shared/models/clientes.models';
+import { TableColumnDefinition } from '../../../../shared/models/table-preferences.models';
 import { EmpleadoNomina } from '../../../contabilidad/models/nomina.models';
 import { NominaService } from '../../../contabilidad/services/nomina.service';
 
@@ -24,7 +27,8 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
     MatIconModule,
     MatSnackBarModule,
     MatTableModule,
-    DataTableFrameComponent
+    DataTableFrameComponent,
+    CustomFieldValueComponent
   ],
   template: `
     <section class="empleados-page">
@@ -65,6 +69,9 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
           </div>
         } @else {
           <app-data-table-frame
+            tableModule="nomina"
+            tableId="empleados"
+            [columns]="columnDefinitions()"
             searchPlaceholder="Buscar empleado, cargo o identificación"
             [total]="empleadosFiltrados().length"
             [pageIndex]="pageIndex()"
@@ -89,6 +96,16 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
                 </td>
               </ng-container>
 
+              <ng-container matColumnDef="email">
+                <th mat-header-cell *matHeaderCellDef>Email</th>
+                <td mat-cell *matCellDef="let row">{{ row.email || '—' }}</td>
+              </ng-container>
+
+              <ng-container matColumnDef="telefono">
+                <th mat-header-cell *matHeaderCellDef>Teléfono</th>
+                <td mat-cell *matCellDef="let row">{{ row.telefono || '—' }}</td>
+              </ng-container>
+
               <ng-container matColumnDef="ingreso">
                 <th mat-header-cell *matHeaderCellDef>Ingreso</th>
                 <td mat-cell *matCellDef="let row">{{ row.fechaIngreso }}</td>
@@ -111,12 +128,41 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
                 </td>
               </ng-container>
 
+              <ng-container matColumnDef="decimoTercero">
+                <th mat-header-cell *matHeaderCellDef>Décimo tercero</th>
+                <td mat-cell *matCellDef="let row">{{ row.modoDecimoTercero === 'MENSUALIZADO' ? 'Mensualizado' : 'Acumulado' }}</td>
+              </ng-container>
+
+              <ng-container matColumnDef="decimoCuarto">
+                <th mat-header-cell *matHeaderCellDef>Décimo cuarto</th>
+                <td mat-cell *matCellDef="let row">{{ row.modoDecimoCuarto === 'MENSUALIZADO' ? 'Mensualizado' : 'Acumulado' }}</td>
+              </ng-container>
+
+              <ng-container matColumnDef="cargasFamiliares">
+                <th mat-header-cell *matHeaderCellDef>Cargas familiares</th>
+                <td mat-cell *matCellDef="let row">{{ row.cargasFamiliares ?? 0 }}</td>
+              </ng-container>
+
+              <ng-container matColumnDef="fechaSalida">
+                <th mat-header-cell *matHeaderCellDef>Fecha de salida</th>
+                <td mat-cell *matCellDef="let row">{{ row.fechaSalida || '—' }}</td>
+              </ng-container>
+
               <ng-container matColumnDef="estado">
                 <th mat-header-cell *matHeaderCellDef>Estado</th>
                 <td mat-cell *matCellDef="let row">
                   <span class="pill" [class.off]="row.estado === 'INACTIVO'" [class.pending]="row.estado === 'EN_LIQUIDACION'">{{ etiquetaEstado(row.estado) }}</span>
                 </td>
               </ng-container>
+
+              @for (campo of camposPersonalizados(); track campo.idCampo) {
+                <ng-container [matColumnDef]="customColumnId(campo.idCampo)">
+                  <th mat-header-cell *matHeaderCellDef>{{ campo.nombreMostrar }}</th>
+                  <td mat-cell *matCellDef="let row">
+                    <app-custom-field-value [field]="campo" [value]="row.camposPersonalizados?.[campo.idCampo]" />
+                  </td>
+                </ng-container>
+              }
 
               <ng-container matColumnDef="acciones">
                 <th mat-header-cell *matHeaderCellDef class="num">Acciones</th>
@@ -133,8 +179,8 @@ import { NominaService } from '../../../contabilidad/services/nomina.service';
                 </td>
               </ng-container>
 
-              <tr mat-header-row *matHeaderRowDef="columnas"></tr>
-              <tr mat-row *matRowDef="let row; columns: columnas"></tr>
+              <tr mat-header-row *matHeaderRowDef="columnas()"></tr>
+              <tr mat-row *matRowDef="let row; columns: columnas()"></tr>
             </table>
           </app-data-table-frame>
         }
@@ -174,8 +220,45 @@ export class NominaEmpleadosListComponent {
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
 
-  protected readonly columnas = ['empleado', 'cargo', 'ingreso', 'sueldo', 'fondos', 'estado', 'acciones'];
   protected readonly empleados = signal<EmpleadoNomina[]>([]);
+  protected readonly camposPersonalizados = signal<CampoPersonalizado[]>([]);
+  protected readonly columnas = computed(() => [
+    'empleado',
+    'cargo',
+    'email',
+    'telefono',
+    'ingreso',
+    'sueldo',
+    'fondos',
+    'decimoTercero',
+    'decimoCuarto',
+    'cargasFamiliares',
+    'fechaSalida',
+    'estado',
+    ...this.camposPersonalizados().map((campo) => this.customColumnId(campo.idCampo)),
+    'acciones'
+  ]);
+  protected readonly columnDefinitions = computed<TableColumnDefinition[]>(() => [
+    { id: 'empleado', label: 'Empleado' },
+    { id: 'cargo', label: 'Cargo' },
+    { id: 'email', label: 'Email', defaultVisible: false },
+    { id: 'telefono', label: 'Teléfono', defaultVisible: false },
+    { id: 'ingreso', label: 'Ingreso' },
+    { id: 'sueldo', label: 'Sueldo' },
+    { id: 'fondos', label: 'Fondos de reserva' },
+    { id: 'decimoTercero', label: 'Décimo tercero', defaultVisible: false },
+    { id: 'decimoCuarto', label: 'Décimo cuarto', defaultVisible: false },
+    { id: 'cargasFamiliares', label: 'Cargas familiares', defaultVisible: false },
+    { id: 'fechaSalida', label: 'Fecha de salida', defaultVisible: false },
+    { id: 'estado', label: 'Estado' },
+    ...this.camposPersonalizados().map((campo) => ({
+      id: this.customColumnId(campo.idCampo),
+      label: campo.nombreMostrar,
+      group: 'custom' as const,
+      defaultVisible: campo.visibleEnLista === true
+    })),
+    { id: 'acciones', label: 'Acciones', locked: true }
+  ]);
   protected readonly canUpdate = computed(() => this.authorization.canAccess('contabilidad', 'update'));
   protected readonly empleadosActivos = computed(() => this.empleados().filter((empleado) => empleado.estado === 'ACTIVO'));
   protected readonly empleadosDesdePrimerDia = computed(() =>
@@ -228,6 +311,16 @@ export class NominaEmpleadosListComponent {
       .getEmpleados()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((empleados) => this.empleados.set(empleados));
+    this.nominaService
+      .getConfiguracion()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((config) => this.camposPersonalizados.set(
+        (config.camposPersonalizados ?? []).filter((campo) => campo.activo !== false)
+      ));
+  }
+
+  protected customColumnId(idCampo: string): string {
+    return `custom_${idCampo}`;
   }
 
   protected editar(empleado: EmpleadoNomina): void {

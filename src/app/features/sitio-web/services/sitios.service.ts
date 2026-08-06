@@ -15,6 +15,8 @@ import {
   EntradaSubdominio,
   SitioConfig,
   TipoSitio,
+  SCHEMA_VERSION_SITIO,
+  migrarSitioConfig,
   sitioConfigSchema,
 } from '@winsuite/bloques';
 import { AuthService } from '../../../core/services/auth.service';
@@ -67,7 +69,7 @@ export class SitiosService {
   async getConfig(sitioId: string): Promise<SitioConfig | null> {
     await this.sitesSession.ensureReady();
     const snapshot = await get(ref(this.database, `${this.getTenantPath()}/${sitioId}/config`));
-    return snapshot.exists() ? (snapshot.val() as SitioConfig) : null;
+    return snapshot.exists() ? migrarSitioConfig(snapshot.val()) : null;
   }
 
   /**
@@ -103,7 +105,7 @@ export class SitiosService {
 
     const ahora = Date.now();
     const config: SitioConfig = {
-      schemaVersion: 1,
+      schemaVersion: SCHEMA_VERSION_SITIO,
       sitioId,
       nombre,
       tipo,

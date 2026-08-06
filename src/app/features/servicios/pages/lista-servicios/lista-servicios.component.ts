@@ -17,6 +17,7 @@ import { ServiciosService } from '../../../../core/services/servicios.service';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { Servicio } from '../../../../shared/models/servicios.models';
 import { CrearServicioComponent } from '../crear-servicio/crear-servicio.component';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 
 @Component({
   selector: 'app-lista-servicios',
@@ -30,7 +31,8 @@ import { CrearServicioComponent } from '../crear-servicio/crear-servicio.compone
     MatDialogModule,
     MatIconModule,
     MatChipsModule,
-    MatTooltipModule
+    MatTooltipModule,
+    DataTableFrameComponent
   ],
   templateUrl: './lista-servicios.component.html',
   styleUrls: ['./lista-servicios.component.scss']

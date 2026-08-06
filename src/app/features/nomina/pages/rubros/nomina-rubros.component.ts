@@ -149,6 +149,8 @@ import { PlanCuentasService } from '../../../contabilidad/services/plan-cuentas.
           </div>
         } @else {
           <app-data-table-frame
+            tableModule="nomina"
+            tableId="rubros"
             searchPlaceholder="Buscar rubro"
             [total]="rubrosFiltrados().length"
             [pageIndex]="pageIndex()"

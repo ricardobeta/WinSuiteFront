@@ -17,6 +17,7 @@ import { AuthService } from '../../../../core/services/auth.service';
 import { VentaDocumento } from '../../models/ventas.models';
 import { ReversoVentaDialogComponent } from '../reverso-venta-dialog/reverso-venta-dialog.component';
 import { VentasService } from '../../services/ventas.service';
+import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 
 @Component({
   selector: 'app-ventas-resumen',
@@ -33,6 +34,7 @@ import { VentasService } from '../../services/ventas.service';
     MatPaginatorModule,
     MatSnackBarModule,
     MatTableModule,
+    DataTableFrameComponent,
     DatePipe,
     DecimalPipe
   ],
@@ -62,7 +64,7 @@ import { VentasService } from '../../services/ventas.service';
         </article>
       </section>
 
-      <div class="table-wrap">
+      <app-data-table-frame tableModule="ventas" tableId="resumen" [showSearch]="false" [showPaginator]="false">
         <table mat-table [dataSource]="ventasPaginadas()">
           <ng-container matColumnDef="numero">
             <th mat-header-cell *matHeaderCellDef>Numero</th>
@@ -108,7 +110,7 @@ import { VentasService } from '../../services/ventas.service';
           <tr mat-header-row *matHeaderRowDef="columnas"></tr>
           <tr mat-row *matRowDef="let row; columns: columnas"></tr>
         </table>
-      </div>
+      </app-data-table-frame>
 
       <mat-paginator
         [length]="ventasFiltradas().length"

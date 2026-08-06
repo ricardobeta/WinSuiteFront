@@ -95,6 +95,8 @@ import { ProductosService } from '../../services/productos.service';
       } @else {
         <section class="surface-card table-card">
           <app-data-table-frame
+            tableModule="inventario"
+            tableId="costos"
             searchPlaceholder="Buscar producto en el análisis"
             [total]="rowsFiltradas().length"
             [pageIndex]="pageIndex()"

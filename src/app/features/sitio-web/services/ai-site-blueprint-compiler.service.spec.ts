@@ -178,9 +178,9 @@ describe('AiSiteBlueprintCompilerService', () => {
     expect(blocks.every(b => b.tipo !== 'html')).toBe(true);
   });
 
-  it('degrada paycta a cta cuando el sitio es landing', () => {
+  it('crea una oferta fija desde paycta tambien cuando el sitio es landing', () => {
     const blocks = bodyBlocks([{ type: 'paycta', title: 'Paga', ctaText: 'Ir' }], false);
-    expect(blocks[0].tipo).toBe('cta');
+    expect(blocks[0]).toMatchObject({ tipo: 'pago', modoPago: 'fijo', concepto: 'Paga', monto: 10, moneda: 'USD' });
   });
 
   it('carousel degrada a imagen con una sola foto y usa mockups sin fotos', () => {

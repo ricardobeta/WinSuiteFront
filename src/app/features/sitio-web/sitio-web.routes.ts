@@ -57,7 +57,7 @@ export const SITIO_WEB_ROUTES: Routes = [
           {
             path: 'catalogo',
             loadComponent: () => import('./pages/catalogo-page/catalogo-page.component').then((c) => c.CatalogoPageComponent),
-            data: { module: 'Sitio Web', page: 'Catalogo' },
+            data: { module: 'Sitio Web', page: 'Productos' },
           },
           {
             path: 'pedidos',

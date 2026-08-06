@@ -60,6 +60,8 @@ interface RecetaRow {
         </section>
       } @else {
         <app-data-table-frame
+          tableModule="inventario"
+          tableId="recetas"
           searchPlaceholder="Buscar receta"
           [total]="recetasFiltradas().length"
           [pageIndex]="pageIndex()"
