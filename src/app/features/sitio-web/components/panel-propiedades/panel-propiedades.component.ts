@@ -797,6 +797,12 @@ import { SelectorImagenComponent } from '../selector-imagen/selector-imagen.comp
             emojis). Textos editables sobre el bloque.
           </p>
         }
+        @case ('proceso-compra') {
+          <p class="ayuda">
+            Edita el título, la introducción, la etiqueta, los iconos y los textos directamente
+            sobre el bloque. Puedes usar entre 2 y 8 etapas.
+          </p>
+        }
         @case ('logos') {
           <label class="check">
             <input
@@ -2005,7 +2011,7 @@ export class PanelPropiedadesComponent {
         { id: 'titulo', nombre: 'Titulo' }, { id: 'descripcion', nombre: 'Descripcion' },
         { id: 'direccion', nombre: 'Direccion' }, { id: 'horario', nombre: 'Horario' },
         { id: 'telefono', nombre: 'Telefono' }, { id: 'email', nombre: 'Correo' },
-        { id: 'boton', nombre: 'Boton' },
+        { id: 'boton-mapa', nombre: 'Abrir indicaciones' }, { id: 'boton', nombre: 'Boton' },
       ],
       header: [{ id: 'marca', nombre: 'Nombre del negocio' }, { id: 'enlaces', nombre: 'Enlaces del menu' }],
       footer: [
@@ -2019,6 +2025,10 @@ export class PanelPropiedadesComponent {
       faq: [{ id: 'titulo', nombre: 'Titulo' }],
       cta: [{ id: 'titulo', nombre: 'Titulo' }, { id: 'texto', nombre: 'Descripcion' }, { id: 'boton', nombre: 'Boton' }],
       caracteristicas: [{ id: 'titulo', nombre: 'Titulo' }],
+      'proceso-compra': [
+        { id: 'titulo', nombre: 'Titulo' },
+        { id: 'descripcion', nombre: 'Introduccion' },
+      ],
       logos: [{ id: 'titulo', nombre: 'Titulo' }],
       equipo: [{ id: 'titulo', nombre: 'Titulo' }],
       countdown: [{ id: 'titulo', nombre: 'Titulo' }, { id: 'mensajeFin', nombre: 'Mensaje final' }],
@@ -2331,6 +2341,7 @@ export class PanelPropiedadesComponent {
       header: 'inicio', hero: 'hero', productos: 'productos', planes: 'planes',
       formulario: 'contacto', mapa: 'ubicacion', testimonios: 'testimonios',
       faq: 'preguntas', caracteristicas: 'beneficios', equipo: 'equipo', footer: 'pie',
+      'proceso-compra': 'como-comprar',
       pago: 'pago', 'metodos-pago': 'metodos-pago', cta: 'accion',
     };
     return nombres[this.bloque().tipo] ?? this.bloque().id.toLowerCase().replace(/[^a-z0-9-]/g, '-');

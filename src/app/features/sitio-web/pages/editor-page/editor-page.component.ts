@@ -641,6 +641,7 @@ export class EditorPageComponent {
       header: 'inicio', hero: 'hero', productos: 'productos', planes: 'planes',
       formulario: 'contacto', mapa: 'ubicacion', testimonios: 'testimonios',
       faq: 'preguntas', caracteristicas: 'beneficios', equipo: 'equipo', footer: 'pie',
+      'proceso-compra': 'como-comprar',
       pago: 'pago', 'metodos-pago': 'metodos-pago', cta: 'accion', texto: 'contenido',
       galeria: 'galeria', video: 'video', carrusel: 'carrusel', logos: 'marcas',
       estadisticas: 'resultados', countdown: 'cuenta-regresiva', boton: 'boton',
