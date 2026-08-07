@@ -47,6 +47,10 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
               <span class="sufijo">.winsuit.app</span>
             </div>
           </label>
+          <a class="abrir-sitio" [href]="urlPublica(c)" target="_blank" rel="noopener noreferrer">
+            <mat-icon>open_in_new</mat-icon>
+            Abrir sitio publicado
+          </a>
 
           <h4>Dominio propio</h4>
           @if (c.dominioCustom; as dominio) {
@@ -116,6 +120,18 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
               <input [(ngModel)]="seoOgImageAlt" maxlength="200" />
             </label>
           }
+          <div class="campo">
+            <span>Icono de la pestaña del navegador</span>
+            <app-selector-imagen
+              [url]="faviconUrl() || undefined"
+              variante="icono"
+              (urlChange)="faviconUrl.set($event)"
+            />
+            <p class="nota">
+              Usa una imagen cuadrada de 512 × 512 px en PNG o WebP. Se mostrara como favicon
+              en pestañas, favoritos y accesos directos.
+            </p>
+          </div>
         </section>
 
         <section>
@@ -228,6 +244,24 @@ import { DialogoSitioComponent } from '../../components/dialogo-sitio/dialogo-si
       font-family: monospace;
       opacity: 0.7;
     }
+    .abrir-sitio {
+      width: fit-content;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--tc-primary);
+      font-weight: 650;
+      text-decoration: none;
+    }
+    .abrir-sitio:hover {
+      text-decoration: underline;
+    }
+    .abrir-sitio:focus-visible {
+      outline: 2px solid var(--tc-primary);
+      outline-offset: 3px;
+      border-radius: 6px;
+    }
     .campo {
       display: flex;
       flex-direction: column;
@@ -302,6 +336,7 @@ export class ConfiguracionPageComponent {
   readonly config = signal<SitioConfig | null>(null);
   readonly guardando = signal(false);
   readonly seoOgImage = signal('');
+  readonly faviconUrl = signal('');
 
   // Campos de formulario (se hidratan al cargar la config).
   nombre = '';
@@ -336,6 +371,7 @@ export class ConfiguracionPageComponent {
     this.seoTitle = config.seo.title;
     this.seoDescription = config.seo.description;
     this.seoOgImage.set(config.seo.ogImageUrl ?? '');
+    this.faviconUrl.set(config.seo.faviconUrl ?? '');
     this.seoOgImageAlt = config.seo.ogImageAlt ?? '';
     this.facebookPixelId = config.tracking.facebookPixelId ?? '';
     this.gaMeasurementId = config.tracking.gaMeasurementId ?? '';
@@ -373,6 +409,7 @@ export class ConfiguracionPageComponent {
                   this.seoOgImageAlt.trim() || this.seoDescription.trim() || this.nombre.trim(),
               }
             : {}),
+          ...(this.faviconUrl() ? { faviconUrl: this.faviconUrl() } : {}),
         },
         tracking: {
           ...(this.facebookPixelId.trim() ? { facebookPixelId: this.facebookPixelId.trim() } : {}),
@@ -390,6 +427,12 @@ export class ConfiguracionPageComponent {
     } finally {
       this.guardando.set(false);
     }
+  }
+
+  urlPublica(config: SitioConfig): string {
+    return config.dominioCustom?.verificado
+      ? `https://${config.dominioCustom.dominio}/`
+      : `https://${config.subdominio}.winsuit.app/`;
   }
 
   async registrarDominio(): Promise<void> {

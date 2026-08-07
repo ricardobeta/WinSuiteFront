@@ -15,7 +15,7 @@ import { SitioMediaService } from '../../services/sitio-media.service';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MatIconModule],
   template: `
-    <div class="selector">
+    <div class="selector" [class.icono]="variante() === 'icono'">
       @if (url()) {
         <img class="previa" [src]="url()" alt="Imagen seleccionada" />
       }
@@ -57,6 +57,16 @@ import { SitioMediaService } from '../../services/sitio-media.service';
       border-radius: 6px;
       object-fit: cover;
       align-self: flex-start;
+    }
+    .selector.icono .previa {
+      width: 64px;
+      height: 64px;
+      padding: 6px;
+      box-sizing: border-box;
+      object-fit: contain;
+      background: var(--tc-surface-container-low);
+      border: 1px solid var(--tc-ghost-border);
+      border-radius: 12px;
     }
     .controles {
       display: flex;
@@ -128,6 +138,7 @@ export class SelectorImagenComponent {
   }
 
   readonly url = input<string | undefined>(undefined);
+  readonly variante = input<'normal' | 'icono'>('normal');
   readonly urlChange = output<string>();
   readonly subiendo = signal(false);
 

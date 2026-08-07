@@ -206,6 +206,13 @@ const AUTOSAVE_MS = 1500;
           <mat-icon>palette</mat-icon>
           Tema
         </button>
+        @if (urlSitioPublico(); as url) {
+          <a mat-stroked-button matTooltip="Abre la version publicada en una pestaña nueva"
+            [href]="url" target="_blank" rel="noopener noreferrer">
+            <mat-icon>open_in_new</mat-icon>
+            Vista previa
+          </a>
+        }
         <button mat-flat-button color="primary" [disabled]="publicando()" (click)="publicar()">
           <mat-icon>rocket_launch</mat-icon>
           {{ publicando() ? 'Publicando...' : 'Publicar' }}
@@ -432,6 +439,13 @@ export class EditorPageComponent {
   readonly config = signal<SitioConfig | null>(null);
   readonly contenido = signal<ContenidoSitio | null>(null);
   readonly paginaActualId = signal('home');
+  readonly urlSitioPublico = computed(() => {
+    const config = this.config();
+    if (!config) return null;
+    return config.dominioCustom?.verificado
+      ? `https://${config.dominioCustom.dominio}/`
+      : `https://${config.subdominio}.winsuit.app/`;
+  });
   readonly seleccionId = signal<string | null>(null);
   /** Vista activa; es el MISMO signal que inyectan los bloques via VIEWPORT_ACTIVO. */
   readonly viewport = inject(VIEWPORT_ACTIVO) as ReturnType<typeof signal<Viewport>>;
