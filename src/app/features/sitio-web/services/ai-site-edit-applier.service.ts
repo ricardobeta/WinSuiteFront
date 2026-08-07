@@ -1,5 +1,6 @@
 import { Injectable } from '@angular/core';
 import { Bloque, ContenidoSitio, contenidoSitioSchema } from '@winsuite/bloques';
+import { ZodError, ZodIssue } from 'zod';
 import { AiSiteEditOperation } from './ai-site-generator.service';
 
 /**
@@ -34,7 +35,38 @@ export class AiSiteEditApplierService {
     }
 
     const clean = JSON.parse(JSON.stringify(draft)) as ContenidoSitio;
-    return contenidoSitioSchema.parse(clean) as ContenidoSitio;
+    const validado = contenidoSitioSchema.safeParse(clean);
+    if (!validado.success) throw new Error(this.describirFallo(validado.error));
+    return validado.data as ContenidoSitio;
+  }
+
+  /**
+   * El volcado crudo de zod es ilegible para quien edita un sitio. Se resume en una frase que
+   * nombra el valor rechazado, porque casi siempre es la IA inventando un valor de enum.
+   */
+  private describirFallo(error: ZodError): string {
+    const vistos = new Set<string>();
+    const detalles: string[] = [];
+    for (const issue of error.issues) {
+      const detalle = this.describirIssue(issue);
+      if (vistos.has(detalle)) continue;
+      vistos.add(detalle);
+      detalles.push(detalle);
+      if (detalles.length === 3) break;
+    }
+    return `La IA propuso cambios que el editor no acepta: ${detalles.join('; ')}. `
+      + 'No se aplicó ningún cambio; vuelve a pedírselo con otras palabras.';
+  }
+
+  private describirIssue(issue: ZodIssue): string {
+    const campo = String(issue.path[issue.path.length - 1] ?? 'contenido');
+    if (issue.code === 'invalid_enum_value') {
+      return `«${String(issue.received)}» no es un valor válido de ${campo} (admite ${issue.options.join(', ')})`;
+    }
+    if (issue.code === 'unrecognized_keys') {
+      return `${campo} no admite ${issue.keys.map(key => `«${key}»`).join(', ')}`;
+    }
+    return `${campo}: ${issue.message}`;
   }
 
   private patchBlock(

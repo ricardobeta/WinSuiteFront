@@ -51,4 +51,22 @@ describe('AiSiteEditApplierService', () => {
       op: 'delete-block', pageId: 'home', blockId: '__zona-pago',
     }])).toThrow(/zona funcional/i);
   });
+
+  it('explica en castellano el valor de enum que la IA invento', () => {
+    // La IA propuso paddingY:"minimo", que no existe; el volcado crudo de zod no le dice
+    // nada a quien esta editando el sitio.
+    expect(() => new AiSiteEditApplierService().apply(content(), [{
+      op: 'patch-block', pageId: 'home', blockId: 'hero-1',
+      patch: { estilos: { paddingY: 'minimo' } },
+    }])).toThrow(/«minimo» no es un valor válido de paddingY \(admite compacto, normal, amplio\)/);
+  });
+
+  it('no aplica ninguna operacion cuando una sola es invalida', () => {
+    const original = content();
+    expect(() => new AiSiteEditApplierService().apply(original, [
+      { op: 'patch-block', pageId: 'home', blockId: 'hero-1', patch: { estilos: { paddingY: 'minimo' } } },
+      { op: 'patch-block', pageId: 'home', blockId: 'texto-manual', patch: { estilos: { fondo: '#000000' } } },
+    ])).toThrow(/No se aplicó ningún cambio/);
+    expect(original.paginas['home'].bloques[1].estilos?.fondo).toBeUndefined();
+  });
 });

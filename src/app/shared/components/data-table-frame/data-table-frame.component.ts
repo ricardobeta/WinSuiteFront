@@ -18,7 +18,7 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
+import { MatPaginatorIntl, MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { Subject, debounceTime, distinctUntilChanged } from 'rxjs';
@@ -31,9 +31,14 @@ import {
   TableColumnPickerDialogComponent,
   TableColumnPickerDialogData
 } from '../table-column-picker-dialog/table-column-picker-dialog.component';
+import { DataTableFramePaginatorIntl } from './data-table-frame-paginator-intl';
 
 @Component({
   selector: 'app-data-table-frame',
+  providers: [
+    DataTableFramePaginatorIntl,
+    { provide: MatPaginatorIntl, useExisting: DataTableFramePaginatorIntl }
+  ],
   imports: [
     MatButtonModule,
     MatDialogModule,
@@ -94,7 +99,7 @@ import {
           [pageIndex]="pageIndex"
           [pageSize]="pageSize"
           [pageSizeOptions]="pageSizeOptions"
-          showFirstLastButtons
+          [showFirstLastButtons]="showFirstLastButtons"
           (page)="pageChange.emit($event)"
         />
       }
@@ -161,6 +166,10 @@ export class DataTableFrameComponent implements AfterViewInit, OnChanges, OnDest
   @Input() pageIndex = 0;
   @Input() pageSize = 10;
   @Input() pageSizeOptions: readonly number[] = [10, 25, 50];
+  /** Las tablas paginadas por cursor lo apagan: no conocen la ultima pagina. */
+  @Input() showFirstLastButtons = true;
+  /** Sustituye la etiqueta de rango cuando `total` es una cota y no el total real. */
+  @Input() rangeLabel: ((pageIndex: number, pageSize: number, length: number) => string) | null = null;
   @Input() tableModule = '';
   @Input() tableId = '';
   @Input() columns: readonly TableColumnDefinition[] = [];
@@ -186,6 +195,7 @@ export class DataTableFrameComponent implements AfterViewInit, OnChanges, OnDest
   private readonly auth = inject(AuthService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly preferences = inject(TablePreferencesService);
+  private readonly paginatorIntl = inject(DataTableFramePaginatorIntl);
   private observer: MutationObserver | null = null;
   private viewInitialized = false;
   private loadedKey = '';
@@ -198,6 +208,11 @@ export class DataTableFrameComponent implements AfterViewInit, OnChanges, OnDest
   }
 
   ngOnChanges(changes: SimpleChanges): void {
+    // El paginador es OnPush y solo relee la etiqueta cuando `intl.changes` emite.
+    if (changes['rangeLabel'] || changes['total'] || changes['pageIndex'] || changes['pageSize']) {
+      this.paginatorIntl.rangeLabelFn = this.rangeLabel;
+      this.paginatorIntl.changes.next();
+    }
     if (changes['columns'] || changes['lockedColumnIds']) {
       this.setCatalog(this.columns.length > 0 ? this.normalizeColumns(this.columns) : []);
     }

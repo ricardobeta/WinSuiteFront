@@ -14,15 +14,34 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { PageEvent } from '@angular/material/paginator';
 
 import { AuthorizationService } from '../../../../core/services/authorization.service';
+import { BuscarButtonComponent } from '../../../../shared/components/buscar-button/buscar-button.component';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { TableNoticeComponent } from '../../../../shared/components/table-state/table-notice.component';
+import { TableStateComponent } from '../../../../shared/components/table-state/table-state.component';
+import { BusquedaAbortadaError, buscarPaginado } from '../../../../shared/utils/buscar-paginado.util';
+import { haystack, normalizarTexto } from '../../../../shared/utils/texto.util';
 import { PendienteContabilizacionDialogComponent } from '../../components/pendiente-contabilizacion-dialog/pendiente-contabilizacion-dialog.component';
 import { AsientoContable, EstadoAsiento, OrigenAsiento, PendienteContabilizacion } from '../../models/contabilidad.models';
 import { AsientosContablesService, AsientosPageCursor } from '../../services/asientos-contables.service';
 import { ConfiguracionContableService } from '../../services/configuracion-contable.service';
 import { IntegracionContableService } from '../../services/integracion-contable.service';
 import { PeriodoContableService } from '../../services/periodo-contable.service';
+
+interface FiltrosAsientos {
+  texto: string;
+  estado: EstadoAsiento | 'TODOS';
+  origen: OrigenAsiento | 'TODOS';
+}
+
+function hayFiltro(filtros: FiltrosAsientos | null): boolean {
+  return !!filtros && (!!filtros.texto || filtros.estado !== 'TODOS' || filtros.origen !== 'TODOS');
+}
+
+function mismosFiltros(a: FiltrosAsientos, b: FiltrosAsientos): boolean {
+  return a.texto === b.texto && a.estado === b.estado && a.origen === b.origen;
+}
 
 @Component({
   selector: 'app-asientos-list',
@@ -40,7 +59,10 @@ import { PeriodoContableService } from '../../services/periodo-contable.service'
     MatSnackBarModule,
     MatTableModule,
     MatTooltipModule,
-    DataTableFrameComponent
+    BuscarButtonComponent,
+    DataTableFrameComponent,
+    TableNoticeComponent,
+    TableStateComponent
   ],
   template: `
     <section class="asientos-page">
@@ -69,8 +91,8 @@ import { PeriodoContableService } from '../../services/periodo-contable.service'
         </mat-form-field>
 
         <mat-form-field appearance="outline">
-          <mat-label>Filtrar página cargada</mat-label>
-          <input matInput type="search" [value]="busqueda()" (input)="actualizarBusqueda($event)" placeholder="Numero, detalle o referencia" />
+          <mat-label>Buscar en el período</mat-label>
+          <input matInput type="search" [value]="busqueda()" (input)="actualizarBusqueda($event)" placeholder="Numero, detalle, referencia o documento origen" />
           <button mat-icon-button matIconSuffix type="button" matTooltipPosition="above" [matTooltip]="ayuda.buscar" aria-label="Ayuda buscar asiento">
             <mat-icon>help_outline</mat-icon>
           </button>
@@ -103,48 +125,70 @@ import { PeriodoContableService } from '../../services/periodo-contable.service'
           </mat-select>
         </mat-form-field>
 
-        <button mat-raised-button color="primary" type="button" class="search-button" (click)="buscar()" [disabled]="!periodo() || cargando()">
-          <mat-icon>search</mat-icon>
-          Buscar
-        </button>
+        <app-buscar-button
+          class="search-button"
+          [disabled]="!periodo()"
+          [cargando]="cargando()"
+          [pendiente]="buscarPendiente()"
+          (buscar)="buscar()"
+        />
       </section>
 
       <section class="surface-card table-card">
+        @if (filtrosSucios()) {
+          <app-table-notice tipo="filtros-sucios" (accion)="buscar()" />
+        }
+        <div [class.contenido-obsoleto]="filtrosSucios()">
         @if (!periodo()) {
-          <div class="empty-state">
-            <mat-icon>date_range</mat-icon>
-            <h3>Selecciona un período</h3>
-            <p>La consulta no se ejecutará hasta que elijas un mes.</p>
-          </div>
+          <app-table-state estado="sin-criterio" />
         } @else if (!consultaRealizada()) {
-          <div class="empty-state">
-            <mat-icon>manage_search</mat-icon>
-            <h3>Consulta pendiente</h3>
-            <p>Presiona Buscar para cargar hasta 50 asientos del período seleccionado.</p>
-          </div>
+          <app-table-state
+            estado="pendiente"
+            mensaje="Presiona Buscar para consultar los asientos del período seleccionado."
+          />
         } @else if (cargando()) {
-          <div class="empty-state">
-            <mat-icon>hourglass_empty</mat-icon>
-            <h3>Cargando asientos</h3>
-          </div>
+          <app-table-state
+            estado="cargando"
+            [escaneados]="escaneados()"
+            [encontrados]="coincidencias()"
+            [chunks]="chunksEscaneo()"
+            [columnasSkeleton]="8"
+          />
         } @else if (asientos().length === 0) {
-          <div class="empty-state">
-            <mat-icon>receipt_long</mat-icon>
-            <h3>Sin asientos</h3>
-            <p>No existen asientos en el período seleccionado.</p>
-          </div>
+          <app-table-state
+            estado="vacio"
+            [icono]="hayFiltrosAplicados() ? 'search_off' : 'receipt_long'"
+            [titulo]="hayFiltrosAplicados() ? 'Sin coincidencias' : 'Sin asientos'"
+            [mensaje]="hayFiltrosAplicados()
+              ? 'Ningún asiento del período coincide con los filtros aplicados.'
+              : 'No existen asientos en el período seleccionado.'"
+          >
+            @if (hayFiltrosAplicados()) {
+              <button mat-stroked-button type="button" (click)="limpiarFiltros()">Limpiar filtros</button>
+            }
+          </app-table-state>
         } @else {
+          @if (truncado()) {
+            <app-table-notice
+              tipo="escaneo-parcial"
+              [escaneados]="escaneados()"
+              [encontrados]="coincidencias()"
+              (accion)="continuarEscaneo()"
+            />
+          }
           <app-data-table-frame
             tableModule="contabilidad"
             tableId="asientos"
             [showSearch]="false"
-            [total]="totalPaginador()"
+            [total]="longitudPaginador()"
             [pageIndex]="pageIndex()"
             [pageSize]="pageSize()"
             [pageSizeOptions]="[50, 100]"
+            [showFirstLastButtons]="false"
+            [rangeLabel]="etiquetaRango"
             (pageChange)="actualizarPagina($event)"
           >
-            <table mat-table [dataSource]="asientosFiltrados()">
+            <table mat-table [dataSource]="asientos()">
               <ng-container matColumnDef="numero">
                 <th mat-header-cell *matHeaderCellDef>Numero</th>
                 <td mat-cell *matCellDef="let row">{{ row.numero ?? 'Borrador' }}</td>
@@ -216,6 +260,7 @@ import { PeriodoContableService } from '../../services/periodo-contable.service'
             </table>
           </app-data-table-frame>
         }
+        </div>
       </section>
 
       <section class="surface-card table-card">
@@ -297,6 +342,8 @@ import { PeriodoContableService } from '../../services/periodo-contable.service'
     .empty-state.compact { min-height: 120px; }
     .empty-state h3 { margin: 0; color: var(--foreground); }
     .empty-state p { margin: 0; }
+    /* Los filtros cambiaron: lo que se ve sigue siendo el resultado de la busqueda anterior. */
+    .contenido-obsoleto { opacity: .55; transition: opacity .2s ease; }
     .disabled-link { pointer-events: none; opacity: .55; }
     .marca-editado { vertical-align: middle; margin-left: .35rem; font-size: 1.1rem; width: 1.1rem; height: 1.1rem; color: var(--muted-foreground); }
     button[mat-icon-button] { color: var(--muted-foreground); }
@@ -329,7 +376,21 @@ export class AsientosListComponent implements OnInit {
   protected readonly pageIndex = signal(0);
   protected readonly pageSize = signal(50);
   protected readonly hasMore = signal(false);
+  /** Registros leidos de RTDB en la busqueda actual; alimenta el texto de progreso. */
+  protected readonly escaneados = signal(0);
+  protected readonly coincidencias = signal(0);
+  protected readonly chunksEscaneo = signal(0);
+  /** El escaneo se corto por el techo de seguridad y quedan registros sin revisar. */
+  protected readonly truncado = signal(false);
   private readonly cursors = new Map<number, AsientosPageCursor | null>([[0, null]]);
+  private cursorContinuacion: AsientosPageCursor | null = null;
+  private controlador: AbortController | null = null;
+  private secuencia = 0;
+  /**
+   * Filtros congelados en la ultima busqueda ejecutada. El predicado usa siempre estos y
+   * nunca los del formulario, para que teclear no altere lo que ya esta en pantalla.
+   */
+  private readonly filtrosAplicados = signal<FiltrosAsientos | null>(null);
   protected readonly canCreate = computed(() => this.authorization.canAccess('contabilidad', 'create'));
   protected readonly canDelete = computed(() => this.authorization.canAccess('contabilidad', 'delete'));
   /** El listado consulta un solo periodo, asi que su estado se resuelve una vez para todas las filas. */
@@ -345,23 +406,44 @@ export class AsientosListComponent implements OnInit {
     eliminar: 'Solo elimina borradores. Los asientos aprobados deben reversarse para mantener auditoria.'
   };
 
-  protected readonly asientosFiltrados = computed(() => {
-    const term = this.busqueda().trim().toLowerCase();
-    return this.asientos().filter((asiento) => {
-      const matchText = !term
-        || (asiento.numero ?? '').toLowerCase().includes(term)
-        || asiento.glosa.toLowerCase().includes(term)
-        || (asiento.referencia ?? '').toLowerCase().includes(term)
-        || (asiento.origenNumero ?? '').toLowerCase().includes(term)
-        || (asiento.origen ?? 'MANUAL').toLowerCase().includes(term);
-      const matchEstado = this.estadoFiltro() === 'TODOS' || asiento.estado === this.estadoFiltro();
-      const matchOrigen = this.origenFiltro() === 'TODOS' || (asiento.origen ?? 'MANUAL') === this.origenFiltro();
-      return matchText && matchEstado && matchOrigen;
-    });
+  protected readonly filtrosActuales = computed<FiltrosAsientos>(() => ({
+    texto: normalizarTexto(this.busqueda()),
+    estado: this.estadoFiltro(),
+    origen: this.origenFiltro()
+  }));
+  protected readonly hayFiltrosAplicados = computed(() => hayFiltro(this.filtrosAplicados()));
+  /**
+   * Se comparan los valores y no un simple flag: si el usuario cambia un filtro y lo
+   * devuelve a su valor original, el aviso desaparece solo.
+   */
+  protected readonly filtrosSucios = computed(() => {
+    const aplicados = this.filtrosAplicados();
+    return this.consultaRealizada()
+      && !!aplicados
+      && !mismosFiltros(aplicados, this.filtrosActuales());
   });
-  protected readonly totalPaginador = computed(() =>
+  protected readonly buscarPendiente = computed(() =>
+    this.filtrosSucios() || (!!this.periodo() && !this.consultaRealizada())
+  );
+
+  /**
+   * Cota inferior conocida, no el total del periodo: la paginacion por cursor no sabe
+   * cuantos registros quedan. Solo sirve para que el paginador habilite "siguiente".
+   */
+  protected readonly longitudPaginador = computed(() =>
     this.pageIndex() * this.pageSize() + this.asientos().length + (this.hasMore() ? 1 : 0)
   );
+
+  protected readonly etiquetaRango = (pageIndex: number, pageSize: number): string => {
+    const enPagina = this.asientos().length;
+    if (enPagina === 0) {
+      return this.hayFiltrosAplicados() ? 'Sin coincidencias' : '0 resultados';
+    }
+    const desde = pageIndex * pageSize + 1;
+    const revisados = this.hayFiltrosAplicados() ? ` de ${this.escaneados()} revisados` : '';
+    const fin = this.hasMore() ? '' : ' · fin del período';
+    return `${desde}–${desde + enPagina - 1}${revisados}${fin}`;
+  };
 
   ngOnInit(): void {
     void this.cargarPendientes();
@@ -389,10 +471,30 @@ export class AsientosListComponent implements OnInit {
     this.reiniciarConsulta();
   }
 
+  protected limpiarFiltros(): void {
+    this.busqueda.set('');
+    this.estadoFiltro.set('TODOS');
+    this.origenFiltro.set('TODOS');
+    this.buscar();
+  }
+
   protected buscar(): void {
+    if (!this.periodo()) {
+      return;
+    }
     this.cursors.clear();
     this.cursors.set(0, null);
+    this.cursorContinuacion = null;
+    this.truncado.set(false);
+    // Los filtros se congelan aqui y solo aqui: lo que se ve siempre corresponde a la
+    // ultima busqueda ejecutada, no a lo que el usuario este tecleando.
+    this.filtrosAplicados.set(this.filtrosActuales());
     void this.cargarPagina(0);
+  }
+
+  /** Retoma el escaneo donde lo corto el techo de seguridad, sin reiniciar la pagina. */
+  protected continuarEscaneo(): void {
+    void this.cargarPagina(this.pageIndex(), true);
   }
 
   protected actualizarPagina(event: PageEvent): void {
@@ -402,47 +504,125 @@ export class AsientosListComponent implements OnInit {
       return;
     }
 
+    // Los cursores pertenecen a la busqueda anterior: paginar ahora mezclaria criterios.
+    if (this.filtrosSucios()) {
+      return;
+    }
+
     if (this.cursors.has(event.pageIndex)) {
       void this.cargarPagina(event.pageIndex);
     }
   }
 
-  private async cargarPagina(pageIndex: number): Promise<void> {
-    if (!this.periodo() || !this.cursors.has(pageIndex)) {
+  private async cargarPagina(pageIndex: number, continuar = false): Promise<void> {
+    const periodo = this.periodo();
+    if (!periodo) {
       return;
     }
+    if (continuar ? !this.cursorContinuacion : !this.cursors.has(pageIndex)) {
+      return;
+    }
+    const cursorBase = continuar ? this.cursorContinuacion : (this.cursors.get(pageIndex) ?? null);
+
+    // Si habia un escaneo en curso se aborta: sus resultados ya no interesan.
+    this.controlador?.abort();
+    const controlador = new AbortController();
+    this.controlador = controlador;
+    const secuencia = ++this.secuencia;
+
+    const previos = continuar ? this.asientos() : [];
+    const escaneadosPrevios = continuar ? this.escaneados() : 0;
+    const faltan = Math.max(1, this.pageSize() - previos.length);
+    const filtros = this.filtrosAplicados() ?? this.filtrosActuales();
 
     this.cargando.set(true);
     this.consultaRealizada.set(true);
-    void this.verificarPeriodo(this.periodo());
+    if (!continuar) {
+      this.escaneados.set(0);
+      this.coincidencias.set(0);
+      this.chunksEscaneo.set(0);
+      this.truncado.set(false);
+    }
+    void this.verificarPeriodo(periodo);
+
     try {
-      const page = await this.service.getAsientosPage(
-        this.periodo(),
-        this.pageSize(),
-        this.cursors.get(pageIndex) ?? null
-      );
-      this.asientos.set(page.items);
+      const resultado = await buscarPaginado<AsientoContable, AsientosPageCursor>({
+        fetchChunk: (cursor, limit) => this.service.getAsientosPage(periodo, limit, cursor),
+        cursorDe: (asiento) => (asiento.id ? { value: asiento.fecha, key: asiento.id } : null),
+        predicado: this.predicadoDe(filtros),
+        pageSize: faltan,
+        cursorInicial: cursorBase,
+        signal: controlador.signal,
+        onProgreso: ({ escaneados, encontrados, chunks }) => {
+          if (secuencia !== this.secuencia) return;
+          this.escaneados.set(escaneadosPrevios + escaneados);
+          this.coincidencias.set(previos.length + encontrados);
+          this.chunksEscaneo.set(chunks);
+        }
+      });
+
+      if (secuencia !== this.secuencia) return;
+
+      this.asientos.set([...previos, ...resultado.items]);
+      this.escaneados.set(escaneadosPrevios + resultado.escaneados);
+      this.coincidencias.set(previos.length + resultado.items.length);
       this.pageIndex.set(pageIndex);
-      this.hasMore.set(page.hasMore);
-      if (page.nextCursor) {
-        this.cursors.set(pageIndex + 1, page.nextCursor);
+      this.hasMore.set(resultado.hasMore);
+      this.truncado.set(resultado.truncado);
+      this.cursorContinuacion = resultado.truncado ? resultado.nextCursor : null;
+      if (resultado.nextCursor && !resultado.truncado) {
+        this.cursors.set(pageIndex + 1, resultado.nextCursor);
       } else {
         this.cursors.delete(pageIndex + 1);
       }
     } catch (error) {
+      // Un escaneo abortado no toca el estado: manda el que lo reemplazo.
+      if (error instanceof BusquedaAbortadaError || secuencia !== this.secuencia) return;
       this.asientos.set([]);
       this.hasMore.set(false);
+      this.truncado.set(false);
       this.mostrarMensaje(error instanceof Error ? error.message : 'No se pudieron cargar los asientos.', 'error');
     } finally {
-      this.cargando.set(false);
+      // Sin este guard el escaneo abortado apagaria el indicador de carga del nuevo.
+      if (secuencia === this.secuencia) {
+        this.cargando.set(false);
+      }
     }
   }
 
+  /** null = sin filtros: el helper resuelve la pagina con una sola lectura. */
+  private predicadoDe(filtros: FiltrosAsientos): ((asiento: AsientoContable) => boolean) | null {
+    if (!hayFiltro(filtros)) {
+      return null;
+    }
+    return (asiento) => {
+      if (filtros.estado !== 'TODOS' && asiento.estado !== filtros.estado) return false;
+      if (filtros.origen !== 'TODOS' && (asiento.origen ?? 'MANUAL') !== filtros.origen) return false;
+      if (!filtros.texto) return true;
+      return haystack(
+        asiento.numero,
+        asiento.glosa,
+        asiento.referencia,
+        asiento.origenNumero,
+        asiento.origen ?? 'MANUAL'
+      ).includes(filtros.texto);
+    };
+  }
+
   private reiniciarConsulta(): void {
+    this.controlador?.abort();
+    this.secuencia++;
+    this.cargando.set(false);
     this.asientos.set([]);
     this.pageIndex.set(0);
     this.hasMore.set(false);
     this.consultaRealizada.set(false);
+    this.escaneados.set(0);
+    this.coincidencias.set(0);
+    this.chunksEscaneo.set(0);
+    this.truncado.set(false);
+    this.filtrosAplicados.set(null);
+    this.cursorContinuacion = null;
     this.cursors.clear();
     this.cursors.set(0, null);
   }
