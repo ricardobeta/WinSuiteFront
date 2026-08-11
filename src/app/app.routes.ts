@@ -66,6 +66,22 @@ export const routes: Routes = [
     loadChildren: () =>
       import('./features/super-admin/super-admin.routes').then((routes) => routes.SUPER_ADMIN_ROUTES),
   },
+  // Alias públicos de navegación: el destino conserva autenticación y permisos dentro del workspace.
+  {
+    path: 'cumplimiento-sri/devolucion-iva-proyectos-inmobiliarios',
+    pathMatch: 'full',
+    redirectTo: 'workspace/contabilidad/cumplimiento-sri/devolucion-iva-proyectos-inmobiliarios',
+  },
+  {
+    path: 'cumplimiento-sri/ats',
+    pathMatch: 'full',
+    redirectTo: 'workspace/contabilidad/cumplimiento-sri/ats',
+  },
+  {
+    path: 'contabilidad/ats',
+    pathMatch: 'full',
+    redirectTo: 'workspace/contabilidad/cumplimiento-sri/ats',
+  },
   {
     path: 'workspace',
     component: WorkspaceShellComponent,

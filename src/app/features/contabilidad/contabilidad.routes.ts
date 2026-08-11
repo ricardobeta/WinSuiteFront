@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { moduleAccessGuard } from '../../core/guards/permission.guard';
 
 import { ContabilidadShellComponent } from './pages/contabilidad-shell/contabilidad-shell.component';
 import { PlanCuentasComponent } from './pages/plan-cuentas/plan-cuentas.component';
@@ -17,6 +18,8 @@ import { FacturasCompraListComponent } from './pages/facturas-compra-list/factur
 import { FacturaCompraFormComponent } from './pages/factura-compra-form/factura-compra-form.component';
 import { CargaMasivaComprasComponent } from './pages/carga-masiva-compras/carga-masiva-compras.component';
 import { AtsGenerarComponent } from './pages/ats-generar/ats-generar.component';
+import { CumplimientoSriHubComponent } from './pages/cumplimiento-sri/cumplimiento-sri-hub.component';
+import { DevolucionIvaInmobiliariosComponent } from './pages/cumplimiento-sri/devolucion-iva-inmobiliarios.component';
 import { BancosCuentasListComponent } from './pages/bancos/bancos-cuentas-list.component';
 import { ExtractoImportComponent } from './pages/bancos/extracto-import.component';
 import { BancosMovimientosListComponent } from './pages/bancos/bancos-movimientos-list.component';
@@ -27,6 +30,7 @@ import { BancosDashboardComponent } from './pages/bancos/bancos-dashboard.compon
 import { NominaShellComponent } from '../nomina/pages/nomina-shell/nomina-shell.component';
 import { NominaRolesComponent } from './pages/nomina-roles/nomina-roles.component';
 import { NominaRolDetalleComponent } from '../nomina/pages/rol-detalle/nomina-rol-detalle.component';
+import { NominaPagoRolComponent } from '../nomina/pages/pagos/nomina-pago-rol.component';
 import { NominaLiquidacionComponent } from '../nomina/pages/liquidacion/nomina-liquidacion.component';
 import { NominaProvisionesComponent } from '../nomina/pages/provisiones/nomina-provisiones.component';
 import { NominaUtilidadesComponent } from '../nomina/pages/utilidades/nomina-utilidades.component';
@@ -189,6 +193,30 @@ export const CONTABILIDAD_ROUTES: Routes = [
       },
       {
         path: 'ats',
+        pathMatch: 'full',
+        redirectTo: 'cumplimiento-sri/ats'
+      },
+      {
+        path: 'cumplimiento-sri',
+        canMatch: [moduleAccessGuard('contabilidad_sri', 'read')],
+        component: CumplimientoSriHubComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Cumplimiento SRI'
+        }
+      },
+      {
+        path: 'cumplimiento-sri/devolucion-iva-proyectos-inmobiliarios',
+        canMatch: [moduleAccessGuard('contabilidad_sri', 'read')],
+        component: DevolucionIvaInmobiliariosComponent,
+        data: {
+          module: 'Contabilidad',
+          page: 'Devolución de IVA para proyectos inmobiliarios'
+        }
+      },
+      {
+        path: 'cumplimiento-sri/ats',
+        canMatch: [moduleAccessGuard('contabilidad_sri', 'read')],
         component: AtsGenerarComponent,
         data: {
           module: 'Contabilidad',
@@ -278,6 +306,14 @@ export const CONTABILIDAD_ROUTES: Routes = [
             data: {
               module: 'Contabilidad',
               page: 'Detalle de rol de pago'
+            }
+          },
+          {
+            path: 'roles/:id/pago',
+            component: NominaPagoRolComponent,
+            data: {
+              module: 'Contabilidad',
+              page: 'Pago de rol de nomina'
             }
           },
           {

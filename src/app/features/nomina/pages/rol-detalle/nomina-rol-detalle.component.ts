@@ -22,12 +22,15 @@ import { SuccessSnackbarComponent } from '../../../../shared/components/success-
 import {
   ConceptoProvision,
   ConfiguracionNominaContable,
+  EstadoPagoRol,
   RolPago,
   RolPagoDetalle,
   RolPagoLinea,
   RubroNomina
 } from '../../../contabilidad/models/nomina.models';
+import { PagoNomina, ResumenPagoNomina } from '../../../contabilidad/models/pagos-nomina.models';
 import { AnticiposNominaService } from '../../../contabilidad/services/anticipos-nomina.service';
+import { PagosNominaService } from '../../../contabilidad/services/pagos-nomina.service';
 import { calcularDiasFondosReservaPeriodo } from '../../../contabilidad/services/nomina-calculos.util';
 import { TasasIess } from '../../../contabilidad/services/nomina-calculos.util';
 import { IntegracionContableService } from '../../../contabilidad/services/integracion-contable.service';
@@ -123,6 +126,16 @@ interface EmpleadoEdit {
           <span class="pill" [class.ok]="rol()?.estado === 'APROBADO'" [class.off]="rol()?.estado === 'ANULADO'">
             {{ rol()?.estado }}
           </span>
+          @if (rol()?.estado === 'APROBADO') {
+            <span
+              class="pill pago"
+              [class.ok]="estadoPago() === 'PAGADO'"
+              [class.parcial]="estadoPago() === 'PARCIAL'"
+              [matTooltip]="tooltipEstadoPago()"
+            >
+              {{ etiquetaEstadoPago() }}
+            </span>
+          }
           <button
             mat-stroked-button
             type="button"
@@ -440,6 +453,75 @@ interface EmpleadoEdit {
         </div>
       </ng-template>
 
+      @if (rol()?.estado === 'APROBADO') {
+        <section class="surface-card pagos-card">
+          <header>
+            <div>
+              <h3>Pagos del rol</h3>
+              <p class="muted">
+                Cancelan los sueldos y beneficios sociales por pagar contra el banco que hizo la transferencia.
+              </p>
+            </div>
+            @if (estadoPago() !== 'PAGADO' && canUpdate()) {
+              <a mat-raised-button color="primary" [routerLink]="['/workspace/contabilidad/nomina/roles', rolId, 'pago']">
+                <mat-icon>payments</mat-icon>
+                Registrar pago
+              </a>
+            }
+          </header>
+
+          @if (pagos().length === 0) {
+            <p class="muted">
+              Todavia no se ha registrado ningun pago. El neto sigue pendiente en
+              {{ etiquetaPasivoRol() }}.
+            </p>
+          } @else {
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Numero</th>
+                    <th>Fecha</th>
+                    <th>Banco</th>
+                    <th>Referencia</th>
+                    <th class="num">Empleados</th>
+                    <th class="num">Total</th>
+                    <th>Estado</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (item of pagos(); track item.pago.id) {
+                    <tr [class.anulado]="item.pago.estado === 'ANULADO'">
+                      <td>{{ item.pago.numero }}</td>
+                      <td>{{ item.pago.fecha }}</td>
+                      <td>{{ item.pago.bancoNombre }} · {{ item.pago.numeroCuentaBanco }}</td>
+                      <td>{{ item.pago.referencia || '—' }}</td>
+                      <td class="num">{{ item.pago.totalEmpleados }}</td>
+                      <td class="num"><strong>{{ item.pago.total | currency:'USD':'symbol-narrow':'1.2-2' }}</strong></td>
+                      <td>{{ item.pago.estado }}</td>
+                      <td class="acciones-celda">
+                        @if (item.pago.estado === 'REGISTRADO' && canUpdate()) {
+                          <button
+                            mat-button
+                            color="warn"
+                            type="button"
+                            (click)="anularPago(item.pago)"
+                            [disabled]="procesando()"
+                          >
+                            Anular
+                          </button>
+                        }
+                      </td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
+      }
+
       <footer class="surface-card actions-bar">
         @if (rol()?.tipo === 'LIQUIDACION' && rol()?.estado === 'BORRADOR') {
           <p class="muted">La conciliacion y sus ajustes se administran desde la liquidacion del empleado.</p>
@@ -476,7 +558,14 @@ interface EmpleadoEdit {
             @if (rol()?.reversadoEn) { Fue reversado contablemente. }
           </p>
           @if (rol()?.estado === 'APROBADO') {
-            <button mat-stroked-button color="warn" type="button" (click)="reversar()" [disabled]="procesando() || !canUpdate()">
+            <button
+              mat-stroked-button
+              color="warn"
+              type="button"
+              (click)="reversar()"
+              [disabled]="procesando() || !canUpdate() || tienePagosVivos()"
+              [matTooltip]="tienePagosVivos() ? 'Anula primero los pagos registrados del rol' : 'Genera el asiento inverso del rol'"
+            >
               <mat-icon>undo</mat-icon>
               Reversar rol
             </button>
@@ -498,6 +587,19 @@ interface EmpleadoEdit {
     .pill { display: inline-flex; padding: .3rem .75rem; border-radius: 999px; background: color-mix(in srgb, #f59e0b 18%, transparent); font-weight: 700; }
     .pill.ok { background: color-mix(in srgb, var(--primary) 18%, transparent); }
     .pill.off { background: color-mix(in srgb, var(--muted-foreground) 18%, transparent); color: var(--muted-foreground); }
+    .pill.pago { background: color-mix(in srgb, var(--muted-foreground) 18%, transparent); color: var(--muted-foreground); }
+    .pill.pago.parcial { background: color-mix(in srgb, #f59e0b 20%, transparent); color: var(--foreground); }
+    .pill.pago.ok { background: color-mix(in srgb, var(--primary) 18%, transparent); color: var(--foreground); }
+    .pagos-card { padding: 1.25rem; display: grid; gap: .85rem; background: var(--tc-surface-container-lowest); }
+    .pagos-card > header { display: flex; justify-content: space-between; gap: 1rem; align-items: start; flex-wrap: wrap; }
+    .pagos-card h3 { margin: 0 0 .25rem; font-size: 1rem; }
+    .pagos-card .table-wrap { overflow: auto; }
+    .pagos-card table { width: 100%; border-collapse: collapse; min-width: 720px; }
+    .pagos-card th, .pagos-card td { text-align: left; padding: .45rem .75rem; border-bottom: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); font-size: .9rem; }
+    .pagos-card th { font-size: .75rem; text-transform: uppercase; color: var(--muted-foreground); }
+    .pagos-card .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .pagos-card tr.anulado { color: var(--muted-foreground); text-decoration: line-through; }
+    .pagos-card .acciones-celda { text-align: right; text-decoration: none; }
     .kpi-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
     .kpi-card { padding: 1rem 1.25rem; display: grid; gap: .25rem; border-radius: var(--tc-radius-lg); }
     .kpi-card span { color: var(--muted-foreground); font-size: .8rem; text-transform: uppercase; letter-spacing: .08em; }
@@ -564,6 +666,7 @@ export class NominaRolDetalleComponent implements OnInit {
   private readonly nominaService = inject(NominaService);
   private readonly authorization = inject(AuthorizationService);
   private readonly anticiposService = inject(AnticiposNominaService);
+  private readonly pagosService = inject(PagosNominaService);
   private readonly revisionAsiento = inject(RevisionAsientoService);
   private readonly pdfApi = inject(NominaPdfApiService);
   private readonly integracionContable = inject(IntegracionContableService);
@@ -601,8 +704,38 @@ export class NominaRolDetalleComponent implements OnInit {
   /** Anticipos del periodo pendientes por empleado, para ofrecer traerlos al borrador. */
   private readonly anticiposPendientes = signal<Map<string, number>>(new Map());
 
+  /** Pagos del rol, incluidos los anulados: la seccion de pagos los muestra como historial. */
+  protected readonly pagos = signal<ResumenPagoNomina[]>([]);
+  protected readonly tienePagosVivos = computed(() =>
+    this.pagos().some((item) => item.pago.estado === 'REGISTRADO')
+  );
+  protected readonly estadoPago = computed<EstadoPagoRol>(() => this.rol()?.estadoPago ?? 'PENDIENTE');
+  protected readonly etiquetaEstadoPago = computed(() => {
+    switch (this.estadoPago()) {
+      case 'PAGADO': return 'PAGADO';
+      case 'PARCIAL': return 'PAGO PARCIAL';
+      default: return 'PENDIENTE DE PAGO';
+    }
+  });
+  protected readonly tooltipEstadoPago = computed(() => {
+    const rol = this.rol();
+    const pagado = this.redondear(rol?.totalPagado ?? 0);
+    const neto = this.redondear(rol?.totalNetoPagar ?? 0);
+    return this.estadoPago() === 'PENDIENTE'
+      ? `El neto de ${neto.toFixed(2)} sigue como pasivo por pagar`
+      : `Pagado ${pagado.toFixed(2)} de ${neto.toFixed(2)}`;
+  });
+  /** Cuenta que el pago descarga, para explicar en pantalla donde quedo el pasivo. */
+  protected readonly etiquetaPasivoRol = computed(() => {
+    switch (this.rol()?.tipo) {
+      case 'UTILIDADES': return 'utilidades por pagar';
+      case 'LIQUIDACION': return 'liquidaciones por pagar';
+      default: return 'sueldos y beneficios sociales por pagar';
+    }
+  });
+
   private config: ConfiguracionNominaContable = this.nominaService.getDefaultConfiguracion();
-  private rolId = '';
+  protected rolId = '';
   private vistaInicializada = false;
 
   protected readonly totales = computed(() => {
@@ -1103,6 +1236,55 @@ export class NominaRolDetalleComponent implements OnInit {
       this.vistaInicializada = true;
     }
     await this.cargarAnticiposPendientes();
+    await this.cargarPagos();
+  }
+
+  private async cargarPagos(): Promise<void> {
+    if (this.rol()?.estado !== 'APROBADO') {
+      this.pagos.set([]);
+      return;
+    }
+    try {
+      this.pagos.set(await this.pagosService.getPagosPorRol(this.rolId));
+    } catch {
+      // Sin lectura de pagos la pantalla sigue siendo util: el servicio revalida al registrar.
+      this.pagos.set([]);
+    }
+  }
+
+  /**
+   * Anula un pago mal registrado: genera el asiento inverso, devuelve el saldo a sus empleados y
+   * deja el rol nuevamente pagable.
+   */
+  protected anularPago(pago: PagoNomina): void {
+    if (!this.canUpdate() || !pago.id) {
+      return;
+    }
+    const dialogRef = this.dialog.open(ConfirmDialogComponent, {
+      width: '460px',
+      data: {
+        title: `Anular pago ${pago.numero}`,
+        message: 'Se generara el asiento inverso y el saldo volvera a quedar pendiente para los empleados incluidos. Continuar?',
+        confirmText: 'Anular pago'
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(async (confirmado) => {
+      if (!confirmado) {
+        return;
+      }
+      this.error.set(null);
+      this.procesando.set(true);
+      try {
+        await this.pagosService.anularPago(pago.id!);
+        this.toast('Pago anulado y asiento inverso generado.', 'undo');
+        await this.cargar(this.rolId);
+      } catch (error) {
+        this.error.set(error instanceof Error ? error.message : 'No se pudo anular el pago.');
+      } finally {
+        this.procesando.set(false);
+      }
+    });
   }
 
   private async cargarAnticiposPendientes(): Promise<void> {

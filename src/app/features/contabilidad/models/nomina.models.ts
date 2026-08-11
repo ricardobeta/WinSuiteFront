@@ -7,6 +7,13 @@ export type EstadoContratoNomina = 'VIGENTE' | 'FINALIZADO';
 
 export type EstadoRolPago = 'BORRADOR' | 'APROBADO' | 'ANULADO';
 
+/**
+ * Estado de cobro del rol, independiente de su aprobacion: aprobar devenga el pasivo y pagar lo
+ * cancela. Se mantiene aparte de EstadoRolPago porque son dos ciclos distintos y mezclarlos
+ * romperia cada guarda que hoy pregunta por BORRADOR o APROBADO.
+ */
+export type EstadoPagoRol = 'PENDIENTE' | 'PARCIAL' | 'PAGADO';
+
 export type TipoNovedadNomina = 'INGRESO' | 'DESCUENTO';
 
 export type TipoRubroNomina = 'INGRESO' | 'DESCUENTO';
@@ -276,6 +283,14 @@ export interface RolPago {
   asientoId?: string | null;
   /** Asiento de reversion cuando el rol aprobado se reversa contablemente. */
   asientoReversionId?: string | null;
+  /**
+   * Resumen desnormalizado de los pagos del rol, para pintar el listado sin leer los documentos.
+   * La fuente de verdad siguen siendo los pagos: estos campos se recalculan al registrar y anular.
+   * Ausentes en los roles guardados antes de existir el pago.
+   */
+  estadoPago?: EstadoPagoRol;
+  totalPagado?: number;
+  ultimoPagoEn?: number | null;
   creadoEn?: number;
   actualizadoEn?: number;
   aprobadoEn?: number | null;

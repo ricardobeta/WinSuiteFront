@@ -38,6 +38,7 @@ import {
   VistaPreviaImportacionCatalogosNomina
 } from '../models/nomina.models';
 import { AnticiposNominaService } from './anticipos-nomina.service';
+import { PagosNominaService } from './pagos-nomina.service';
 import { AsientosContablesService } from './asientos-contables.service';
 import { ConfiguracionContableService } from './configuracion-contable.service';
 import { IntegracionContableService } from './integracion-contable.service';
@@ -75,6 +76,7 @@ export class NominaService {
   private readonly integracionContable = inject(IntegracionContableService);
   private readonly configuracionContable = inject(ConfiguracionContableService);
   private readonly anticiposService = inject(AnticiposNominaService);
+  private readonly pagosService = inject(PagosNominaService);
 
   /** Codigo del rubro de anticipo: es la bisagra entre el auxiliar de anticipos y el rol. */
   static readonly CODIGO_RUBRO_ANTICIPO = 'ANTIC';
@@ -2152,6 +2154,11 @@ export class NominaService {
     }
     if (resumen.rol.estado !== 'APROBADO') {
       throw new Error('Solo se puede reversar un rol aprobado.');
+    }
+    // Reversar el devengo con el pago vivo dejaria el pasivo en negativo: el asiento del pago
+    // seguiria descargando una cuenta que ya nadie acredito.
+    if (await this.pagosService.tienePagosRegistrados(rolId)) {
+      throw new Error('El rol tiene pagos registrados. Anulalos antes de reversar el rol.');
     }
 
     const timestamp = Date.now();
