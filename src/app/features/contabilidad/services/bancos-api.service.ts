@@ -132,6 +132,15 @@ export class BancosApiService {
     return firstValueFrom(this.http.get<ResumenConciliacion>(`${this.baseUrl}/conciliacion/resumen`, { params }));
   }
 
+  /** Observaciones del contador sobre el período (texto libre). */
+  guardarObservaciones(cuentaBancariaId: string, periodo: string, observaciones: string): Promise<void> {
+    return firstValueFrom(this.http.post<void>(`${this.baseUrl}/conciliacion/observaciones`, {
+      cuentaBancariaId,
+      periodo,
+      observaciones
+    }));
+  }
+
   explicarDescuadre(cuentaBancariaId: string, periodo: string): Promise<{ explicacion: string }> {
     return firstValueFrom(this.http.post<{ explicacion: string }>(`${this.baseUrl}/conciliacion/explicar`, {
       cuentaBancariaId,

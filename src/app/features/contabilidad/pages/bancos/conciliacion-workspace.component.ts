@@ -149,6 +149,32 @@ const TAMANO_PAGINA = 100;
           } @else {
             <p class="hint">La IA puede explicarte en lenguaje claro qué causa la diferencia entre banco y libros.</p>
           }
+
+          <div class="observaciones">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Observaciones del contador</mat-label>
+              <textarea matInput rows="3" maxlength="4000"
+                        [value]="observaciones()"
+                        [disabled]="!canUpdate()"
+                        (input)="observaciones.set($any($event.target).value)"
+                        placeholder="Ej. La ND de $14.26 corresponde a comisiones de junio; el banco la reversa en julio."></textarea>
+              <mat-hint>
+                @if (datos.observacionesEn) {
+                  Guardado el {{ datos.observacionesEn | date: 'dd/MM/yyyy HH:mm' }} · la IA las tiene en cuenta al explicar
+                } @else {
+                  Salen en el reporte y la IA las usa como contexto de su análisis
+                }
+              </mat-hint>
+            </mat-form-field>
+            @if (canUpdate()) {
+              <button mat-stroked-button color="primary" type="button"
+                      [disabled]="procesando() || !observacionesCambiadas()"
+                      (click)="guardarObservaciones()">
+                <mat-icon>save</mat-icon>
+                Guardar observaciones
+              </button>
+            }
+          </div>
         </section>
       }
 
@@ -340,6 +366,8 @@ const TAMANO_PAGINA = 100;
     .explicacion-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
     .explicacion-header h3 { display: inline-flex; align-items: center; gap: .4rem; margin: 0; }
     .explicacion { margin: 0; white-space: pre-line; }
+    .observaciones { display: grid; gap: .5rem; justify-items: start; margin-top: .35rem; }
+    .observaciones mat-form-field { width: 100%; }
     .hint { color: var(--muted-foreground); margin: 0; }
     .sugerencias-card { padding: 1rem 1.25rem; display: grid; gap: .75rem; }
     .sugerencias-card h3 { display: inline-flex; align-items: center; gap: .4rem; margin: 0; }
@@ -401,6 +429,9 @@ export class ConciliacionWorkspaceComponent {
   protected readonly resumen = signal<ResumenConciliacion | null>(null);
   protected readonly seleccionMovimientos = signal<Set<string>>(new Set());
   protected readonly filtroExtracto = signal('');
+  protected readonly observaciones = signal('');
+  /** Texto tal como está guardado, para no ofrecer guardar sin cambios. */
+  private readonly observacionesGuardadas = signal('');
   protected readonly cargandoMas = signal(false);
   protected readonly hayMasMovimientos = signal(false);
   private readonly cursorMovimientos = signal<string | null>(null);
@@ -459,6 +490,9 @@ export class ConciliacionWorkspaceComponent {
   protected readonly seleccionCuadra = computed(() =>
     Math.abs(this.diferenciaSeleccion()) <= 0.01);
 
+  protected readonly observacionesCambiadas = computed(() =>
+    this.observaciones().trim() !== this.observacionesGuardadas().trim());
+
   constructor() {
     this.cuentasService.getCuentas()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -505,6 +539,11 @@ export class ConciliacionWorkspaceComponent {
       this.movimientos.set(movimientos);
       this.matches.set(matches);
       this.resumen.set(resumen);
+      // No se pisa lo que el usuario esté escribiendo sin haber guardado aún.
+      if (!this.observacionesCambiadas()) {
+        this.observaciones.set(resumen.observaciones ?? '');
+      }
+      this.observacionesGuardadas.set(resumen.observaciones ?? '');
       this.consultaRealizada.set(true);
       this.limpiarSeleccion();
     } catch {
@@ -676,9 +715,36 @@ export class ConciliacionWorkspaceComponent {
     }
   }
 
+  protected async guardarObservaciones(): Promise<void> {
+    this.procesando.set(true);
+    try {
+      const texto = this.observaciones().trim();
+      await this.api.guardarObservaciones(this.cuenta.value, this.periodo.value, texto);
+      this.observacionesGuardadas.set(texto);
+      const datos = this.resumen();
+      if (datos) {
+        this.resumen.set({ ...datos, observaciones: texto, observacionesEn: Date.now() });
+      }
+      this.snackBar.open('Observaciones guardadas.', 'OK', { duration: 3000 });
+    } catch (error) {
+      const mensaje = (error as { error?: { message?: string } })?.error?.message
+        ?? 'No se pudieron guardar las observaciones.';
+      this.snackBar.open(mensaje, 'OK', { duration: 4500 });
+    } finally {
+      this.procesando.set(false);
+    }
+  }
+
   protected async explicar(): Promise<void> {
     this.procesando.set(true);
     try {
+      // La IA lee las observaciones desde el período guardado: si quedaron sin
+      // guardar, el análisis saldría sin el contexto que el contador acaba de escribir.
+      if (this.observacionesCambiadas()) {
+        const texto = this.observaciones().trim();
+        await this.api.guardarObservaciones(this.cuenta.value, this.periodo.value, texto);
+        this.observacionesGuardadas.set(texto);
+      }
       const { explicacion } = await this.api.explicarDescuadre(this.cuenta.value, this.periodo.value);
       const datos = this.resumen();
       if (datos) {

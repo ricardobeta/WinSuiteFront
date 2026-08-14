@@ -235,6 +235,10 @@ export interface ResumenConciliacion {
     ncNoRegistradas: number;
   };
   explicacionIA?: string;
+  /** Notas del contador sobre el período; sobreviven al recálculo y salen en el PDF. */
+  observaciones?: string;
+  observacionesPor?: string;
+  observacionesEn?: number;
 }
 
 export interface MovimientosPage {
