@@ -104,6 +104,14 @@ const TAMANO_PAGINA = 100;
             Sugerencias IA
           </button>
         }
+        @if (canUpdate()) {
+          <button mat-stroked-button type="button" (click)="recalcular()"
+                  [disabled]="!consultaRealizada() || procesando()"
+                  matTooltip="Rehace saldos y totales del período desde los movimientos, tras corregir datos">
+            <mat-icon>calculate</mat-icon>
+            Recalcular
+          </button>
+        }
         <button mat-stroked-button type="button" (click)="descargarPdf()"
                 [disabled]="!consultaRealizada() || procesando()">
           <mat-icon>picture_as_pdf</mat-icon>
@@ -134,6 +142,20 @@ const TAMANO_PAGINA = 100;
             <p class="kpi-value">{{ datos.diferenciaResidual != null ? (datos.diferenciaResidual | currency: 'USD':'symbol-narrow':'1.2-2') : '—' }}</p>
           </article>
         </section>
+
+        @if (datos.descuadreExtracto && (datos.descuadreExtracto > 0.01 || datos.descuadreExtracto < -0.01)) {
+          <section class="surface-card aviso-extracto">
+            <mat-icon>warning</mat-icon>
+            <div>
+              <strong>El extracto no cuadra consigo mismo.</strong>
+              Saldo inicial {{ datos.saldoInicialExtracto | currency: 'USD':'symbol-narrow':'1.2-2' }}
+              más movimientos {{ datos.movimientosExtracto | currency: 'USD':'symbol-narrow':'1.2-2' }}
+              no llega al saldo final {{ datos.saldoExtracto | currency: 'USD':'symbol-narrow':'1.2-2' }}
+              (faltan {{ datos.descuadreExtracto | currency: 'USD':'symbol-narrow':'1.2-2' }}).
+              Es probable que el archivo importado esté incompleto: revísalo antes de conciliar.
+            </div>
+          </section>
+        }
 
         <section class="surface-card explicacion-card">
           <div class="explicacion-header">
@@ -362,6 +384,8 @@ const TAMANO_PAGINA = 100;
     .metric-hero .kpi-label { color: color-mix(in srgb, #fff 82%, transparent); }
     .kpi-card.alerta .kpi-value { color: #b45309; }
     .kpi-card.ok .kpi-value { color: #15803d; }
+    .aviso-extracto { padding: .85rem 1.25rem; display: flex; align-items: start; gap: .6rem; border-left: 4px solid #d97706; color: #92400e; }
+    .aviso-extracto mat-icon { color: #d97706; }
     .explicacion-card { padding: 1rem 1.25rem; display: grid; gap: .5rem; }
     .explicacion-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
     .explicacion-header h3 { display: inline-flex; align-items: center; gap: .4rem; margin: 0; }
@@ -711,6 +735,19 @@ export class ConciliacionWorkspaceComponent {
       const mensaje = (error as { error?: { message?: string } })?.error?.message
         ?? 'No se pudo conciliar la selección.';
       this.snackBar.open(mensaje, 'OK', { duration: 5000 });
+      this.procesando.set(false);
+    }
+  }
+
+  /** Tras corregir datos a mano, rehace los saldos derivados del período. */
+  protected async recalcular(): Promise<void> {
+    this.procesando.set(true);
+    try {
+      await this.api.recalcularPeriodo(this.cuenta.value, this.periodo.value);
+      await this.refrescar();
+      this.snackBar.open('Período recalculado con los movimientos actuales.', 'OK', { duration: 4000 });
+    } catch {
+      this.snackBar.open('No se pudo recalcular el período.', 'OK', { duration: 4500 });
       this.procesando.set(false);
     }
   }

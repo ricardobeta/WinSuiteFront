@@ -84,6 +84,8 @@ export class BancosApiService {
     guardarPlantilla: boolean;
     plantillaId?: string | null;
     nombrePlantilla?: string | null;
+    saldoInicial?: number | null;
+    saldoFinal?: number | null;
   }): Promise<ResultadoImportacion> {
     return firstValueFrom(this.http.post<ResultadoImportacion>(`${this.baseUrl}/extractos/importar`, input));
   }
@@ -130,6 +132,14 @@ export class BancosApiService {
   getResumen(cuentaBancariaId: string, periodo: string): Promise<ResumenConciliacion> {
     const params = new HttpParams().set('cuentaBancariaId', cuentaBancariaId).set('periodo', periodo);
     return firstValueFrom(this.http.get<ResumenConciliacion>(`${this.baseUrl}/conciliacion/resumen`, { params }));
+  }
+
+  /** Rehace saldos y totales del período desde los movimientos y devuelve el resumen. */
+  recalcularPeriodo(cuentaBancariaId: string, periodo: string): Promise<ResumenConciliacion> {
+    return firstValueFrom(this.http.post<ResumenConciliacion>(`${this.baseUrl}/conciliacion/recalcular`, {
+      cuentaBancariaId,
+      periodo
+    }));
   }
 
   /** Observaciones del contador sobre el período (texto libre). */

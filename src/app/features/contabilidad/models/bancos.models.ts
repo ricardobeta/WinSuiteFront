@@ -169,6 +169,12 @@ export interface AnalisisExtracto {
   hojaIndex: number;
   hojas: HojaExtractoResumen[];
   primerasFilas: FilaCandidata[];
+  /** Propuestos a partir del archivo; el usuario los confirma antes de importar. */
+  saldoInicialDetectado?: number | null;
+  saldoFinalDetectado?: number | null;
+  sumaMovimientos: number;
+  /** false = la deducción es incierta y hay que contrastarla con el extracto del banco. */
+  saldosConfiables: boolean;
 }
 
 export interface PreviewFila {
@@ -219,6 +225,10 @@ export interface ResumenConciliacion {
   saldoBancoAjustado?: number;
   saldoLibrosAjustado?: number;
   diferenciaResidual?: number;
+  /** Continuidad del extracto: inicial + movimientos debe llegar al final. */
+  saldoInicialExtracto?: number;
+  movimientosExtracto?: number;
+  descuadreExtracto?: number;
   partidas: {
     depositosTransito: PartidaConciliatoria[];
     chequesNoCobrados: PartidaConciliatoria[];

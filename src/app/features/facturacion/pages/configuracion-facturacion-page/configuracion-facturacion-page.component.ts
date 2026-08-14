@@ -167,6 +167,7 @@ export class ConfiguracionFacturacionPageComponent {
     fromAddress: ['', [Validators.email]],
     fromName: [''],
     replyTo: ['', [Validators.email]],
+    bccAddress: ['', [Validators.email, Validators.maxLength(254)]],
     startTls: [true],
     ssl: [false],
     testRecipient: ['', [Validators.email]]
@@ -589,6 +590,9 @@ export class ConfiguracionFacturacionPageComponent {
   }
 
   protected correoConfiguracionInvalida(): boolean {
+    if (this.correoForm.controls.bccAddress.invalid) {
+      return true;
+    }
     if (this.correoForm.controls.mode.value === 'SAAS_DEFAULT') {
       return false;
     }

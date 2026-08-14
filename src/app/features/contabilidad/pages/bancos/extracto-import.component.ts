@@ -303,6 +303,51 @@ type FormatoElegido = string;
             </mat-form-field>
           </div>
 
+          <div class="saldos">
+            <h4>Saldos del extracto</h4>
+            @if (analisis()!.saldosConfiables) {
+              <p class="hint">
+                Deducidos encadenando los saldos línea a línea, sin depender del orden del archivo.
+                Confírmalos contra el extracto del banco: se usarán como el saldo real del período.
+              </p>
+            } @else {
+              <p class="cuadre error">
+                <mat-icon>error_outline</mat-icon>
+                No se pudo deducir con certeza el corte del período (el archivo no encadena los saldos
+                de forma única). <strong>Escríbelos tal como los da el banco.</strong>
+              </p>
+            }
+            <div class="saldos-grid">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Saldo inicial</mat-label>
+                <input matInput type="number" step="0.01" [(ngModel)]="saldoInicial" />
+              </mat-form-field>
+              <span class="operador">+</span>
+              <div class="movimientos-suma">
+                <span class="etiqueta">Movimientos del archivo</span>
+                <strong [class.neg]="analisis()!.sumaMovimientos < 0">
+                  {{ analisis()!.sumaMovimientos | currency: 'USD':'symbol-narrow':'1.2-2' }}
+                </strong>
+              </div>
+              <span class="operador">=</span>
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Saldo final</mat-label>
+                <input matInput type="number" step="0.01" [(ngModel)]="saldoFinal" />
+              </mat-form-field>
+            </div>
+            @if (saldoInicial !== null && saldoFinal !== null) {
+              @if (saldosCuadran()) {
+                <p class="cuadre ok"><mat-icon>check_circle</mat-icon> Los saldos cuadran con los movimientos del archivo.</p>
+              } @else {
+                <p class="cuadre error">
+                  <mat-icon>warning</mat-icon>
+                  Diferencia de {{ descuadreSaldos() | currency: 'USD':'symbol-narrow':'1.2-2' }}:
+                  puede que falten movimientos en el archivo o que el mapeo de columnas no sea el correcto.
+                </p>
+              }
+            }
+          </div>
+
           <div class="preview-header">
             <h4>Vista previa</h4>
             <p class="contadores" [class.con-descartes]="analisis()!.filasDescartadas > 0">
@@ -441,6 +486,18 @@ type FormatoElegido = string;
     .mapeo-header h3 { margin: 0; display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
     .mapeo-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; }
     .encabezado-select { grid-column: span 2; }
+    .saldos { display: grid; gap: .5rem; padding: .85rem 1rem; border-radius: .75rem; background: color-mix(in srgb, var(--primary) 5%, transparent); }
+    .saldos h4 { margin: 0; }
+    .saldos-grid { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+    .saldos-grid mat-form-field { width: 180px; }
+    .operador { font-size: 1.2rem; color: var(--muted-foreground); }
+    .movimientos-suma { display: grid; }
+    .movimientos-suma .etiqueta { font-size: .75rem; color: var(--muted-foreground); }
+    .movimientos-suma strong.neg { color: var(--destructive); }
+    .cuadre { display: flex; align-items: center; gap: .35rem; margin: 0; font-size: .85rem; }
+    .cuadre.ok { color: #15803d; }
+    .cuadre.error { color: #b45309; }
+    .cuadre mat-icon { font-size: 1.1rem; width: 1.1rem; height: 1.1rem; }
     .preview-header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
     .preview-header h4 { margin: 0; }
     .contadores { margin: 0; color: var(--muted-foreground); }
@@ -488,6 +545,8 @@ export class ExtractoImportComponent {
   protected guardarPlantilla = true;
   protected nombrePlantilla = '';
   protected mapeoEditable!: MapeoExtracto;
+  protected saldoInicial: number | null = null;
+  protected saldoFinal: number | null = null;
   protected referenciaCol: number | null = null;
   protected debitoCol: number | null = null;
   protected creditoCol: number | null = null;
@@ -504,6 +563,19 @@ export class ExtractoImportComponent {
       label: `${col + 1}. ${nombre || '(sin título)'}`
     }));
   });
+
+  /** inicial + movimientos - final: si no da cero, el archivo no está completo. */
+  protected descuadreSaldos(): number {
+    if (this.saldoInicial === null || this.saldoFinal === null) {
+      return 0;
+    }
+    const suma = this.analisis()?.sumaMovimientos ?? 0;
+    return Math.round((Number(this.saldoInicial) + suma - Number(this.saldoFinal)) * 100) / 100;
+  }
+
+  protected saldosCuadran(): boolean {
+    return Math.abs(this.descuadreSaldos()) <= 0.01;
+  }
 
   protected readonly descartadas = computed(() => {
     const datos = this.resultado();
@@ -655,6 +727,8 @@ export class ExtractoImportComponent {
     this.nombrePlantilla = aplicada?.nombre ?? this.nombrePlantillaPorDefecto();
     this.mapeoEditable = structuredClone(analisis.mapeo);
     this.mapeoEditable.hojaIndex = analisis.hojaIndex;
+    this.saldoInicial = analisis.saldoInicialDetectado ?? null;
+    this.saldoFinal = analisis.saldoFinalDetectado ?? null;
     this.referenciaCol = analisis.mapeo.mapeo.referencia?.col ?? null;
     this.debitoCol = analisis.mapeo.mapeo.debito?.col ?? analisis.mapeo.mapeo.montoUnico?.col ?? null;
     this.creditoCol = analisis.mapeo.mapeo.credito?.col ?? null;
@@ -708,7 +782,9 @@ export class ExtractoImportComponent {
         mapeo: this.construirMapeo(),
         guardarPlantilla: this.guardarPlantilla,
         plantillaId: this.analisis()?.plantillaId ?? null,
-        nombrePlantilla: this.guardarPlantilla ? this.nombrePlantilla : null
+        nombrePlantilla: this.guardarPlantilla ? this.nombrePlantilla : null,
+        saldoInicial: this.saldoInicial === null ? null : Number(this.saldoInicial),
+        saldoFinal: this.saldoFinal === null ? null : Number(this.saldoFinal)
       });
       this.resultado.set(resultado);
       this.paso.set('resumen');

@@ -669,6 +669,34 @@
               </section>
             }
 
+            <section class="settings-block" aria-labelledby="bcc-title">
+              <div class="block-heading">
+                <div>
+                  <h4 id="bcc-title">Copia oculta para la empresa</h4>
+                  <p>Guarda un correo interno para recibir una copia de cada factura enviada al cliente.</p>
+                </div>
+              </div>
+              <div class="form-grid">
+                <mat-form-field appearance="outline" class="span-2">
+                  <mat-label>Correo para copia oculta (BCC)</mat-label>
+                  <input
+                    matInput
+                    type="email"
+                    formControlName="bccAddress"
+                    autocomplete="email"
+                    maxlength="254"
+                    placeholder="facturas@empresa.com"
+                  />
+                  <mat-hint>Opcional. El cliente no verá esta dirección.</mat-hint>
+                  @if (correoForm.controls.bccAddress.hasError('email')) {
+                    <mat-error>Ingresa un correo válido</mat-error>
+                  } @else if (correoForm.controls.bccAddress.hasError('maxlength')) {
+                    <mat-error>El correo no puede superar 254 caracteres</mat-error>
+                  }
+                </mat-form-field>
+              </div>
+            </section>
+
             <section class="test-block" aria-labelledby="test-title">
               <div>
                 <h4 id="test-title">Comprobar el envío</h4>

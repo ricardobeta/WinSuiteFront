@@ -91,6 +91,7 @@ export interface ConfiguracionCorreoFactura {
   fromAddress: string;
   fromName: string;
   replyTo: string;
+  bccAddress: string;
   startTls: boolean;
   ssl: boolean;
   passwordConfigured?: boolean;
