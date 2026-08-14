@@ -11,6 +11,7 @@ import { PageEvent } from '@angular/material/paginator';
 
 import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { Almacen, Producto } from '../../models/inventario.models';
+import { esVariante } from '../../utils/producto.util';
 import { AlmacenesService } from '../../services/almacenes.service';
 import { KardexService } from '../../services/kardex.service';
 import { ProductosService } from '../../services/productos.service';
@@ -168,7 +169,8 @@ export class RecetasListComponent implements OnInit {
   });
   protected readonly recetas = computed(() =>
     this.productos()
-      .filter((producto) => (producto.tipo ?? 'SIMPLE') === 'RECETA')
+      // Las variantes de una receta se editan dentro de su producto padre.
+      .filter((producto) => (producto.tipo ?? 'SIMPLE') === 'RECETA' && !esVariante(producto))
       .sort((a, b) => a.nombre.localeCompare(b.nombre))
   );
   protected readonly recetaRows = computed<RecetaRow[]>(() => {

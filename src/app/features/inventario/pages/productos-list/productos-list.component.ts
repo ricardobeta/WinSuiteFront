@@ -18,6 +18,9 @@ import { AlmacenesService } from '../../services/almacenes.service';
 import { CamposInventarioService } from '../../services/campos-inventario.service';
 import { KardexService } from '../../services/kardex.service';
 import { ProductosService } from '../../services/productos.service';
+import { esGranel, esInsumo, esVariante, usoDe } from '../../utils/producto.util';
+
+type FiltroUso = 'TODOS' | 'VENTA' | 'INSUMO';
 
 @Component({
   selector: 'app-productos-list',
@@ -67,7 +70,31 @@ import { ProductosService } from '../../services/productos.service';
           (searchChange)="actualizarBusqueda($event)"
           (pageChange)="actualizarPagina($event)"
         >
+          <div table-filters class="uso-filtros">
+            @for (opcion of filtrosUso; track opcion.valor) {
+              <button
+                type="button"
+                class="uso-chip"
+                [class.activo]="filtroUso() === opcion.valor"
+                (click)="seleccionarFiltroUso(opcion.valor)"
+              >
+                {{ opcion.etiqueta }}
+              </button>
+            }
+          </div>
+
           <table mat-table [dataSource]="productosPaginados()">
+          <ng-container matColumnDef="imagen">
+            <th mat-header-cell *matHeaderCellDef>Imagen</th>
+            <td mat-cell *matCellDef="let row">
+              @if (row.imagen?.url) {
+                <img class="miniatura" [src]="row.imagen.url" [alt]="row.nombre" loading="lazy" />
+              } @else {
+                <span class="miniatura miniatura-vacia">{{ inicial(row) }}</span>
+              }
+            </td>
+          </ng-container>
+
           <ng-container matColumnDef="sku">
             <th mat-header-cell *matHeaderCellDef>SKU</th>
             <td mat-cell *matCellDef="let row">{{ row.sku }}</td>
@@ -79,6 +106,20 @@ import { ProductosService } from '../../services/productos.service';
               {{ row.nombre }}
               @if ((row.tipo ?? 'SIMPLE') === 'RECETA') {
                 <mat-chip class="chip-receta">Receta</mat-chip>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="uso">
+            <th mat-header-cell *matHeaderCellDef>Uso</th>
+            <td mat-cell *matCellDef="let row">
+              @if (esMateriaPrima(row)) {
+                <mat-chip class="chip-insumo">Materia prima</mat-chip>
+              } @else {
+                <mat-chip class="chip-venta">Venta</mat-chip>
+                @if (esPorPeso(row)) {
+                  <mat-chip class="chip-granel">Por peso</mat-chip>
+                }
               }
             </td>
           </ng-container>
@@ -180,6 +221,22 @@ import { ProductosService } from '../../services/productos.service';
     .inactivo { opacity: .65; }
     .chip-low { margin-left: .35rem; background: color-mix(in srgb, #b3261e 14%, transparent); color: #b3261e; }
     .chip-receta { margin-left: .35rem; background: rgb(249 115 22 / 20%); color: rgb(154 52 18); }
+    .chip-insumo { background: color-mix(in srgb, var(--foreground) 10%, transparent); color: var(--muted-foreground); }
+    .chip-venta { background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
+    .chip-granel { margin-left: .35rem; background: rgb(14 165 233 / 18%); color: rgb(3 105 161); }
+    .miniatura { display: block; width: 40px; height: 40px; border-radius: 8px; object-fit: cover; }
+    .miniatura-vacia {
+      display: grid; place-items: center;
+      background: var(--tc-surface-container-low); color: var(--muted-foreground);
+      font-weight: 650; font-size: .9rem;
+    }
+    .uso-filtros { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .uso-chip {
+      padding: .35rem .75rem; border-radius: 999px; cursor: pointer;
+      border: 1px solid var(--border); background: transparent;
+      color: var(--muted-foreground); font-size: .8rem; font-weight: 600;
+    }
+    .uso-chip.activo { border-color: transparent; background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
     .empty-card { padding: 1rem; border: 1px dashed color-mix(in srgb, var(--outline) 55%, transparent); border-radius: .75rem; }
     .empty-card h3 { margin: 0; }
     .empty-card p { margin: .4rem 0 0; color: var(--muted-foreground); }
@@ -206,12 +263,20 @@ export class ProductosListComponent implements OnInit {
   protected readonly busqueda = signal('');
   protected readonly pageIndex = signal(0);
   protected readonly pageSize = signal(10);
+  protected readonly filtroUso = signal<FiltroUso>('TODOS');
+  protected readonly filtrosUso: Array<{ valor: FiltroUso; etiqueta: string }> = [
+    { valor: 'TODOS', etiqueta: 'Todos' },
+    { valor: 'VENTA', etiqueta: 'De venta' },
+    { valor: 'INSUMO', etiqueta: 'Materia prima' }
+  ];
   protected readonly productosFiltrados = computed(() => {
+    const uso = this.filtroUso();
+    const porUso =
+      uso === 'TODOS' ? this.productos() : this.productos().filter((producto) => usoDe(producto) === uso);
+
     const query = this.normalizar(this.busqueda());
-    if (!query) return this.productos();
-    return this.productos().filter((producto) =>
-      this.normalizar(`${producto.sku} ${producto.nombre}`).includes(query)
-    );
+    if (!query) return porUso;
+    return porUso.filter((producto) => this.normalizar(`${producto.sku} ${producto.nombre}`).includes(query));
   });
   protected readonly productosPaginados = computed(() => {
     const start = this.pageIndex() * this.pageSize();
@@ -227,8 +292,10 @@ export class ProductosListComponent implements OnInit {
     return index;
   });
   protected readonly displayedColumns = computed(() => [
+    'imagen',
     'sku',
     'nombre',
+    'uso',
     'codigoBarras',
     'descripcion',
     'stockAlmacen',
@@ -243,8 +310,10 @@ export class ProductosListComponent implements OnInit {
     'acciones'
   ]);
   protected readonly columnDefinitions = computed<TableColumnDefinition[]>(() => [
+    { id: 'imagen', label: 'Imagen' },
     { id: 'sku', label: 'SKU' },
     { id: 'nombre', label: 'Nombre' },
+    { id: 'uso', label: 'Uso' },
     { id: 'codigoBarras', label: 'Código de barras', defaultVisible: false },
     { id: 'descripcion', label: 'Descripción', defaultVisible: false },
     { id: 'stockAlmacen', label: 'Stock del almacén' },
@@ -269,7 +338,11 @@ export class ProductosListComponent implements OnInit {
       .getProductos()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((productos) => {
-        this.productos.set(productos.filter((producto) => (producto.tipo ?? 'SIMPLE') === 'SIMPLE'));
+        // Las recetas tienen su propia pantalla; las variantes se ven dentro de su
+        // producto padre. Aqui quedan los productos simples y las plantillas.
+        this.productos.set(
+          productos.filter((producto) => (producto.tipo ?? 'SIMPLE') === 'SIMPLE' && !esVariante(producto))
+        );
         this.cargando.set(false);
       });
 
@@ -327,6 +400,24 @@ export class ProductosListComponent implements OnInit {
   protected actualizarBusqueda(value: string): void {
     this.busqueda.set(value);
     this.pageIndex.set(0);
+  }
+
+  protected seleccionarFiltroUso(valor: FiltroUso): void {
+    this.filtroUso.set(valor);
+    this.pageIndex.set(0);
+  }
+
+  protected esMateriaPrima(producto: Producto): boolean {
+    return esInsumo(producto);
+  }
+
+  protected esPorPeso(producto: Producto): boolean {
+    return esGranel(producto);
+  }
+
+  /** Sustituto de la miniatura cuando el producto todavia no tiene foto. */
+  protected inicial(producto: Producto): string {
+    return (producto.nombre ?? '?').trim().charAt(0).toUpperCase() || '?';
   }
 
   protected actualizarPagina(event: PageEvent): void {

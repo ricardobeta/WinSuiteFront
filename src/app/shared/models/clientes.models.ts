@@ -25,8 +25,33 @@ export interface CampoPersonalizado {
   activo?: boolean;
 }
 
+export const COLORES_ETIQUETA_CLIENTE = ['teal', 'blue', 'violet', 'amber', 'rose', 'slate'] as const;
+
+export type ColorEtiquetaCliente = typeof COLORES_ETIQUETA_CLIENTE[number];
+
+export interface EtiquetaClienteConfig {
+  idEtiqueta: string;
+  nombre: string;
+  color: ColorEtiquetaCliente;
+  activa: boolean;
+}
+
+export const CAMPOS_BASE_CLIENTE = [
+  'nombreCompleto',
+  'email',
+  'telefono',
+  'direccion',
+  'identificacion',
+  'etiquetas'
+] as const;
+
+export type CampoBaseCliente = typeof CAMPOS_BASE_CLIENTE[number];
+export type CampoFormularioClienteKey = CampoBaseCliente | `custom:${string}`;
+
 export interface ConfiguracionClientes {
   camposPersonalizados: CampoPersonalizado[];
+  catalogoEtiquetas: EtiquetaClienteConfig[];
+  ordenFormulario: CampoFormularioClienteKey[];
 }
 
 export interface Cliente {

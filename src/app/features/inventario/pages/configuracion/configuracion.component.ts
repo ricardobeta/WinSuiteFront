@@ -221,9 +221,28 @@ import { UnidadesService } from '../../services/unidades.service';
                   </mat-form-field>
                 </div>
 
+                <div class="grid-2">
+                  <mat-form-field appearance="outline">
+                    <mat-label>Incremento por defecto en venta por peso</mat-label>
+                    <input matInput type="text" inputmode="decimal" formControlName="pasoCantidadGranelDefecto" />
+                    <mat-hint>Cuanto suma cada toque de +/- en el POS para productos vendidos por peso o medida.</mat-hint>
+                  </mat-form-field>
+                </div>
+
                 <div class="toggles-row">
                   <mat-slide-toggle formControlName="permitirStockNegativo">Permitir stock negativo</mat-slide-toggle>
                   <mat-slide-toggle formControlName="alertasStockMinimo">Alertas de stock minimo</mat-slide-toggle>
+                </div>
+
+                <div class="toggle-explicado">
+                  <mat-slide-toggle formControlName="requerirImagenProductoVenta">
+                    Exigir imagen en productos de venta
+                  </mat-slide-toggle>
+                  <p>
+                    Bloquea guardar un producto de venta sin foto. No aplica a materias primas,
+                    que no se muestran en la caja. Los productos ya creados sin imagen siguen
+                    funcionando hasta que alguien los edite.
+                  </p>
                 </div>
 
                 <div class="save-bar">
@@ -269,6 +288,8 @@ import { UnidadesService } from '../../services/unidades.service';
     .config-form { display: grid; gap: 1rem; }
     .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
     .toggles-row { display: flex; flex-wrap: wrap; gap: 1.2rem; }
+    .toggle-explicado { display: grid; gap: .35rem; }
+    .toggle-explicado p { margin: 0; max-width: 62ch; color: var(--muted-foreground); font-size: .82rem; }
     .save-bar { position: sticky; bottom: .75rem; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 68px; padding: .7rem 1rem; border: 1px solid var(--border); border-radius: 14px; background: color-mix(in srgb, var(--tc-surface-container-lowest) 94%, transparent); box-shadow: 0 12px 30px rgb(15 23 42 / 13%); backdrop-filter: blur(12px); }
     .save-state { display: flex; align-items: center; gap: .6rem; color: var(--muted-foreground); font-size: .82rem; }.save-state mat-icon { color: var(--primary); }
     .section-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1rem; }
@@ -330,7 +351,9 @@ export class ConfiguracionComponent implements OnInit {
     alertasStockMinimo: [true],
     impuestoPorDefecto: [12, [Validators.required, Validators.min(0)]],
     metodoPrecioVentaDefecto: ['MARKUP' as MetodoPrecioVenta, [Validators.required]],
-    porcentajePrecioVentaDefecto: [30, [Validators.required, Validators.min(0), Validators.max(99.99)]]
+    porcentajePrecioVentaDefecto: [30, [Validators.required, Validators.min(0), Validators.max(99.99)]],
+    requerirImagenProductoVenta: [false],
+    pasoCantidadGranelDefecto: [0.1, [Validators.required, Validators.min(0.001)]]
   });
 
   ngOnInit(): void {

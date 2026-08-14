@@ -10,7 +10,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
-import { Cliente, CampoPersonalizado, ClienteDialogData } from '../../../../shared/models/clientes.models';
+import { Cliente, CampoPersonalizado, ClienteDialogData, EtiquetaClienteConfig } from '../../../../shared/models/clientes.models';
 import { ClientesService } from '../../../../core/services/clientes.service';
 import { ConfiguracionClientesService } from '../../../../core/services/configuracion-clientes.service';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
@@ -18,6 +18,7 @@ import { ClienteFormDialogComponent } from '../../../../shared/components/client
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { CustomFieldValueComponent } from '../../../../shared/components/custom-field-value/custom-field-value.component';
 import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
+import { EtiquetaClienteChipComponent } from '../../../../shared/components/etiqueta-cliente-chip/etiqueta-cliente-chip.component';
 import { TableColumnDefinition } from '../../../../shared/models/table-preferences.models';
 
 @Component({
@@ -34,7 +35,8 @@ import { TableColumnDefinition } from '../../../../shared/models/table-preferenc
     MatTooltipModule,
     MatSnackBarModule,
     CustomFieldValueComponent,
-    DataTableFrameComponent
+    DataTableFrameComponent,
+    EtiquetaClienteChipComponent
   ],
   template: `
     <section class="clientes-card surface-card">
@@ -88,7 +90,15 @@ import { TableColumnDefinition } from '../../../../shared/models/table-preferenc
 
           <ng-container matColumnDef="etiquetas">
             <th mat-header-cell *matHeaderCellDef>Etiquetas</th>
-            <td mat-cell *matCellDef="let row">{{ row.etiquetas?.join(', ') || '—' }}</td>
+            <td mat-cell *matCellDef="let row">
+              @if (row.etiquetas?.length) {
+                <div class="client-tags">
+                  @for (etiqueta of row.etiquetas; track etiqueta) {
+                    <app-etiqueta-cliente-chip [valor]="etiqueta" [catalogo]="catalogoEtiquetas()" />
+                  }
+                </div>
+              } @else { — }
+            </td>
           </ng-container>
 
           <ng-container matColumnDef="creadoEn">
@@ -142,6 +152,7 @@ import { TableColumnDefinition } from '../../../../shared/models/table-preferenc
     table { width: 100%; min-width: 900px; }
     thead tr { background: var(--tc-surface-container-low); }
     td mat-icon { font-size: 1.1rem; }
+    .client-tags { display: flex; min-width: 180px; max-width: 360px; gap: .35rem; flex-wrap: wrap; padding: .3rem 0; }
     @media (max-width: 900px) { .toolbar { align-items: start; flex-direction: column; } }
   `]
 })
@@ -156,6 +167,7 @@ export class ListaClientesComponent implements OnInit, AfterViewInit {
 
   protected readonly dataSource = new MatTableDataSource<Cliente>([]);
   protected readonly camposPersonalizados = signal<CampoPersonalizado[]>([]);
+  protected readonly catalogoEtiquetas = signal<EtiquetaClienteConfig[]>([]);
   protected readonly camposActivos = computed(() =>
     this.camposPersonalizados().filter((campo) => campo.activo !== false)
   );
@@ -188,6 +200,7 @@ export class ListaClientesComponent implements OnInit, AfterViewInit {
 
     this.configuracionService.getConfiguracion().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((configuracion) => {
       this.camposPersonalizados.set(configuracion.camposPersonalizados ?? []);
+      this.catalogoEtiquetas.set(configuracion.catalogoEtiquetas ?? []);
     });
   }
 

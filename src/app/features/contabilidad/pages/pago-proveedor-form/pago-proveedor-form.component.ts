@@ -13,6 +13,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { TwoDecimalInputDirective } from '../../../../shared/directives/two-decimal-input.directive';
 import { dateAIso, isoADate } from '../../../../shared/utils/fecha-input.util';
 import { CuentaContableAutocompleteComponent } from '../../components/cuenta-contable-autocomplete/cuenta-contable-autocomplete.component';
 import { ProveedorCxpAutocompleteComponent, ProveedorCxpOpcion } from '../../components/proveedor-cxp-autocomplete/proveedor-cxp-autocomplete.component';
@@ -31,7 +32,7 @@ interface ProveedorConSaldo extends ProveedorCxpOpcion {
 @Component({
   selector: 'app-pago-proveedor-form',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterLink, MatButtonModule, MatDatepickerModule, MatDialogModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, MatSnackBarModule, CuentaContableAutocompleteComponent, ProveedorCxpAutocompleteComponent],
+  imports: [CommonModule, FormsModule, RouterLink, MatButtonModule, MatDatepickerModule, MatDialogModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, MatSnackBarModule, CuentaContableAutocompleteComponent, ProveedorCxpAutocompleteComponent, TwoDecimalInputDirective],
   template: `
     <section class="pago-form-page">
       <header class="surface-card page-header"><div><p class="eyebrow">Cuentas por pagar</p><h2>Nuevo pago a proveedor</h2><p>Aplica el pago a uno o varios documentos pendientes. Genera el asiento DEBE CxP / HABER banco.</p></div><a mat-button routerLink="/workspace/contabilidad/cuentas-por-pagar/pagos">Volver</a></header>
@@ -49,7 +50,7 @@ interface ProveedorConSaldo extends ProveedorCxpOpcion {
           @if (documentosProveedor().length === 0) { <p class="hint">Selecciona un proveedor con saldo pendiente.</p> } @else {
             <div class="table-scroll"><table><thead><tr><th>Número</th><th>Vence</th><th class="num">Saldo</th><th class="num">Abono</th><th></th></tr></thead><tbody>
               @for (documento of documentosProveedor(); track documento.id) {
-                <tr><td><strong>{{ referenciaDocumento(documento) }}</strong><span class="sub">{{ documento.numero }} · {{ documento.glosa }}</span></td><td>{{ documento.fechaVencimiento | date:'dd/MM/yyyy' }}</td><td class="num">{{ documento.saldoPendiente | currency:'USD':'symbol-narrow':'1.2-2' }}</td><td class="num"><mat-form-field appearance="outline" class="abono-field"><input matInput type="number" min="0" [max]="documento.saldoPendiente" step="0.01" inputmode="decimal" [ngModel]="abonos()[documento.id!]" (ngModelChange)="setAbono(documento.id!, $event)" aria-label="Abono" /></mat-form-field></td><td><button mat-button type="button" (click)="pagarTotal(documento)">Total</button></td></tr>
+                <tr><td><strong>{{ referenciaDocumento(documento) }}</strong><span class="sub">{{ documento.numero }} · {{ documento.glosa }}</span></td><td>{{ documento.fechaVencimiento | date:'dd/MM/yyyy' }}</td><td class="num">{{ documento.saldoPendiente | currency:'USD':'symbol-narrow':'1.2-2' }}</td><td class="num"><mat-form-field appearance="outline" class="abono-field"><input matInput type="text" inputmode="decimal" appTwoDecimalInput [ngModel]="abonos()[documento.id!]" (ngModelChange)="setAbono(documento.id!, $event)" [name]="'abono-' + documento.id" aria-label="Abono" /></mat-form-field></td><td><button mat-button type="button" (click)="pagarTotal(documento)">Total</button></td></tr>
               }
             </tbody></table></div>
           }
@@ -112,7 +113,23 @@ export class PagoProveedorFormComponent implements OnInit {
   protected limpiarFechaSiVacia(event: Event): void { if ((event.target as HTMLInputElement).value.trim() === '') this.fecha.set(''); }
   protected actualizarReferencia(referencia: string): void { this.referencia.set(referencia ?? ''); this.actualizarGlosaSugerida(); }
   protected editarGlosa(glosa: string): void { this.glosaEditada = true; this.glosa.set(glosa ?? ''); }
-  protected setAbono(documentoId: string, valor: number | null): void { const documento = this.documentosProveedor().find((item) => item.id === documentoId); const maximo = this.round2(documento?.saldoPendiente ?? 0); const monto = Math.min(this.round2(Number(valor ?? 0)), maximo); this.abonos.update((actual) => ({ ...actual, [documentoId]: monto > 0 ? monto : 0 })); this.actualizarGlosaSugerida(); }
+  /**
+   * El input es de texto (ver appTwoDecimalInput), asi que el valor llega como string mientras se
+   * teclea. El campo vacio borra la clave en vez de escribir 0: si no, al limpiarlo para reescribir
+   * el importe el binding devolveria un "0" al input.
+   */
+  protected setAbono(documentoId: string, valor: number | string | null): void {
+    const texto = String(valor ?? '').trim();
+    const documento = this.documentosProveedor().find((item) => item.id === documentoId);
+    const maximo = this.round2(documento?.saldoPendiente ?? 0);
+    const monto = Math.min(this.round2(Number(texto)), maximo);
+    this.abonos.update((actual) => {
+      const siguiente = { ...actual };
+      if (!texto) { delete siguiente[documentoId]; } else { siguiente[documentoId] = monto > 0 ? monto : 0; }
+      return siguiente;
+    });
+    this.actualizarGlosaSugerida();
+  }
   protected pagarTotal(documento: DocumentoPorPagar): void { if (documento.id) this.setAbono(documento.id, this.round2(documento.saldoPendiente)); }
   protected referenciaDocumento(documento: DocumentoPorPagar): string { return referenciaDocumentoPago(documento); }
 

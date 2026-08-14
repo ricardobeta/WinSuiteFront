@@ -434,8 +434,8 @@ export class DevolucionIvaInmobiliariosComponent implements OnInit {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
       const refreshed = await this.api.obtenerOCrearExpediente(draft.proyectoId, draft.periodo);
       this.expediente.set(refreshed);
-      this.snack.open(`Excel generado · versión ${response.headers.get('x-document-version') ?? refreshed.exportaciones.length}`, 'Cerrar', { duration: 5000 });
-    } catch (error) { this.handle(error); } finally { this.busy.set(false); }
+      this.snack.open(`Excel respaldado y descargado · versión ${response.headers.get('x-document-version') ?? refreshed.exportaciones.length}`, 'Cerrar', { duration: 5000 });
+    } catch (error) { this.error.set(await this.downloadErrorMessage(error)); } finally { this.busy.set(false); }
   }
 
   updateAmount(line: LineaElegible, field: 'base' | 'iva', event: Event): void {
@@ -535,6 +535,18 @@ export class DevolucionIvaInmobiliariosComponent implements OnInit {
   }
 
   private handle(error: unknown): void { this.error.set(this.message(error)); }
+  private async downloadErrorMessage(error: unknown): Promise<string> {
+    const body = (error as { error?: unknown })?.error;
+    if (body instanceof Blob) {
+      try {
+        const payload = JSON.parse(await body.text()) as { error?: string; message?: string };
+        return payload.error ?? payload.message ?? this.message(error);
+      } catch {
+        // Si el cuerpo no es JSON se conserva el mensaje HTTP original.
+      }
+    }
+    return this.message(error);
+  }
   private message(error: unknown): string { const value = error as { error?: { error?: string }; message?: string }; return value.error?.error ?? value.message ?? 'No se pudo completar la operación.'; }
   private currentPeriod(): string { const now = new Date(); return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`; }
 }

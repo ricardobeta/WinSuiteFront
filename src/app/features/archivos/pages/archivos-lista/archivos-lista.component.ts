@@ -1,4 +1,5 @@
 import { CommonModule } from '@angular/common';
+import { HttpResponse } from '@angular/common/http';
 import { AfterViewInit, Component, DestroyRef, Injector, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { FormBuilder, ReactiveFormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
@@ -10,6 +11,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatPaginator, MatPaginatorModule } from '@angular/material/paginator';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatSort, MatSortModule } from '@angular/material/sort';
@@ -28,6 +30,7 @@ import { DataTableFrameComponent } from '../../../../shared/components/data-tabl
 import { ARCHIVO_MAX_TOTAL_BYTES, ArchivoItem, ArchivosUsage } from '../../../../shared/models/archivos.models';
 import { PlanService } from '../../../../core/services/plan.service';
 import { SitioMediaService } from '../../../sitio-web/services/sitio-media.service';
+import { CumplimientoSriApiService } from '../../../contabilidad/services/cumplimiento-sri-api.service';
 
 
 @Component({
@@ -45,6 +48,7 @@ import { SitioMediaService } from '../../../sitio-web/services/sitio-media.servi
     MatInputModule,
     MatPaginatorModule,
     MatProgressBarModule,
+    MatProgressSpinnerModule,
     MatSelectModule,
     MatSnackBarModule,
     MatSortModule,
@@ -217,16 +221,19 @@ import { SitioMediaService } from '../../../sitio-web/services/sitio-media.servi
                     type="button"
                     color="primary"
                     matTooltip="Descargar"
+                    [disabled]="processingFile() === row.id || !canDownloadItem(row)"
                     (click)="download(row)"
                   >
-                    <mat-icon>download</mat-icon>
+                    @if (processingFile() === row.id) { <mat-spinner diameter="20" /> }
+                    @else { <mat-icon>download</mat-icon> }
                   </button>
-                  @if (canDelete()) {
+                  @if (canDeleteItem(row)) {
                     <button
                       mat-icon-button
                       type="button"
                       color="warn"
                       matTooltip="Eliminar"
+                      [disabled]="processingFile() === row.id"
                       (click)="confirmDelete(row)"
                     >
                       <mat-icon>delete</mat-icon>
@@ -458,6 +465,7 @@ import { SitioMediaService } from '../../../sitio-web/services/sitio-media.servi
 export class ArchivosListaComponent implements OnInit, AfterViewInit {
   private readonly archivosService = inject(ArchivosService);
   private readonly sitioMediaService = inject(SitioMediaService);
+  private readonly sriApi = inject(CumplimientoSriApiService);
   private readonly authorization = inject(AuthorizationService);
   private readonly dialog = inject(MatDialog);
   private readonly injector = inject(Injector);
@@ -491,6 +499,7 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
   protected readonly sitesNextPageToken = signal<string | null>(null);
   private readonly sitesInitialized = signal(false);
   protected readonly filteredCount = signal(0);
+  protected readonly processingFile = signal('');
 
   private readonly planService = inject(PlanService);
 
@@ -520,7 +529,7 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
 
   protected readonly displayedColumns = computed(() => {
     const base = ['archivo', 'tipo', 'modulo', 'fecha', 'tamano'];
-    return this.canDelete() ? [...base, 'acciones'] : base;
+    return [...base, 'acciones'];
   });
 
   protected readonly filterForm = this.fb.group({
@@ -585,6 +594,9 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
     if (moduleKey === 'sitio_web') {
       return 'Sites (publico)';
     }
+    if (moduleKey === 'contabilidad_sri') {
+      return 'Cumplimiento SRI';
+    }
     return moduleKey.charAt(0).toUpperCase() + moduleKey.slice(1);
   }
 
@@ -629,20 +641,47 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
     });
   }
 
-  protected download(item: ArchivoItem): void {
-    if (!item.downloadUrl) {
+  protected canDownloadItem(item: ArchivoItem): boolean {
+    if (item.sourceModule === 'contabilidad_sri') {
+      return !!item.sourceEntityId && Number.isInteger(item.sourceVersion)
+        && this.authorization.canAccess('contabilidad_sri', 'read');
+    }
+    return !!item.downloadUrl;
+  }
+
+  protected canDeleteItem(item: ArchivoItem): boolean {
+    if (!this.canDelete()) return false;
+    return item.sourceModule !== 'contabilidad_sri'
+      || this.authorization.canAccess('contabilidad_sri', 'update');
+  }
+
+  protected async download(item: ArchivoItem): Promise<void> {
+    if (!this.canDownloadItem(item) || this.processingFile()) return;
+    if (item.sourceModule !== 'contabilidad_sri') {
+      window.open(item.downloadUrl, '_blank');
       return;
     }
-    window.open(item.downloadUrl, '_blank');
+    this.processingFile.set(item.id);
+    try {
+      const response = await this.sriApi.descargarArchivo(item.sourceEntityId!, item.sourceVersion!);
+      this.saveBlob(response, item.name);
+    } catch (error) {
+      this.snackBar.open(await this.downloadErrorMessage(error), 'Cerrar', { duration: 4500 });
+    } finally {
+      this.processingFile.set('');
+    }
   }
 
   protected confirmDelete(item: ArchivoItem): void {
+    if (!this.canDeleteItem(item) || this.processingFile()) return;
     const dialogRef = this.dialog.open(ConfirmDialogComponent, {
       width: '420px',
       data: {
         title: 'Eliminar archivo',
         message: item.sourceModule === 'sitio_web'
           ? `¿Deseas eliminar "${item.name}" del contenido publico? Si esta en uso, dejara de mostrarse en el sitio publicado.`
+          : item.sourceModule === 'contabilidad_sri'
+          ? `¿Deseas eliminar "${item.name}"? La versión fiscal permanecerá en el historial y podrá restaurarse usando nuevamente la cuota de Archivos.`
           : `¿Deseas eliminar "${item.name}"? Esta accion no se puede deshacer.`,
         confirmText: 'Eliminar'
       }
@@ -653,18 +692,25 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
         return;
       }
 
+      this.processingFile.set(item.id);
       const eliminar = item.sourceModule === 'sitio_web'
         ? this.sitioMediaService.eliminarImagen(item.storagePath).then(() => {
             this.sitesFiles.update((actuales) => actuales.filter((archivo) => archivo.id !== item.id));
             this.applyFilters();
           })
+        : item.sourceModule === 'contabilidad_sri'
+        ? this.sriApi.eliminarArchivo(item.sourceEntityId!, item.sourceVersion!)
+            .then(() => this.planService.refresh()).then(() => undefined)
         : this.archivosService.deleteArchivo(item);
 
       eliminar
-        .then(() => this.showSuccess('Archivo eliminado correctamente.'))
+        .then(() => this.showSuccess(item.sourceModule === 'contabilidad_sri'
+          ? 'Archivo eliminado. La versión fiscal sigue disponible para restaurar.'
+          : 'Archivo eliminado correctamente.'))
         .catch(() => {
           this.snackBar.open('No se pudo eliminar el archivo.', 'Cerrar', { duration: 3200 });
-        });
+        })
+        .finally(() => this.processingFile.set(''));
     });
   }
 
@@ -739,6 +785,28 @@ export class ArchivosListaComponent implements OnInit, AfterViewInit {
       horizontalPosition: 'end',
       verticalPosition: 'top'
     });
+  }
+
+  private saveBlob(response: HttpResponse<Blob>, fallback: string): void {
+    const disposition = response.headers.get('content-disposition') ?? '';
+    const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    const simple = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+    const filename = encoded ? decodeURIComponent(encoded) : (simple ?? fallback);
+    const url = URL.createObjectURL(response.body ?? new Blob());
+    const anchor = document.createElement('a');
+    anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  private async downloadErrorMessage(error: unknown): Promise<string> {
+    const body = (error as { error?: unknown })?.error;
+    if (body instanceof Blob) {
+      try {
+        const payload = JSON.parse(await body.text()) as { error?: string; message?: string };
+        return payload.error ?? payload.message ?? 'No se pudo descargar el archivo SRI.';
+      } catch { /* Se conserva el mensaje generico. */ }
+    }
+    return error instanceof Error ? error.message : 'No se pudo descargar el archivo SRI.';
   }
 
   private async loadSitesPage(reset: boolean): Promise<void> {

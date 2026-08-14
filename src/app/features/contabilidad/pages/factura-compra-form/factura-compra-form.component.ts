@@ -25,6 +25,7 @@ import { TwoDecimalInputDirective } from '../../../../shared/directives/two-deci
 import { ArchivoItem } from '../../../../shared/models/archivos.models';
 import { ArchivosService } from '../../../../core/services/archivos.service';
 import { Almacen, Producto } from '../../../inventario/models/inventario.models';
+import { esComprable } from '../../../inventario/utils/producto.util';
 import { AlmacenesService } from '../../../inventario/services/almacenes.service';
 import { ProductosService } from '../../../inventario/services/productos.service';
 import {
@@ -931,7 +932,8 @@ export class FacturaCompraFormComponent implements OnInit {
 
   async ngOnInit(): Promise<void> {
     this.productosService.getProductos().pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((productos) => this.productos.set(productos.filter((p) => p.activo !== false)));
+      // Una plantilla de variantes no tiene stock propio: se compran sus variantes.
+      .subscribe((productos) => this.productos.set(productos.filter((p) => esComprable(p))));
     this.almacenesService.getAlmacenesActivos().pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((almacenes) => this.almacenes.set(almacenes));
     this.tiposGastoService.listar().pipe(takeUntilDestroyed(this.destroyRef))

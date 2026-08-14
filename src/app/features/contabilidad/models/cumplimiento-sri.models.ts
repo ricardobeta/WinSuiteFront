@@ -117,6 +117,17 @@ export interface ExportacionSri {
   totalIva: number;
   numeroLineas: number;
   snapshot: VistaPreviaDevolucionIva;
+  archivo?: ArchivoExportacionSri;
+}
+
+export type EstadoArchivoExportacionSri = 'DISPONIBLE' | 'ELIMINADO' | 'NO_ARCHIVADO';
+
+export interface ArchivoExportacionSri {
+  estado: EstadoArchivoExportacionSri;
+  archivoId: string;
+  tamanoBytes: number;
+  sha256: string;
+  almacenadoEn: number;
 }
 
 export interface ExportacionRecienteSri {
@@ -129,4 +140,5 @@ export interface ExportacionRecienteSri {
   nombreArchivo: string;
   totalIva: number;
   numeroLineas: number;
+  archivo?: ArchivoExportacionSri;
 }

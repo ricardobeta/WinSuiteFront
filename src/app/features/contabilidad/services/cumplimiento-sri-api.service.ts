@@ -78,4 +78,24 @@ export class CumplimientoSriApiService {
     const params = new HttpParams().set('limit', limit);
     return firstValueFrom(this.http.get<ExportacionRecienteSri[]>(`${this.refundUrl}/exportaciones-recientes`, { params }));
   }
+
+  descargarArchivo(expedienteId: string, version: number): Promise<HttpResponse<Blob>> {
+    return firstValueFrom(this.http.get(
+      `${this.refundUrl}/expedientes/${encodeURIComponent(expedienteId)}/exportaciones/${version}/archivo`,
+      { observe: 'response', responseType: 'blob' }
+    ));
+  }
+
+  restaurarArchivo(expedienteId: string, version: number): Promise<HttpResponse<Blob>> {
+    return firstValueFrom(this.http.post(
+      `${this.refundUrl}/expedientes/${encodeURIComponent(expedienteId)}/exportaciones/${version}/archivo/restaurar`, {},
+      { observe: 'response', responseType: 'blob' }
+    ));
+  }
+
+  eliminarArchivo(expedienteId: string, version: number): Promise<void> {
+    return firstValueFrom(this.http.delete<void>(
+      `${this.refundUrl}/expedientes/${encodeURIComponent(expedienteId)}/exportaciones/${version}/archivo`
+    ));
+  }
 }

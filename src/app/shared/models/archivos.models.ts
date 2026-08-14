@@ -12,6 +12,10 @@ export interface ArchivoItem {
   contentType?: string;
   extension?: ArchivoExtension | string;
   sourceModule?: string;
+  managedByBackend?: boolean;
+  sourceEntityId?: string;
+  sourceVersion?: number;
+  sha256?: string;
   jobId?: string;
   claveAcceso?: string;
   tipoArchivo?: string;

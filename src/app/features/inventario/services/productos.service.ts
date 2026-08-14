@@ -93,6 +93,82 @@ export class ProductosService {
     return productoId;
   }
 
+  /**
+   * Crea varios productos en una sola escritura multipath.
+   *
+   * Generar 20 variantes con 20 `crearProducto()` seguidos puede fallar a mitad y dejar
+   * el arbol incompleto. Un unico `update()` con todas las rutas es atomico.
+   */
+  async crearProductosLote(productos: Array<Omit<Producto, 'id'>>): Promise<string[]> {
+    if (productos.length === 0) {
+      return [];
+    }
+
+    const timestamp = Date.now();
+    const metadata = this.audit.createMetadata('crear', null, timestamp);
+    const cambios: Record<string, unknown> = {};
+    const ids: string[] = [];
+
+    for (const producto of productos) {
+      const id = push(this.getCollectionRef()).key;
+      if (!id) {
+        throw new Error('No se pudo generar el identificador de una variante.');
+      }
+
+      ids.push(id);
+      cambios[id] = { ...producto, ...metadata };
+    }
+
+    await update(this.getCollectionRef(), cambios);
+
+    await this.audit.recordSafe({
+      action: 'crear',
+      target: {
+        module: 'inventario',
+        entityType: 'producto',
+        entityId: ids[0],
+        label: productos[0]?.nombre ?? 'Variantes'
+      },
+      summary: `Creo ${ids.length} variante(s) de producto`,
+      changesAfter: { cantidad: ids.length, skus: productos.map((producto) => producto.sku) }
+    });
+
+    return ids;
+  }
+
+  /** Actualiza varios productos en una sola escritura multipath. */
+  async actualizarProductosLote(cambiosPorProducto: Array<{ id: string; cambios: Partial<Producto> }>): Promise<void> {
+    if (cambiosPorProducto.length === 0) {
+      return;
+    }
+
+    const metadata = this.audit.createMetadata('actualizar', null);
+    const cambios: Record<string, unknown> = {};
+
+    for (const entrada of cambiosPorProducto) {
+      for (const [campo, valor] of Object.entries({ ...entrada.cambios, ...metadata })) {
+        // RTDB rechaza `undefined`: se omite la clave y se deja el valor previo intacto.
+        if (valor !== undefined) {
+          cambios[`${entrada.id}/${campo}`] = valor;
+        }
+      }
+    }
+
+    await update(this.getCollectionRef(), cambios);
+
+    await this.audit.recordSafe({
+      action: 'actualizar',
+      target: {
+        module: 'inventario',
+        entityType: 'producto',
+        entityId: cambiosPorProducto[0].id,
+        label: cambiosPorProducto[0].cambios.nombre ?? cambiosPorProducto[0].id
+      },
+      summary: `Actualizo ${cambiosPorProducto.length} variante(s) de producto`,
+      changesAfter: { cantidad: cambiosPorProducto.length }
+    });
+  }
+
   async actualizarProducto(productoId: string, producto: Partial<Producto>): Promise<void> {
     const actual = await this.getProductoById(productoId);
     await update(this.getItemRef(productoId), {

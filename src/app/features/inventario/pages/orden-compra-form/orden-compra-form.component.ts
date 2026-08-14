@@ -27,6 +27,7 @@ import { OrdenesCompraService } from '../../services/ordenes-compra.service';
 import { ProductosService } from '../../services/productos.service';
 import { ProveedoresService } from '../../services/proveedores.service';
 import { Almacen, EstadoOrdenCompra, MetodoPrecioVenta, OrdenCompraItem, Producto, Proveedor } from '../../models/inventario.models';
+import { esComprable } from '../../utils/producto.util';
 
 const EXTENSIONES_PDF = ['pdf', 'png', 'jpg', 'jpeg', 'webp'];
 
@@ -450,7 +451,8 @@ export class OrdenCompraFormComponent implements OnInit {
       .getProductos()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((productos) => {
-        this.productos.set(productos.filter((p) => p.activo !== false));
+        // Una plantilla de variantes no tiene stock propio: se compran sus variantes.
+        this.productos.set(productos.filter((p) => esComprable(p)));
         const map: Record<string, Producto> = {};
         productos.forEach((producto) => {
           if (producto.id) {

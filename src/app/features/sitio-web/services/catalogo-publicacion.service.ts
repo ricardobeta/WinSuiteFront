@@ -6,8 +6,17 @@ import { AuthService } from '../../../core/services/auth.service';
 import { ProductosService } from '../../inventario/services/productos.service';
 import { CategoriasService } from '../../inventario/services/categorias.service';
 import { Producto } from '../../inventario/models/inventario.models';
+import { esVendibleEnPos } from '../../inventario/utils/producto.util';
 import { SITES_DATABASE } from '../../../core/firebase/sites-firebase.tokens';
 import { SitesFirebaseSessionService } from '../../../core/services/sites-firebase-session.service';
+import { SitioMediaService } from './sitio-media.service';
+
+/** Desenlace de copiar la foto de inventario al bucket publico de sitios. */
+export type ResultadoCopiaImagen =
+  | { estado: 'copiada'; url: string }
+  | { estado: 'sin-imagen' }
+  | { estado: 'sin-cupo' }
+  | { estado: 'error'; motivo: string };
 
 /**
  * Capa de publicacion del catalogo: sitios_catalogo/{tenantId}/productos/{productoId}.
@@ -22,6 +31,7 @@ export class CatalogoPublicacionService {
   private readonly productosService = inject(ProductosService);
   private readonly categoriasService = inject(CategoriasService);
   private readonly sitesSession = inject(SitesFirebaseSessionService);
+  private readonly sitioMedia = inject(SitioMediaService);
 
   private catalogoPath(): string {
     return `sitios_catalogo/${this.authService.getTenantId()}/productos`;
@@ -59,25 +69,58 @@ export class CatalogoPublicacionService {
     await update(ref(this.database, this.configPath()), config);
   }
 
-  async setVisible(producto: Producto, visible: boolean): Promise<void> {
+  /**
+   * Publica u oculta un producto del inventario.
+   *
+   * @returns como acabo la copia de la imagen; el producto se publica en cualquier caso.
+   */
+  async setVisible(producto: Producto, visible: boolean): Promise<ResultadoCopiaImagen> {
     await this.sitesSession.ensureReady();
     const productoId = producto.id;
-    if (!productoId) return;
+    if (!productoId) return { estado: 'sin-imagen' };
     const existente = await get(ref(this.database, `${this.catalogoPath()}/${productoId}`));
     if (existente.exists()) {
       await update(ref(this.database, `${this.catalogoPath()}/${productoId}`), {
         visible,
         actualizadoEn: Date.now(),
       });
-      return;
+      return { estado: 'sin-imagen' };
     }
+
+    // La tienda nunca sirve la foto privada del inventario: se copia al bucket publico.
+    const copia: ResultadoCopiaImagen = visible
+      ? await this.copiarImagenDeInventario(producto)
+      : { estado: 'sin-imagen' };
+
     const categorias = await this.categoriasService.getCategoriasOnce();
     const publicado = this.aProductoPublicado(producto, {
       visible,
-      imagenes: [],
+      imagenes: copia.estado === 'copiada' ? [copia.url] : [],
       categoriaNombre: categorias.find((categoria) => categoria.id === producto.categoriaId)?.nombre,
     });
     await update(ref(this.database), { [`${this.catalogoPath()}/${productoId}`]: publicado });
+
+    return copia;
+  }
+
+  /**
+   * Copia la foto de inventario al bucket publico de sitios.
+   *
+   * Nunca lanza: una foto no debe impedir publicar el producto. Distingue quedarse sin
+   * cupo de un fallo tecnico, porque mandar a comprar plan cuando el problema es otro
+   * seria enganoso.
+   */
+  async copiarImagenDeInventario(producto: Producto): Promise<ResultadoCopiaImagen> {
+    const origen = producto.imagen?.url;
+    if (!origen) return { estado: 'sin-imagen' };
+
+    try {
+      const url = await this.sitioMedia.copiarDesdeUrl(origen, slugify(producto.nombre) || 'producto');
+      return url ? { estado: 'copiada', url } : { estado: 'sin-cupo' };
+    } catch (error) {
+      console.warn('No se pudo copiar la imagen del producto al espacio publico', error);
+      return { estado: 'error', motivo: error instanceof Error ? error.message : 'Error desconocido' };
+    }
   }
 
   async setImagenes(productoId: string, imagenes: string[]): Promise<void> {
@@ -167,8 +210,9 @@ export class CatalogoPublicacionService {
     for (const [productoId, publicado] of Object.entries(publicados)) {
       if (publicado.fuente?.tipo === 'manual' || publicado.fuente?.tipo === 'dropi') continue;
       const producto = productos.find((p) => p.id === productoId);
-      if (!producto || !producto.activo) {
-        // El producto ya no existe o esta inactivo: se oculta de la tienda.
+      if (!producto || !esVendibleEnPos(producto)) {
+        // Se oculta de la tienda si el producto ya no existe, quedo inactivo, o paso a
+        // ser materia prima o plantilla de variantes (que no se venden por si mismas).
         cambios[`${this.catalogoPath()}/${productoId}/visible`] = false;
         cambios[`${this.catalogoPath()}/${productoId}/actualizadoEn`] = ahora;
         continue;
@@ -179,6 +223,9 @@ export class CatalogoPublicacionService {
       cambios[`${this.catalogoPath()}/${productoId}/ivaPorcentaje`] = producto.ivaPorcentaje;
       cambios[`${this.catalogoPath()}/${productoId}/categoriaId`] = producto.categoriaId;
       cambios[`${this.catalogoPath()}/${productoId}/categoriaNombre`] = categoriaPorId.get(producto.categoriaId) ?? producto.categoriaId;
+      // `imagenes` no se toca aqui: la tienda sirve copias propias del bucket publico y
+      // crearlas exige subir bytes y reservar cuota, cosa que este multipath no puede hacer.
+      // Se publican al hacer visible el producto o desde "Usar la imagen del inventario".
       cambios[`${this.catalogoPath()}/${productoId}/slug`] =
         publicado.slug || slugify(producto.nombre);
       cambios[`${this.catalogoPath()}/${productoId}/actualizadoEn`] = ahora;

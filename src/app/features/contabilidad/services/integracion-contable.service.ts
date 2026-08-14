@@ -109,12 +109,15 @@ export class IntegracionContableService {
     return config.habilitarAsientosAutomaticos;
   }
 
-  async guardarConfiguracion(configuracion: ConfiguracionIntegracionContable): Promise<void> {
-    await set(this.getIntegracionesRef(), {
+  /** Devuelve lo escrito por el mismo motivo que guardarEmpresa: la pantalla ignora su propio eco. */
+  async guardarConfiguracion(configuracion: ConfiguracionIntegracionContable): Promise<ConfiguracionIntegracionContable> {
+    const payload: ConfiguracionIntegracionContable = {
       ...this.getDefaultConfiguracion(),
       ...configuracion,
       actualizadoEn: Date.now()
-    });
+    };
+    await set(this.getIntegracionesRef(), payload);
+    return payload;
   }
 
   getMapeosCategorias(): Observable<MapeoCategoriaContable[]> {

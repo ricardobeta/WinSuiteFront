@@ -162,6 +162,10 @@ import { bytesAMegabytes, formatearBytes, formatearCantidad, megabytesABytes } f
               <input matInput type="number" formControlName="storageMb" />
             </mat-form-field>
             <mat-form-field appearance="outline">
+              <mat-label>Imagenes publicas de sitios (MB)</mat-label>
+              <input matInput type="number" formControlName="sitesMediaMb" />
+            </mat-form-field>
+            <mat-form-field appearance="outline">
               <mat-label>Sitios ecommerce</mat-label>
               <input matInput type="number" formControlName="sitiosEcommerce" />
             </mat-form-field>
@@ -269,6 +273,7 @@ export class PlanesEmpresaComponent implements OnInit {
     visiblePublico: [true],
     limites: this.formBuilder.group({
       storageMb: [null as number | null],
+      sitesMediaMb: [null as number | null],
       sitiosEcommerce: [null as number | null],
       sitiosLanding: [null as number | null],
       aiTokensMes: [null as number | null],
@@ -303,7 +308,7 @@ export class PlanesEmpresaComponent implements OnInit {
       id: '', nombre: '', descripcion: '', precioMensual: 0, precioAnual: 0, orden: this.planes().length,
       activo: true, visiblePublico: true,
       limites: {
-        storageMb: null, sitiosEcommerce: null, sitiosLanding: null, aiTokensMes: null,
+        storageMb: null, sitesMediaMb: null, sitiosEcommerce: null, sitiosLanding: null, aiTokensMes: null,
         facturasSriMes: null, descargasSriMes: null, colaboradores: null, sriWorkerHabilitado: true,
       },
     });
@@ -324,6 +329,7 @@ export class PlanesEmpresaComponent implements OnInit {
       visiblePublico: plan.visiblePublico,
       limites: {
         storageMb: bytesAMegabytes(plan.limites?.storageBytes),
+        sitesMediaMb: bytesAMegabytes(plan.limites?.sitesMediaBytes),
         sitiosEcommerce: plan.limites?.sitiosEcommerce ?? null,
         sitiosLanding: plan.limites?.sitiosLanding ?? null,
         aiTokensMes: plan.limites?.aiTokensMes ?? null,
@@ -364,6 +370,7 @@ export class PlanesEmpresaComponent implements OnInit {
       modulos: this.modulos(),
       limites: {
         storageBytes: megabytesABytes(valores.limites.storageMb),
+        sitesMediaBytes: megabytesABytes(valores.limites.sitesMediaMb),
         sitiosEcommerce: valores.limites.sitiosEcommerce,
         sitiosLanding: valores.limites.sitiosLanding,
         aiTokensMes: valores.limites.aiTokensMes,

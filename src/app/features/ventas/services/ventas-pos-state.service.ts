@@ -1,5 +1,6 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 
+import { AuthService } from '../../../core/services/auth.service';
 import { Cliente as ClienteModel } from '../../../shared/models/clientes.models';
 import { CarritoItem, CarritoState, MetodoPagoState, MetodoPagoVenta, PosTabState } from '../models/ventas.models';
 
@@ -40,19 +41,35 @@ function crearPosTab(index: number): PosTabState {
   providedIn: 'root'
 })
 export class VentasPosStateService {
+  private readonly authService = inject(AuthService);
   private readonly tabsState = signal<PosTabState[]>([crearPosTab(1)]);
-  readonly tabs = computed(() => this.tabsState());
   readonly activeTabId = signal<string>(this.tabsState()[0].id);
-  private readonly storageKeyTabs = 'winsuite.pos.tabs';
-  private readonly storageKeyActive = 'winsuite.pos.activeTabId';
+  private readonly storageScope = signal<string | null>(null);
+  private readonly storagePrefix = 'winsuite.pos.v2';
+  private readonly legacyStorageKeyTabs = 'winsuite.pos.tabs';
+  private readonly legacyStorageKeyActive = 'winsuite.pos.activeTabId';
+  private readonly currentStorageScope = computed(() =>
+    this.buildStorageScope(
+      this.authService.tenantId(),
+      this.authService.currentUser()?.uid ?? null
+    )
+  );
+  readonly contextoListo = computed(() => {
+    const current = this.currentStorageScope();
+    return current !== null && current === this.storageScope();
+  });
+  readonly tabs = computed(() => this.contextoListo() ? this.tabsState() : []);
 
   constructor() {
-    this.loadFromLocalStorage();
+    effect(() => {
+      this.activateStorageScope(this.currentStorageScope());
+    }, { allowSignalWrites: true });
   }
 
   readonly activeTab = computed(() => {
-    const tab = this.tabsState().find((item) => item.id === this.activeTabId());
-    return tab ?? this.tabsState()[0];
+    const tabs = this.tabs();
+    const tab = tabs.find((item) => item.id === this.activeTabId());
+    return tab ?? tabs[0];
   });
 
   readonly carrito = computed<CarritoState>(() => this.activeTab()?.carrito ?? ESTADO_INICIAL);
@@ -313,10 +330,40 @@ export class VentasPosStateService {
     this.saveToLocalStorage();
   }
 
-  private loadFromLocalStorage(): void {
+  private activateStorageScope(scope: string | null): void {
+    if (scope === this.storageScope()) {
+      return;
+    }
+
+    // Invalidar primero evita que una vista alcance a pintar el carrito de la
+    // empresa anterior mientras se restaura el nuevo contexto.
+    this.storageScope.set(null);
+    this.resetTabsState();
+
+    if (!scope) {
+      return;
+    }
+
+    this.loadFromLocalStorage(scope);
+    this.storageScope.set(scope);
+    this.removeLegacyUnscopedStorage();
+  }
+
+  private resetTabsState(): void {
+    const initialTab = crearPosTab(1);
+    this.tabsState.set([initialTab]);
+    this.activeTabId.set(initialTab.id);
+  }
+
+  private loadFromLocalStorage(scope: string): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+
     try {
-      const rawTabs = localStorage.getItem(this.storageKeyTabs);
-      const rawActive = localStorage.getItem(this.storageKeyActive);
+      const keys = this.storageKeys(scope);
+      const rawTabs = localStorage.getItem(keys.tabs);
+      const rawActive = localStorage.getItem(keys.active);
 
       if (rawTabs) {
         const parsed = JSON.parse(rawTabs) as PosTabState[];
@@ -356,12 +403,50 @@ export class VentasPosStateService {
   }
 
   private saveToLocalStorage(): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+
     try {
-      localStorage.setItem(this.storageKeyTabs, JSON.stringify(this.tabsState()));
-      localStorage.setItem(this.storageKeyActive, JSON.stringify(this.activeTabId()));
+      const scope = this.storageScope();
+      if (!scope || scope !== this.currentStorageScope()) {
+        return;
+      }
+
+      const keys = this.storageKeys(scope);
+      localStorage.setItem(keys.tabs, JSON.stringify(this.tabsState()));
+      localStorage.setItem(keys.active, JSON.stringify(this.activeTabId()));
     } catch {
       // ignore quota/errors
     }
+  }
+
+  private buildStorageScope(tenantId: string | null, userId: string | null): string | null {
+    const tenant = tenantId?.trim();
+    const user = userId?.trim();
+    if (!tenant || !user) {
+      return null;
+    }
+
+    return `${encodeURIComponent(tenant)}.${encodeURIComponent(user)}`;
+  }
+
+  private storageKeys(scope: string): { tabs: string; active: string } {
+    return {
+      tabs: `${this.storagePrefix}.${scope}.tabs`,
+      active: `${this.storagePrefix}.${scope}.activeTabId`
+    };
+  }
+
+  private removeLegacyUnscopedStorage(): void {
+    if (typeof localStorage === 'undefined') {
+      return;
+    }
+
+    // Las claves antiguas no indicaban empresa. No se migran porque asignarlas
+    // al tenant actual podría volver a mostrar datos pertenecientes a otro.
+    localStorage.removeItem(this.legacyStorageKeyTabs);
+    localStorage.removeItem(this.legacyStorageKeyActive);
   }
 
   private montoDescuentoItem(item: CarritoItem): number {

@@ -44,6 +44,12 @@ service firebase.storage {
       allow read, write, delete: if false;
     }
 
+    // Versiones fiscales generadas por Cumplimiento SRI. Se descargan y eliminan
+    // exclusivamente mediante WinServer para aplicar tenant, RBAC, cuota y auditoria.
+    match /contabilidad-sri/{tenantId}/{allPaths=**} {
+      allow read, write, delete: if false;
+    }
+
     // Los assets de sitios viven en el proyecto Firebase Sites.
     // Todo path no declarado queda bloqueado por defecto.
     match /{allPaths=**} {

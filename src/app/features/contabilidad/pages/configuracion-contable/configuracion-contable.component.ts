@@ -835,18 +835,31 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
    * La pestana Empresa se edita con ngModel sobre un objeto plano, que no es reactivo. No hace
    * falta que lo sea: quien pregunta si hay cambios sin guardar son metodos, no la plantilla, asi
    * que basta comparar contra lo ultimo que se leyo de RTDB en el momento de preguntar.
+   *
+   * Es null mientras no ha llegado esa primera lectura: hasta entonces el formulario solo tiene
+   * los valores por defecto y no hay contra que compararlo. Con una cadena vacia aqui, la primera
+   * emision de RTDB se leeria como conflicto, la ficha guardada no llegaria a pintarse nunca y
+   * guardar quedaria bloqueado desde el momento de abrir la pantalla.
    */
-  private empresaGuardada = '';
+  private empresaGuardada: string | null = null;
 
   private empresaDirty(): boolean {
-    return JSON.stringify(this.empresaForm) !== this.empresaGuardada;
+    return this.empresaGuardada !== null && JSON.stringify(this.empresaForm) !== this.empresaGuardada;
   }
 
   /**
    * La configuracion cambio en otro sitio (el copiloto, u otra pestana) mientras habia ediciones
    * sin guardar. Se avisa en vez de pisar lo que el usuario tenia escrito.
+   *
+   * Se lleva por seccion y no con una sola bandera: un conflicto en Integraciones no debe bloquear
+   * el guardado de Empresa, y sobre todo "Descartar mis cambios" no debe tirar tambien lo que el
+   * usuario llevaba escrito en la pestana que nadie ha tocado.
    */
-  protected readonly configuracionDesactualizada = signal(false);
+  protected readonly empresaDesactualizada = signal(false);
+  protected readonly integracionDesactualizada = signal(false);
+  protected readonly configuracionDesactualizada = computed(
+    () => this.empresaDesactualizada() || this.integracionDesactualizada()
+  );
 
   /** screenKey debe coincidir con el ConfigToolSet del backend. */
   protected readonly copilotContext: ConfigScreenContext = {
@@ -1018,7 +1031,7 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
           // La suscripcion es en vivo. Si el copiloto (o el usuario en otra pestana) cambia la
           // ficha mientras hay ediciones sin guardar, refrescar aqui las borraria sin aviso.
           if (this.empresaDirty()) {
-            this.configuracionDesactualizada.set(true);
+            this.empresaDesactualizada.set(true);
             return;
           }
           this.aplicarEmpresa(empresa);
@@ -1041,7 +1054,14 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
     }
     this.empresaConfigurada.set(!!empresa?.configurado);
     this.empresaGuardada = JSON.stringify(this.empresaForm);
-    this.configuracionDesactualizada.set(false);
+    this.empresaDesactualizada.set(false);
+  }
+
+  private aplicarIntegracion(config: ConfiguracionIntegracionContable): void {
+    Object.assign(this.integracionForm, this.getDefaultIntegracion(), config);
+    this.integracionGuardada.set({ ...this.integracionForm });
+    this.integracionVersion.update((version) => version + 1);
+    this.integracionDesactualizada.set(false);
   }
 
   /**
@@ -1050,30 +1070,38 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
    * refresca la pantalla sola y un aviso solo confundiria.
    */
   protected onCopilotAplicado(respuesta: ConfigApplyResponse): void {
-    if (respuesta.aplicadas > 0 && (this.empresaDirty() || this.integracionDirty())) {
-      this.configuracionDesactualizada.set(true);
+    if (respuesta.aplicadas === 0) {
+      return;
+    }
+    if (this.empresaDirty()) {
+      this.empresaDesactualizada.set(true);
+    }
+    if (this.integracionDirty()) {
+      this.integracionDesactualizada.set(true);
     }
   }
 
-  /** Descarta las ediciones locales y vuelve a leer lo que hay guardado. */
+  /**
+   * Descarta las ediciones locales y vuelve a leer lo guardado, pero SOLO de las secciones en
+   * conflicto: recargar la otra tirara ediciones que nadie ha pisado.
+   */
   protected descartarMisCambios(): void {
-    void this.service.getEmpresaOnce()
-      .then((empresa) => this.aplicarEmpresa(empresa))
-      .catch(() => this.error.set('No se pudo recargar la configuracion guardada.'));
-    void this.integracionService.getConfiguracionOnce()
-      .then((config) => {
-        Object.assign(this.integracionForm, this.getDefaultIntegracion(), config);
-        this.integracionGuardada.set({ ...this.integracionForm });
-        this.integracionVersion.update((version) => version + 1);
-        this.configuracionDesactualizada.set(false);
-      })
-      .catch(() => this.error.set('No se pudo recargar la configuracion guardada.'));
+    if (this.empresaDesactualizada()) {
+      void this.service.getEmpresaOnce()
+        .then((empresa) => this.aplicarEmpresa(empresa))
+        .catch(() => this.error.set('No se pudo recargar la configuracion guardada.'));
+    }
+    if (this.integracionDesactualizada()) {
+      void this.integracionService.getConfiguracionOnce()
+        .then((config) => this.aplicarIntegracion(config))
+        .catch(() => this.error.set('No se pudo recargar la configuracion guardada.'));
+    }
   }
 
   protected async guardarEmpresa(): Promise<void> {
     // Guardar ahora escribiria el nodo completo con un estado que ya no incluye lo que se cambio
     // por otro lado: perderia esos cambios en silencio.
-    if (this.configuracionDesactualizada()) {
+    if (this.empresaDesactualizada()) {
       this.error.set('La configuracion cambio en otro sitio. Descarta tus cambios para ver la version actual.');
       return;
     }
@@ -1081,11 +1109,15 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
     this.guardandoEmpresa.set(true);
 
     try {
-      await this.service.guardarEmpresa({
+      // Se vuelca lo que quedo guardado, no lo que habia en el formulario: el servicio recorta,
+      // fuerza USD y enciende 'configurado', y la emision en vivo de esta misma escritura la
+      // descarta el guardia de guardandoEmpresa. Sin esto el aviso de "completa la configuracion"
+      // seguiria encendido despues de guardar.
+      const guardada = await this.service.guardarEmpresa({
         ...this.empresaForm,
         tipoContribuyente: this.empresaForm.tipoContribuyente as TipoContribuyente
       });
-      this.empresaGuardada = JSON.stringify(this.empresaForm);
+      this.aplicarEmpresa(guardada);
       this.mostrarMensaje('Configuracion contable guardada.', 'save');
     } catch (error: unknown) {
       this.error.set(error instanceof Error ? error.message : 'No se pudo guardar la configuracion.');
@@ -1178,7 +1210,7 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
   protected async guardarIntegracion(): Promise<void> {
     // El nodo se escribe entero: guardar sobre un estado obsoleto borraria lo que cambio el
     // copiloto sin que nadie se entere.
-    if (this.configuracionDesactualizada()) {
+    if (this.integracionDesactualizada()) {
       this.error.set('La configuracion cambio en otro sitio. Descarta tus cambios para ver la version actual.');
       return;
     }
@@ -1186,8 +1218,7 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
     this.guardandoIntegracion.set(true);
 
     try {
-      await this.integracionService.guardarConfiguracion({ ...this.integracionForm });
-      this.integracionGuardada.set({ ...this.integracionForm });
+      this.aplicarIntegracion(await this.integracionService.guardarConfiguracion({ ...this.integracionForm }));
       this.mostrarMensaje('Integracion contable guardada.', 'sync_alt');
     } catch (error: unknown) {
       this.error.set(error instanceof Error ? error.message : 'No se pudo guardar la integracion contable.');
@@ -1315,13 +1346,10 @@ export class ConfiguracionContableComponent implements OnInit, OnDestroy {
         }
         // Mismo motivo que en la pestana Empresa: avisar, nunca pisar.
         if (this.integracionDirty()) {
-          this.configuracionDesactualizada.set(true);
+          this.integracionDesactualizada.set(true);
           return;
         }
-        Object.assign(this.integracionForm, this.getDefaultIntegracion(), config);
-        this.integracionGuardada.set({ ...this.integracionForm });
-        this.integracionVersion.update((version) => version + 1);
-        this.configuracionDesactualizada.set(false);
+        this.aplicarIntegracion(config);
       });
 
     this.planCuentasService

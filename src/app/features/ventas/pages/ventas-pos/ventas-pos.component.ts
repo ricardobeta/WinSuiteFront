@@ -26,11 +26,21 @@ import { ClientesService } from '../../../../core/services/clientes.service';
 import { ConfiguracionClientesService } from '../../../../core/services/configuracion-clientes.service';
 import { AuthService } from '../../../../core/services/auth.service';
 import { ServiciosService } from '../../../../core/services/servicios.service';
-import { Almacen, Producto } from '../../../inventario/models/inventario.models';
+import { Almacen, AtributoVariante, Producto, Unidad } from '../../../inventario/models/inventario.models';
 import { AlmacenesService } from '../../../inventario/services/almacenes.service';
+import { ConfiguracionInventarioService } from '../../../inventario/services/configuracion-inventario.service';
 import { KardexService } from '../../../inventario/services/kardex.service';
 import { ProductosService } from '../../../inventario/services/productos.service';
 import { RecetasService } from '../../../inventario/services/recetas.service';
+import { UnidadesService } from '../../../inventario/services/unidades.service';
+import {
+  esGranel,
+  esInsumo,
+  esPlantillaVariantes,
+  esVendibleEnPos,
+  pasoDe,
+  redondearCantidad
+} from '../../../inventario/utils/producto.util';
 import { CarritoItem, CuentaAbierta, MetodoPagoVenta, ModoPos, PerfilPos, SesionCaja, VentaItemTipo } from '../../models/ventas.models';
 import { VentasConfigService } from '../../services/ventas-config.service';
 import { FacturacionConfigService } from '../../../../core/services/facturacion-config.service';
@@ -47,6 +57,15 @@ import { VentasAlmacenSesionService } from '../../services/ventas-almacen-sesion
 import { FacturaService, FacturaSriError } from '../../services/factura.service';
 import { FacturaSriErrorDialogComponent } from '../factura-sri-error-dialog/factura-sri-error-dialog.component';
 import { calcularResumenVenta } from '../../services/ventas-calculos.util';
+import {
+  CantidadGranelDialogComponent,
+  CantidadGranelDialogData
+} from '../../components/cantidad-granel-dialog/cantidad-granel-dialog.component';
+import {
+  VarianteSeleccionable,
+  VarianteSelectorDialogComponent,
+  VarianteSelectorDialogData
+} from '../../components/variante-selector-dialog/variante-selector-dialog.component';
 
 interface CatalogoPosItem {
   id: string;
@@ -59,7 +78,20 @@ interface CatalogoPosItem {
   costoUnitario: number;
   stock: number | null;
   permitirInventarioNegativo?: boolean;
+  imagenUrl?: string;
+  /** Presente solo en la tarjeta agrupadora: sus hijos se eligen en un dialogo. */
+  grupoVariantes?: { atributos: AtributoVariante[]; hijos: Producto[] };
+  /** Texto extra para que la busqueda encuentre "camiseta roja". */
+  textoBusqueda?: string;
+  /** Se cobra por peso o medida: la cantidad se digita con decimales. */
+  granel?: boolean;
+  /** Abreviatura de la unidad, para rotular la cantidad a granel. */
+  unidadAbreviatura?: string;
+  /** Incremento que aplican los botones +/- del carrito. */
+  paso?: number;
 }
+
+type VistaPosCompacta = 'productos' | 'cobro';
 
 @Component({
   selector: 'app-ventas-pos',
@@ -215,7 +247,7 @@ interface CatalogoPosItem {
 
         @if (permiteCuentasAbiertas() && cuentasAbiertas().length > 0) {
           <div class="cuentas-abiertas">
-            <span class="cuentas-abiertas-label">{{ etiquetaCuenta() }}s retenidas:</span>
+            <span class="cuentas-abiertas-label">{{ etiquetaCuentas() }} retenidas:</span>
             @for (cuenta of cuentasAbiertas(); track cuenta.id) {
               <div
                 class="cuenta-chip"
@@ -247,7 +279,41 @@ interface CatalogoPosItem {
         }
       </section>
 
-      <article class="surface-card panel panel-left">
+      <nav class="compact-nav" aria-label="Cambiar entre productos y cobro">
+        <button
+          type="button"
+          class="compact-nav-button"
+          [class.active]="vistaCompacta() === 'productos'"
+          [attr.aria-pressed]="vistaCompacta() === 'productos'"
+          aria-controls="pos-productos-panel"
+          (click)="mostrarVistaCompacta('productos')"
+        >
+          <mat-icon>grid_view</mat-icon>
+          <span>Productos</span>
+        </button>
+
+        <button
+          type="button"
+          class="compact-nav-button compact-nav-checkout"
+          [class.active]="vistaCompacta() === 'cobro'"
+          [attr.aria-pressed]="vistaCompacta() === 'cobro'"
+          aria-controls="pos-cobro-panel"
+          (click)="mostrarVistaCompacta('cobro')"
+        >
+          <mat-icon>shopping_cart</mat-icon>
+          <span class="compact-nav-copy">
+            <span>Cobro</span>
+            <small>{{ state.carrito().items.length }} {{ state.carrito().items.length === 1 ? 'articulo' : 'articulos' }}</small>
+          </span>
+          <strong>{{ total() | number:'1.2-2' }}</strong>
+        </button>
+      </nav>
+
+      <article
+        id="pos-productos-panel"
+        class="surface-card panel panel-left compact-pane"
+        [class.compact-pane-active]="vistaCompacta() === 'productos'"
+      >
         <header class="panel-title">
           <h2>Catalogo de venta</h2>
           <p>Elige productos o servicios desde una sola vista y agregalos al carrito.</p>
@@ -336,11 +402,39 @@ interface CatalogoPosItem {
           } @else {
             <section class="productos-grid">
               @for (item of catalogoFiltrado(); track item.tipo + '-' + item.id) {
-                <button type="button" class="producto-card" (click)="agregarDesdeCatalogo(item)" [disabled]="itemSinStock(item)">
+                <button
+                  type="button"
+                  class="producto-card"
+                  [class.con-imagen]="mostrarImagenes()"
+                  (click)="agregarDesdeCatalogo(item)"
+                  [disabled]="itemSinStock(item)"
+                >
+                  @if (mostrarImagenes()) {
+                    <div class="producto-foto">
+                      <span class="producto-foto-vacia" aria-hidden="true">{{ item.nombre.charAt(0).toUpperCase() }}</span>
+                      @if (item.imagenUrl) {
+                        <img
+                          [src]="item.imagenUrl"
+                          [alt]="item.nombre"
+                          loading="lazy"
+                          (error)="ocultarImagenRota($event)"
+                        />
+                      }
+                    </div>
+                  }
+
                   <div class="producto-header-row">
                     <div>
                       <p class="producto-nombre">{{ item.nombre }}</p>
-                      <p class="producto-meta">{{ item.sku }}</p>
+                      <p class="producto-meta">
+                        {{ item.sku }}
+                        @if (item.granel) {
+                          · por {{ item.unidadAbreviatura }}
+                        }
+                        @if (item.grupoVariantes) {
+                          · {{ item.grupoVariantes.hijos.length }} variantes
+                        }
+                      </p>
                     </div>
 
                     <span
@@ -360,8 +454,13 @@ interface CatalogoPosItem {
                     </div>
 
                     <span class="producto-cta" [class.disabled]="itemSinStock(item)">
-                      <mat-icon>add_shopping_cart</mat-icon>
-                      Agregar
+                      @if (item.grupoVariantes) {
+                        <mat-icon>tune</mat-icon>
+                        Elegir
+                      } @else {
+                        <mat-icon>add_shopping_cart</mat-icon>
+                        Agregar
+                      }
                     </span>
                   </div>
 
@@ -395,7 +494,7 @@ interface CatalogoPosItem {
                 <span>{{ item.precio | number:'1.2-2' }}</span>
                 <span [class.sin-stock]="itemSinStock(item)">{{ stockLabelCatalogo(item) }}</span>
                 <button mat-stroked-button type="button" (click)="agregarDesdeCatalogo(item)" [disabled]="itemSinStock(item)">
-                  Agregar
+                  {{ item.grupoVariantes ? 'Elegir' : 'Agregar' }}
                 </button>
               </div>
             }
@@ -404,11 +503,15 @@ interface CatalogoPosItem {
         </div>
       </article>
 
-      <article class="surface-card panel panel-right">
+      <article
+        id="pos-cobro-panel"
+        class="surface-card panel panel-right compact-pane"
+        [class.compact-pane-active]="vistaCompacta() === 'cobro'"
+      >
         <header class="panel-title">
           <div>
-            <h2>Cobro</h2>
-            <p>Vendedor {{ vendedorNombre() }} · Sesion {{ sesionEstado() }}</p>
+            <h2>Venta y cobro</h2>
+            <p>Vendedor {{ vendedorNombre() }} · Sesión {{ sesionEstado() }}</p>
           </div>
           <p class="store-label">
             <mat-icon>storefront</mat-icon>
@@ -419,10 +522,11 @@ interface CatalogoPosItem {
         <!-- Pestañas POS: el listado dentro del panel Cobro fue removido; se mantiene arriba. -->
 
         <div class="checkout-scroll">
+        <div class="checkout-primary">
         <section class="client-row">
           <mat-form-field appearance="outline" class="client-search">
             <mat-label>Buscar cliente</mat-label>
-            <input matInput [formControl]="busquedaClienteControl" [matAutocomplete]="clientesAuto" placeholder="Nombre o identificacion" />
+            <input matInput [formControl]="busquedaClienteControl" [matAutocomplete]="clientesAuto" placeholder="Nombre o identificación" />
           </mat-form-field>
 
           <button mat-stroked-button type="button" (click)="abrirClientePopup()">
@@ -450,10 +554,19 @@ interface CatalogoPosItem {
 
         <section class="cart-section">
           <header class="cart-list-header">
-            <h3>Venta actual</h3>
+            <h3>Productos agregados</h3>
             <span>{{ state.carrito().items.length }} {{ state.carrito().items.length === 1 ? 'articulo' : 'articulos' }}</span>
           </header>
-          <div class="cart-list">
+          <div class="cart-column-head" [class.sin-descuentos]="!config().permitirDescuentos" aria-hidden="true">
+            <span>Producto</span>
+            <span>Cantidad</span>
+            @if (config().permitirDescuentos) {
+              <span>Desc.</span>
+            }
+            <span>Total</span>
+            <span></span>
+          </div>
+          <div class="cart-list" [class.sin-descuentos]="!config().permitirDescuentos">
           @if (state.carrito().items.length === 0) {
             <div class="empty-cart">
               <mat-icon>shopping_cart</mat-icon>
@@ -465,7 +578,7 @@ interface CatalogoPosItem {
                 <div>
                   <p class="cart-name">{{ item.nombre }}</p>
                   <p class="cart-meta">
-                    {{ item.sku }} · {{ item.itemTipo === 'SERVICIO' ? 'Servicio' : (item.itemTipo === 'RECETA' ? 'Receta' : 'Producto') }}
+                    {{ item.sku }} · {{ item.itemTipo === 'SERVICIO' ? 'Servicio' : (item.itemTipo === 'RECETA' ? 'Receta' : 'Producto') }} · {{ item.precioUnitario | number:'1.2-2' }} c/u
                   </p>
                 </div>
 
@@ -473,7 +586,18 @@ interface CatalogoPosItem {
                   <button mat-icon-button type="button" (click)="decrementar(item.productoId, item.itemTipo)">
                     <mat-icon>remove</mat-icon>
                   </button>
-                  <span>{{ item.cantidad }}</span>
+                  @if (esLineaGranel(item)) {
+                    <button
+                      type="button"
+                      class="cart-qty cart-qty-editable"
+                      title="Tocar para digitar la cantidad"
+                      (click)="editarCantidadLinea(item)"
+                    >
+                      {{ item.cantidad | number: '1.0-3' }} {{ unidadLinea(item) }}
+                    </button>
+                  } @else {
+                    <span class="cart-qty">{{ item.cantidad | number: '1.0-3' }}</span>
+                  }
                   <button mat-icon-button type="button" (click)="incrementar(item.productoId, item.itemTipo)">
                     <mat-icon>add</mat-icon>
                   </button>
@@ -497,16 +621,31 @@ interface CatalogoPosItem {
           </div>
         </section>
 
-        <section class="totals">
-          <mat-form-field appearance="outline">
-            <mat-label>Descuento global %</mat-label>
-            <input matInput type="number" [value]="state.carrito().descuentoGlobal" (input)="actualizarDescuentoGlobal($event)" />
-          </mat-form-field>
+        </div>
+        <div class="checkout-secondary">
 
-          <mat-form-field appearance="outline">
-            <mat-label>Notas</mat-label>
-            <textarea matInput rows="3" [value]="state.carrito().notas" (input)="actualizarNotas($event)"></textarea>
-          </mat-form-field>
+        <section class="totals">
+          <header class="checkout-block-title">
+            <mat-icon>receipt_long</mat-icon>
+            <div>
+              <h3>Resumen de la venta</h3>
+              <p>Revisa descuentos e impuestos antes de cobrar.</p>
+            </div>
+          </header>
+
+          <div class="order-options">
+            @if (config().permitirDescuentos) {
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Descuento global %</mat-label>
+                <input matInput type="number" [value]="state.carrito().descuentoGlobal" (input)="actualizarDescuentoGlobal($event)" />
+              </mat-form-field>
+            }
+
+            <mat-form-field appearance="outline" subscriptSizing="dynamic">
+              <mat-label>Notas de la venta</mat-label>
+              <textarea matInput rows="2" [value]="state.carrito().notas" (input)="actualizarNotas($event)"></textarea>
+            </mat-form-field>
+          </div>
 
           <div class="totals-grid">
             <p>Subtotal <strong>{{ subtotalConIva() | number:'1.2-2' }}</strong></p>
@@ -522,22 +661,28 @@ interface CatalogoPosItem {
 
         <section class="payments">
           <header>
-            <h3>Pagos</h3>
+            <div class="payment-title">
+              <mat-icon>account_balance_wallet</mat-icon>
+              <div>
+                <h3>Forma de pago</h3>
+                <p>Registra uno o varios medios.</p>
+              </div>
+            </div>
             <button mat-button type="button" (click)="state.agregarPago()">Agregar pago</button>
           </header>
 
           @for (pago of state.carrito().pagos; track $index) {
-            <div class="payment-row">
-              <mat-form-field appearance="outline">
-                <mat-label>Metodo</mat-label>
+            <div class="payment-row" [class.cash-payment]="pago.metodo === 'EFECTIVO'">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                <mat-label>Método</mat-label>
                 <mat-select [value]="pago.metodo" (selectionChange)="actualizarPagoMetodo($index, $event.value)">
                   @for (metodo of metodosPago(); track metodo) {
-                    <mat-option [value]="metodo">{{ metodo }}</mat-option>
+                    <mat-option [value]="metodo">{{ etiquetaMetodoPago(metodo) }}</mat-option>
                   }
                 </mat-select>
               </mat-form-field>
 
-              <mat-form-field appearance="outline">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic">
                 <mat-label>Monto</mat-label>
                 <input
                   matInput
@@ -551,12 +696,14 @@ interface CatalogoPosItem {
                 />
               </mat-form-field>
 
-              <mat-form-field appearance="outline">
-                <mat-label>Referencia</mat-label>
-                <input matInput [value]="pago.referencia" (input)="actualizarPagoReferencia($index, $event)" />
-              </mat-form-field>
+              @if (pago.metodo !== 'EFECTIVO') {
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                  <mat-label>Referencia</mat-label>
+                  <input matInput [value]="pago.referencia" (input)="actualizarPagoReferencia($index, $event)" />
+                </mat-form-field>
+              }
 
-              <button mat-icon-button type="button" color="warn" (click)="state.removerPago($index)">
+              <button mat-icon-button type="button" color="warn" aria-label="Eliminar forma de pago" (click)="state.removerPago($index)">
                 <mat-icon>delete</mat-icon>
               </button>
             </div>
@@ -565,18 +712,25 @@ interface CatalogoPosItem {
           <p class="payments-balance" [class.error]="pagosDescuadrados()">
             Diferencia pagos: {{ balancePagos() | number:'1.2-2' }}
           </p>
-        </section>
 
-        <section class="cobro-rapido">
-          <mat-form-field appearance="outline" class="recibido-field">
-            <mat-label>Efectivo recibido</mat-label>
-            <input matInput type="number" step="0.01" min="0" [value]="efectivoRecibido() ?? ''" (input)="setEfectivoRecibido($event)" />
-          </mat-form-field>
-          <button mat-stroked-button type="button" (click)="efectivoExacto()">Exacto</button>
-          @if (cambio() !== null) {
-            <p class="cambio-line">Cambio <strong>{{ cambio() | number:'1.2-2' }}</strong></p>
+          @if (tienePagoEfectivo()) {
+            <div class="cobro-rapido">
+              <div class="cash-title">
+                <mat-icon>payments</mat-icon>
+                <span>Cambio en efectivo</span>
+              </div>
+            <mat-form-field appearance="outline" class="recibido-field">
+              <mat-label>Efectivo recibido</mat-label>
+              <input matInput type="number" step="0.01" min="0" [value]="efectivoRecibido() ?? ''" (input)="setEfectivoRecibido($event)" />
+            </mat-form-field>
+            <button mat-stroked-button type="button" (click)="efectivoExacto()">Exacto</button>
+            @if (cambio() !== null) {
+              <p class="cambio-line">Cambio <strong>{{ cambio() | number:'1.2-2' }}</strong></p>
+            }
+            </div>
           }
         </section>
+        </div>
         </div>
 
         <section class="actions">
@@ -657,11 +811,11 @@ interface CatalogoPosItem {
     :host { display: block; min-width: 0; }
     .pos-grid {
       display: grid;
-      grid-template-columns: minmax(0, 1.12fr) minmax(400px, .88fr);
+      grid-template-columns: minmax(560px, 1fr) clamp(560px, 44%, 720px);
       grid-template-rows: auto minmax(0, 1fr);
       gap: .875rem;
       height: calc(100dvh - var(--topbar-height) - 3rem);
-      min-height: 620px;
+      min-height: 0;
     }
     :host-context(.workspace-shell.immersive) .pos-grid {
       height: 100dvh;
@@ -678,6 +832,7 @@ interface CatalogoPosItem {
     }
     .panel-left { grid-template-rows: auto auto minmax(0, 1fr); }
     .panel-right { grid-template-rows: auto minmax(0, 1fr) auto; }
+    .compact-nav { display: none; }
     .catalog-controls {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -733,10 +888,13 @@ interface CatalogoPosItem {
     .products-result-label { margin: -.25rem 0 0; color: var(--muted-foreground); font-size: .82rem; }
     .productos-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+      align-items: start;
       gap: .65rem;
     }
     .producto-card {
+      align-self: start;
+      width: 100%;
       min-width: 0;
       min-height: 132px;
       border: 0;
@@ -770,6 +928,16 @@ interface CatalogoPosItem {
       outline-offset: 2px;
     }
     .producto-card:disabled { opacity: .58; cursor: not-allowed; }
+    .cart-qty { min-width: 3.2rem; text-align: center; font-variant-numeric: tabular-nums; }
+    .cart-qty-editable {
+      border: 1px dashed var(--tc-ghost-border);
+      border-radius: 8px;
+      padding: .2rem .45rem;
+      background: none;
+      color: inherit;
+      cursor: pointer;
+      font: inherit;
+    }
     .producto-header-row { display: flex; justify-content: space-between; align-items: flex-start; gap: .5rem; }
     .producto-nombre { margin: 0; font-weight: 700; line-height: 1.2; }
     .stock-badge {
@@ -927,11 +1095,14 @@ interface CatalogoPosItem {
     .cambio-line { margin: 0; font-size: 1.05rem; }
     .cambio-line strong { color: var(--tc-success); }
     .empty-label { color: var(--muted-foreground); margin: 0; }
+
   `]
 })
 export class VentasPosComponent {
   protected readonly state = inject(VentasPosStateService);
   private readonly productosService = inject(ProductosService);
+  private readonly unidadesService = inject(UnidadesService);
+  private readonly configuracionInventario = inject(ConfiguracionInventarioService);
   private readonly serviciosService = inject(ServiciosService);
   private readonly almacenesService = inject(AlmacenesService);
   private readonly kardexService = inject(KardexService);
@@ -967,6 +1138,11 @@ export class VentasPosComponent {
   protected readonly productos = signal<Producto[]>([]);
   protected readonly servicios = signal<Servicio[]>([]);
   protected readonly clientes = signal<Cliente[]>([]);
+  protected readonly unidades = signal<Unidad[]>([]);
+  /** Productos padre: no se venden solos, agrupan a sus variantes en el catalogo. */
+  protected readonly plantillasVariantes = signal<Producto[]>([]);
+  /** Incremento por defecto para productos vendidos por peso, desde Configuracion de inventario. */
+  protected readonly pasoGranelDefecto = signal(0.1);
   protected readonly stockPorAlmacen = signal<Record<string, number>>({});
   protected readonly almacenes = signal<Almacen[]>([]);
   protected readonly almacenSeleccionadoId = signal<string | null>(null);
@@ -987,15 +1163,26 @@ export class VentasPosComponent {
   protected readonly facturandoPaso = signal<string>('');
   // Cobro rápido en efectivo: cálculo de cambio (solo visual, no altera los pagos).
   protected readonly efectivoRecibido = signal<number | null>(null);
+  protected readonly montoPagoEfectivo = computed(() =>
+    this.roundToTwo(
+      this.state.carrito().pagos
+        .filter((pago) => pago.metodo === 'EFECTIVO')
+        .reduce((total, pago) => total + Number(pago.monto || 0), 0)
+    )
+  );
+  protected readonly tienePagoEfectivo = computed(() =>
+    this.state.carrito().pagos.some((pago) => pago.metodo === 'EFECTIVO')
+  );
   protected readonly cambio = computed(() => {
     const recibido = this.efectivoRecibido();
     if (recibido === null) {
       return null;
     }
-    return this.roundToTwo(Math.max(0, recibido - this.total()));
+    return this.roundToTwo(Math.max(0, recibido - this.montoPagoEfectivo()));
   });
   protected readonly cargandoAlmacenes = signal(true);
   protected readonly vistaProductos = signal<'cards' | 'table'>('cards');
+  protected readonly vistaCompacta = signal<VistaPosCompacta>('productos');
   protected readonly filtroCatalogo = signal<'TODOS' | 'PRODUCTOS' | 'SERVICIOS'>('TODOS');
   protected readonly tabEditandoId = signal<string | null>(null);
   protected readonly cobroPorPartesActivo = signal(false);
@@ -1010,9 +1197,12 @@ export class VentasPosComponent {
   protected readonly immersive = this.immersiveService.immersive;
   protected readonly modoPos = computed<ModoPos>(() => this.perfil()?.modo ?? 'RETAIL');
   protected readonly esRestaurante = computed(() => this.modoPos() === 'RESTAURANTE');
-  protected readonly etiquetaCuenta = computed(() => this.perfil()?.etiquetaCuenta?.trim() || 'Cuenta');
+  protected readonly etiquetaCuenta = computed(() =>
+    this.singularizarEtiquetaCuenta(this.perfil()?.etiquetaCuenta?.trim() || 'Cuenta')
+  );
+  protected readonly etiquetaCuentas = computed(() => this.pluralizarEtiquetaCuenta(this.etiquetaCuenta()));
   protected readonly tituloCuentas = computed(() =>
-    this.esRestaurante() ? `${this.etiquetaCuenta()}s abiertas` : 'Pestañas POS'
+    this.esRestaurante() ? `${this.etiquetaCuentas()} abiertas` : 'Pestañas POS'
   );
   protected readonly permiteCuentasAbiertas = computed(
     () => this.esRestaurante() && this.perfil()?.permitirCuentasAbiertas === true
@@ -1095,9 +1285,44 @@ export class VentasPosComponent {
   );
   protected readonly pagosDescuadrados = computed(() => Math.abs(this.balancePagos()) > 0.01);
   protected readonly catalogoBase = computed<CatalogoPosItem[]>(() => {
-    const productos = this.productos().map((producto) => this.mapProductoItem(producto)).filter((item) => !!item.id);
+    const vendibles = this.productos();
+
+    // Las variantes no se listan sueltas: se pliegan bajo la tarjeta de su padre.
+    const hijosPorPadre = new Map<string, Producto[]>();
+    for (const producto of vendibles) {
+      if (producto.productoPadreId) {
+        const lista = hijosPorPadre.get(producto.productoPadreId) ?? [];
+        lista.push(producto);
+        hijosPorPadre.set(producto.productoPadreId, lista);
+      }
+    }
+
+    const sueltos = vendibles
+      .filter((producto) => !producto.productoPadreId)
+      .map((producto) => this.mapProductoItem(producto));
+
+    const grupos: CatalogoPosItem[] = [];
+    const agrupados = new Set<string>();
+
+    for (const padre of this.plantillasVariantes()) {
+      const hijos = hijosPorPadre.get(padre.id ?? '') ?? [];
+      if (hijos.length === 0) {
+        continue;
+      }
+
+      grupos.push(this.mapGrupoVariantes(padre, hijos));
+      hijos.forEach((hijo) => agrupados.add(hijo.id ?? ''));
+    }
+
+    // Si el padre fue borrado o desactivado, sus variantes siguen siendo vendibles
+    // por si solas en vez de desaparecer del catalogo.
+    const huerfanos = vendibles
+      .filter((producto) => !!producto.productoPadreId && !agrupados.has(producto.id ?? ''))
+      .map((producto) => this.mapProductoItem(producto));
+
     const servicios = this.servicios().map((servicio) => this.mapServicioItem(servicio)).filter((item) => !!item.id);
-    return [...productos, ...servicios];
+
+    return [...sueltos, ...grupos, ...huerfanos, ...servicios].filter((item) => !!item.id);
   });
 
   protected readonly catalogoFiltrado = computed(() => {
@@ -1118,11 +1343,13 @@ export class VentasPosComponent {
       return byTipo.slice(0, 40);
     }
 
+    // El texto de variantes permite encontrar el grupo tecleando "camiseta roja".
     return byTipo.filter((item) => {
       return (
         item.nombre.toLowerCase().includes(query) ||
         item.sku.toLowerCase().includes(query) ||
-        (item.codigoBarras?.toLowerCase().includes(query) ?? false)
+        (item.codigoBarras?.toLowerCase().includes(query) ?? false) ||
+        (item.textoBusqueda?.toLowerCase().includes(query) ?? false)
       );
     });
   });
@@ -1235,12 +1462,32 @@ export class VentasPosComponent {
     this.productosService
       .getProductos()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((productos) => this.productos.set(productos.filter((item) => item.activo)));
+      .subscribe((productos) => {
+        // Las materias primas nunca llegan a la caja. Las plantillas tampoco se venden
+        // por si mismas, pero se guardan aparte para agrupar a sus variantes.
+        this.productos.set(productos.filter((item) => esVendibleEnPos(item)));
+        this.plantillasVariantes.set(
+          productos.filter(
+            (item) => item.activo !== false && !esInsumo(item) && esPlantillaVariantes(item)
+          )
+        );
+      });
 
     this.serviciosService
       .getServicios()
       .pipe(takeUntilDestroyed(this.destroyRef))
       .subscribe((servicios) => this.servicios.set(servicios.filter((item) => item.activo)));
+
+    // Se necesitan para rotular las cantidades a granel ("0.750 kg").
+    this.unidadesService
+      .getUnidades()
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((unidades) => this.unidades.set(unidades));
+
+    void this.configuracionInventario
+      .getConfiguracionOnce()
+      .then((config) => this.pasoGranelDefecto.set(config.pasoCantidadGranelDefecto))
+      .catch(() => undefined);
 
     // Cargar almacenes y usar la selección persistida del usuario
     this.almacenesService
@@ -1304,8 +1551,55 @@ export class VentasPosComponent {
         ? Math.max(0, Number(producto.ivaPorcentaje))
         : this.config().impuestoPorDefecto,
       stock: esReceta ? this.stockRecetaAproximado(producto) : this.stockProducto(producto.id),
-      permitirInventarioNegativo: esReceta && producto.permitirInventarioNegativo === true
+      permitirInventarioNegativo: esReceta && producto.permitirInventarioNegativo === true,
+      imagenUrl: producto.imagen?.url || undefined,
+      granel: esGranel(producto),
+      unidadAbreviatura: this.abreviaturaUnidad(producto.unidadId),
+      paso: pasoDe(producto, this.pasoGranelDefecto())
     };
+  }
+
+  /** Tarjeta agrupadora: al tocarla se abre el selector de variante. */
+  private mapGrupoVariantes(padre: Producto, hijos: Producto[]): CatalogoPosItem {
+    const precios = hijos.map((hijo) => Number(hijo.precioVenta ?? 0));
+    const stockTotal = hijos.reduce((suma, hijo) => suma + this.stockProducto(hijo.id), 0);
+
+    return {
+      id: padre.id ?? '',
+      tipo: padre.tipo === 'RECETA' ? 'RECETA' : 'PRODUCTO',
+      sku: padre.sku,
+      codigoBarras: padre.codigoBarras?.trim() || undefined,
+      nombre: padre.nombre,
+      precio: precios.length > 0 ? Math.min(...precios) : Number(padre.precioVenta ?? 0),
+      costoUnitario: Number(padre.precioCosto ?? 0),
+      impuestoPorcentaje: Number.isFinite(padre.ivaPorcentaje)
+        ? Math.max(0, Number(padre.ivaPorcentaje))
+        : this.config().impuestoPorDefecto,
+      stock: stockTotal,
+      permitirInventarioNegativo: padre.permitirInventarioNegativo === true,
+      imagenUrl: padre.imagen?.url || undefined,
+      grupoVariantes: { atributos: padre.atributosVariante ?? [], hijos },
+      // Permite encontrar el grupo tecleando "camiseta roja" o el SKU de una variante.
+      textoBusqueda: hijos
+        .map((hijo) => `${hijo.sku} ${Object.values(hijo.valoresVariante ?? {}).join(' ')}`)
+        .join(' '),
+      granel: esGranel(padre),
+      unidadAbreviatura: this.abreviaturaUnidad(padre.unidadId),
+      paso: pasoDe(padre, this.pasoGranelDefecto())
+    };
+  }
+
+  protected abreviaturaUnidad(unidadId?: string): string {
+    if (!unidadId) {
+      return 'u';
+    }
+
+    return this.unidades().find((unidad) => unidad.id === unidadId)?.abreviatura || 'u';
+  }
+
+  /** Las tarjetas con foto solo se pintan si el perfil del almacen lo pide. */
+  protected mostrarImagenes(): boolean {
+    return this.perfil()?.mostrarImagenes === true;
   }
 
   private mapServicioItem(servicio: Servicio): CatalogoPosItem {
@@ -1440,12 +1734,37 @@ export class VentasPosComponent {
       return porBarras;
     }
 
-    return this.catalogoBase().find((item) => item.sku.toLowerCase() === lower) ?? null;
+    const porSku = this.catalogoBase().find((item) => item.sku.toLowerCase() === lower);
+    if (porSku) {
+      return porSku;
+    }
+
+    // Cada variante tiene su propio codigo de barras y SKU, pero no figura suelta en el
+    // catalogo. Al escanearla se resuelve directo a la variante, sin abrir el selector.
+    const variante = this.productos().find(
+      (producto) =>
+        !!producto.productoPadreId &&
+        (producto.codigoBarras?.trim().toLowerCase() === lower || producto.sku.toLowerCase() === lower)
+    );
+
+    return variante ? this.mapProductoItem(variante) : null;
   }
 
   protected agregarDesdeCatalogo(item: CatalogoPosItem): void {
     if (item.tipo === 'SERVICIO') {
       this.agregarServicio(item);
+      return;
+    }
+
+    // Grupo de variantes: primero se elige la combinacion concreta.
+    if (item.grupoVariantes) {
+      void this.elegirVariante(item);
+      return;
+    }
+
+    // Por peso: el cajero digita la cantidad antes de que la linea entre al carrito.
+    if (item.granel) {
+      void this.agregarGranel(item);
       return;
     }
 
@@ -1455,6 +1774,169 @@ export class VentasPosComponent {
     }
 
     this.agregarProducto(item);
+  }
+
+  /** Abre el selector de talla/color y agrega la variante concreta que se elija. */
+  private async elegirVariante(item: CatalogoPosItem): Promise<void> {
+    const grupo = item.grupoVariantes;
+    if (!grupo) {
+      return;
+    }
+
+    const permitirExceso = this.config().permitirVentaSinStock;
+
+    const variantes: VarianteSeleccionable[] = grupo.hijos.map((hijo) => {
+      const esReceta = hijo.tipo === 'RECETA';
+      const stock = esReceta ? this.stockRecetaAproximado(hijo) : this.stockProducto(hijo.id);
+      const overrideNegativo = esReceta && hijo.permitirInventarioNegativo === true;
+
+      return {
+        id: hijo.id ?? '',
+        sku: hijo.sku,
+        nombre: hijo.nombre,
+        precio: Number(hijo.precioVenta ?? 0),
+        stock,
+        disponible: permitirExceso || overrideNegativo || stock > 0,
+        valores: hijo.valoresVariante ?? {},
+        imagenUrl: hijo.imagen?.url || undefined
+      };
+    });
+
+    const ref = this.dialog.open<
+      VarianteSelectorDialogComponent,
+      VarianteSelectorDialogData,
+      VarianteSeleccionable | null
+    >(VarianteSelectorDialogComponent, {
+      data: {
+        nombrePadre: item.nombre,
+        imagenUrl: item.imagenUrl,
+        atributos: grupo.atributos,
+        variantes
+      },
+      autoFocus: false
+    });
+
+    const elegida = await firstValueFrom(ref.afterClosed());
+    if (!elegida) {
+      return;
+    }
+
+    const hijo = grupo.hijos.find((candidato) => candidato.id === elegida.id);
+    if (!hijo) {
+      return;
+    }
+
+    // Desde aqui la variante es un producto normal: sigue el flujo de siempre.
+    this.agregarDesdeCatalogo(this.mapProductoItem(hijo));
+  }
+
+  /** Pide la cantidad con el teclado decimal y agrega o reemplaza la linea. */
+  private async agregarGranel(item: CatalogoPosItem): Promise<void> {
+    if (!item.id) {
+      return;
+    }
+
+    const itemTipo: VentaItemTipo = item.tipo === 'RECETA' ? 'RECETA' : 'PRODUCTO';
+    const stock = Math.max(0, Number(item.stock ?? 0));
+    const permitirExceso =
+      this.config().permitirVentaSinStock || item.permitirInventarioNegativo === true;
+
+    const cantidad = await this.pedirCantidadGranel({
+      nombre: item.nombre,
+      unidad: item.unidadAbreviatura ?? 'u',
+      precioUnitario: Number(item.precio ?? 0),
+      stockDisponible: stock,
+      permitirExceso
+    });
+
+    if (cantidad === null) {
+      return;
+    }
+
+    // agregarItem acumula sobre la linea existente; para peso se reemplaza el valor
+    // digitado, que es lo que espera el cajero al volver a tocar el producto.
+    const existente = this.state
+      .carrito()
+      .items.find((linea) => linea.productoId === item.id && linea.itemTipo === itemTipo);
+
+    if (existente) {
+      this.state.actualizarCantidad(item.id, cantidad, itemTipo);
+      return;
+    }
+
+    this.state.agregarItem({
+      itemTipo,
+      productoId: item.id,
+      sku: item.sku,
+      nombre: item.nombre,
+      cantidad,
+      precioUnitario: Number(item.precio ?? 0),
+      costoUnitario: Number(item.costoUnitario ?? 0),
+      descuentoItem: 0,
+      ivaPorcentaje: Number.isFinite(item.impuestoPorcentaje)
+        ? Math.max(0, item.impuestoPorcentaje)
+        : this.config().impuestoPorDefecto,
+      stockDisponible: permitirExceso ? Number.MAX_SAFE_INTEGER : stock,
+      permitirInventarioNegativo: item.permitirInventarioNegativo === true
+    });
+  }
+
+  /** Permite corregir la cantidad de una linea ya agregada tocando el numero. */
+  protected async editarCantidadLinea(item: CarritoItem): Promise<void> {
+    const catalogo = this.catalogoBase().find(
+      (candidato) => candidato.id === item.productoId && this.itemTipoDe(candidato) === item.itemTipo
+    );
+
+    if (!catalogo?.granel) {
+      return;
+    }
+
+    const permitirExceso =
+      this.config().permitirVentaSinStock || item.permitirInventarioNegativo === true;
+
+    const cantidad = await this.pedirCantidadGranel({
+      nombre: item.nombre,
+      unidad: catalogo.unidadAbreviatura ?? 'u',
+      precioUnitario: Number(item.precioUnitario ?? 0),
+      stockDisponible: Math.max(0, Number(item.stockDisponible ?? 0)),
+      permitirExceso,
+      cantidadInicial: item.cantidad,
+      textoConfirmar: 'Actualizar'
+    });
+
+    if (cantidad !== null) {
+      this.state.actualizarCantidad(item.productoId, cantidad, item.itemTipo);
+    }
+  }
+
+  private async pedirCantidadGranel(data: CantidadGranelDialogData): Promise<number | null> {
+    const ref = this.dialog.open<CantidadGranelDialogComponent, CantidadGranelDialogData, number | null>(
+      CantidadGranelDialogComponent,
+      { data, autoFocus: false }
+    );
+
+    return (await firstValueFrom(ref.afterClosed())) ?? null;
+  }
+
+  private itemTipoDe(item: CatalogoPosItem): VentaItemTipo {
+    return item.tipo;
+  }
+
+  /** Una linea es de peso si su producto de catalogo esta marcado como granel. */
+  protected esLineaGranel(item: CarritoItem): boolean {
+    return (
+      this.catalogoBase().find(
+        (candidato) => candidato.id === item.productoId && this.itemTipoDe(candidato) === item.itemTipo
+      )?.granel === true
+    );
+  }
+
+  protected unidadLinea(item: CarritoItem): string {
+    return (
+      this.catalogoBase().find(
+        (candidato) => candidato.id === item.productoId && this.itemTipoDe(candidato) === item.itemTipo
+      )?.unidadAbreviatura ?? ''
+    );
   }
 
   protected productoSinStock(producto: Producto): boolean {
@@ -1561,23 +2043,34 @@ export class VentasPosComponent {
     });
   }
 
+  /** Incremento de la linea: 1 por unidad, o el paso del producto si se vende por peso. */
+  private pasoLinea(item: CarritoItem): number {
+    const catalogo = this.catalogoBase().find(
+      (candidato) => candidato.id === item.productoId && this.itemTipoDe(candidato) === item.itemTipo
+    );
+
+    return catalogo?.granel ? (catalogo.paso ?? this.pasoGranelDefecto()) : 1;
+  }
+
   protected incrementar(productoId: string, itemTipo: VentaItemTipo): void {
     const item = this.state.carrito().items.find((current) => current.productoId === productoId && current.itemTipo === itemTipo);
     if (!item) {
       return;
     }
 
+    const siguiente = redondearCantidad(item.cantidad + this.pasoLinea(item));
+
     if (
       item.itemTipo !== 'SERVICIO' &&
       !this.config().permitirVentaSinStock &&
       item.permitirInventarioNegativo !== true &&
-      item.cantidad + 1 > item.stockDisponible
+      siguiente > item.stockDisponible
     ) {
       this.snackBar.open('No puedes exceder el stock disponible.', 'Cerrar', { duration: 2000 });
       return;
     }
 
-    this.state.actualizarCantidad(productoId, item.cantidad + 1, itemTipo);
+    this.state.actualizarCantidad(productoId, siguiente, itemTipo);
   }
 
   protected decrementar(productoId: string, itemTipo: VentaItemTipo): void {
@@ -1586,12 +2079,14 @@ export class VentasPosComponent {
       return;
     }
 
-    if (item.cantidad <= 1) {
+    const siguiente = redondearCantidad(item.cantidad - this.pasoLinea(item));
+
+    if (siguiente <= 0) {
       this.state.removerItem(productoId, itemTipo);
       return;
     }
 
-    this.state.actualizarCantidad(productoId, item.cantidad - 1, itemTipo);
+    this.state.actualizarCantidad(productoId, siguiente, itemTipo);
   }
 
   protected actualizarDescuentoItem(productoId: string, itemTipo: VentaItemTipo, event: Event): void {
@@ -1645,6 +2140,21 @@ export class VentasPosComponent {
     const pagos = [...this.state.carrito().pagos];
     pagos[index] = { ...pagos[index], metodo: metodo as MetodoPagoVenta };
     this.state.setPagos(pagos);
+    if (!pagos.some((pago) => pago.metodo === 'EFECTIVO')) {
+      this.efectivoRecibido.set(null);
+    }
+  }
+
+  protected etiquetaMetodoPago(metodo: string): string {
+    const etiquetas: Record<string, string> = {
+      EFECTIVO: 'Efectivo',
+      TARJETA_CREDITO: 'Tarjeta de crédito',
+      TARJETA_DEBITO: 'Tarjeta de débito',
+      TRANSFERENCIA: 'Transferencia',
+      QR: 'QR',
+      CREDITO_CLIENTE: 'Crédito del cliente'
+    };
+    return etiquetas[metodo] ?? metodo.replaceAll('_', ' ').toLocaleLowerCase('es');
   }
 
   protected actualizarPagoMonto(index: number, event: Event): void {
@@ -1728,6 +2238,35 @@ export class VentasPosComponent {
     this.state.limpiar();
     this.busquedaClienteControl.setValue('');
     this.efectivoRecibido.set(null);
+    this.vistaCompacta.set('productos');
+  }
+
+  protected mostrarVistaCompacta(vista: VistaPosCompacta): void {
+    this.vistaCompacta.set(vista);
+  }
+
+  private singularizarEtiquetaCuenta(etiqueta: string): string {
+    const limpia = etiqueta.trim() || 'Cuenta';
+    const clave = limpia.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
+    if (clave === 'ordenes') {
+      return limpia[0] === limpia[0]?.toUpperCase() ? 'Orden' : 'orden';
+    }
+    if (limpia.length > 4 && /[aeiouáéíóú]s$/i.test(limpia)) {
+      return limpia.slice(0, -1);
+    }
+    if (limpia.length > 4 && /es$/i.test(limpia)) {
+      return limpia.slice(0, -2);
+    }
+    return limpia;
+  }
+
+  private pluralizarEtiquetaCuenta(etiqueta: string): string {
+    return /[aeiouáéíóú]$/i.test(etiqueta) ? `${etiqueta}s` : `${etiqueta}es`;
+  }
+
+  protected ocultarImagenRota(event: Event): void {
+    (event.currentTarget as HTMLImageElement).hidden = true;
   }
 
   protected setEfectivoRecibido(event: Event): void {
@@ -1735,9 +2274,9 @@ export class VentasPosComponent {
     this.efectivoRecibido.set(Number.isFinite(raw) && raw > 0 ? this.roundToTwo(raw) : null);
   }
 
-  /** Botón de efectivo exacto: iguala lo recibido al total (cambio 0). */
+  /** Iguala lo recibido al importe asignado a efectivo, incluso en pagos mixtos. */
   protected efectivoExacto(): void {
-    this.efectivoRecibido.set(this.total());
+    this.efectivoRecibido.set(this.montoPagoEfectivo());
   }
 
   protected async cobrar(): Promise<void> {
@@ -1787,6 +2326,7 @@ export class VentasPosComponent {
       await this.finalizarCuentaRetenidaActiva();
       this.state.limpiar();
       this.busquedaClienteControl.setValue('');
+      this.vistaCompacta.set('productos');
       this.snackBar.openFromComponent(SuccessSnackbarComponent, {
         data: { message: 'Venta confirmada correctamente.', icon: 'point_of_sale' },
         duration: 2600,
@@ -1858,6 +2398,7 @@ export class VentasPosComponent {
       this.desvincularCuentaRetenidaLocal();
       this.state.limpiar();
       this.busquedaClienteControl.setValue('');
+      this.vistaCompacta.set('productos');
       this.snackBar.open(`${this.etiquetaCuenta()} retenida.`, 'Cerrar', { duration: 2200 });
     } catch {
       this.snackBar.open('No se pudo retener la cuenta.', 'Cerrar', { duration: 2600 });

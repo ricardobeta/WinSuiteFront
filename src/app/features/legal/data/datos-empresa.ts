@@ -40,22 +40,22 @@ export interface DatosEmpresa {
 }
 
 export const DATOS_EMPRESA: DatosEmpresa = {
-  razonSocial: '',
+  razonSocial: 'CARRERA MONTERO ELENA MAYTE',
   nombreComercial: 'WinSuit',
-  ruc: '',
+  ruc: '1724459704001',
   representanteLegal: {
-    nombre: '',
+    nombre: 'CARRERA MONTERO ELENA MAYTE',
     cargo: 'Representante Legal',
   },
-  direccion: '',
-  ciudad: '',
+  direccion: 'Barrio: COLLAS Calle: PASEO PROGRESO 3 Número: 3 Intersección: PROGRESO Conjunto: ROCA VIVA Referencia: FRENTE AL CONJUNTO MONTECARLO 4',
+  ciudad: 'Quito',
   pais: 'Ecuador',
   telefono: {
     display: '+593 99 667 1547',
     tel: '+593996671547',
     whatsapp: '593996671547',
   },
-  email: '',
+  email: 'emcarrera106@gmail.com',
   horario: '',
   sitioWeb: 'https://winsuit.app',
   ultimaActualizacion: '2026-07-30',

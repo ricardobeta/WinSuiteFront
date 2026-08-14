@@ -7,10 +7,12 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { Router } from '@angular/router';
 import { FuenteCatalogo, ProductoPublicado } from '@winsuite/bloques';
 import { ProductosService } from '../../../inventario/services/productos.service';
+import { esVendibleEnPos } from '../../../inventario/utils/producto.util';
 import { Producto } from '../../../inventario/models/inventario.models';
-import { CatalogoPublicacionService } from '../../services/catalogo-publicacion.service';
+import { CatalogoPublicacionService, ResultadoCopiaImagen } from '../../services/catalogo-publicacion.service';
 import { SelectorImagenComponent } from '../../components/selector-imagen/selector-imagen.component';
 
 interface ProductoVista {
@@ -83,7 +85,16 @@ const FORM_VACIO: FormProductoManual = {
           </article>
           @if (producto.fuente === 'inventario' && esVisible(producto.id) && fichaAbierta() === producto.id) {
             <section class="ficha">
-              <div class="campo"><span>Imagen principal</span><app-selector-imagen [url]="imagenDe(producto.id)" (urlChange)="cambiarImagen(producto.id, $event)" /></div>
+              <div class="campo">
+                <span>Imagen principal</span>
+                <app-selector-imagen [url]="imagenDe(producto.id)" (urlChange)="cambiarImagen(producto.id, $event)" />
+                @if (puedeUsarImagenInventario(producto.id)) {
+                  <button type="button" class="usar-inventario" [disabled]="copiandoImagen() === producto.id" (click)="usarImagenInventario(producto.id)">
+                    <img [src]="imagenInventarioDe(producto.id)" alt="" loading="lazy" />
+                    <span>{{ copiandoImagen() === producto.id ? 'Copiando...' : 'Usar la imagen del inventario' }}</span>
+                  </button>
+                }
+              </div>
               <label>Badge<input maxlength="20" [value]="catalogoDe(producto.id)?.badge ?? ''" (change)="guardarFicha(producto.id, 'badge', $any($event.target).value)" /></label>
               <label>Descripcion larga<textarea rows="5" maxlength="20000" [value]="catalogoDe(producto.id)?.descripcionLarga ?? ''" (change)="guardarFicha(producto.id, 'descripcionLarga', $any($event.target).value)"></textarea></label>
             </section>
@@ -166,6 +177,8 @@ const FORM_VACIO: FormProductoManual = {
     .acciones-fila { display:flex; }
     .peligro { color:var(--tc-error); }
     .ficha { margin-top:-10px;padding:22px 16px 16px;border-radius:0 0 14px 14px;background:var(--tc-surface-container-low);display:grid;gap:12px; }
+    .usar-inventario { display:inline-flex;align-items:center;gap:8px;margin-top:6px;padding:6px 10px 6px 6px;border:1px solid var(--tc-ghost-border);border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:.82rem;cursor:pointer;text-align:left; }
+    .usar-inventario img { width:32px;height:32px;border-radius:6px;object-fit:cover; }
     label,.campo { display:flex;flex-direction:column;gap:5px;font-size:.84rem;font-weight:700; }
     input,textarea { box-sizing:border-box;width:100%;border:0;border-radius:9px;padding:10px 11px;background:var(--tc-surface-container-highest);color:var(--tc-on-surface);font:inherit;font-weight:400; }
     input:focus-visible,textarea:focus-visible { outline:2px solid var(--primary);outline-offset:2px; }
@@ -198,11 +211,14 @@ export class CatalogoPageComponent {
   private readonly productosService = inject(ProductosService);
   private readonly catalogoService = inject(CatalogoPublicacionService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly router = inject(Router);
 
   readonly filtro = signal('');
   readonly filtroFuente = signal<'todos' | 'inventario' | 'manual'>('todos');
   readonly refrescando = signal(false);
   readonly fichaAbierta = signal<string | null>(null);
+  /** Producto cuya imagen se esta copiando al bucket publico. */
+  readonly copiandoImagen = signal<string | null>(null);
   readonly configurandoFuentes = signal(false);
   readonly seleccionFuentes = signal<FuenteCatalogo[]>(['inventario', 'manual']);
   readonly guardandoFuentes = signal(false);
@@ -219,7 +235,9 @@ export class CatalogoPageComponent {
 
   readonly productosFiltrados = computed<ProductoVista[]>(() => {
     const activas = new Set(this.config()?.fuentesActivas ?? this.seleccionFuentes());
-    const inventario: ProductoVista[] = activas.has('inventario') ? this.inventario().filter((p) => p.activo && p.id).map((p) => ({ id:p.id!,nombre:p.nombre,precioVenta:p.precioVenta,fuente:'inventario',inventario:p })) : [];
+    // Las materias primas no se venden al publico, y una plantilla de variantes no tiene
+    // stock propio: a la tienda solo llegan productos vendibles.
+    const inventario: ProductoVista[] = activas.has('inventario') ? this.inventario().filter((p) => esVendibleEnPos(p) && p.id).map((p) => ({ id:p.id!,nombre:p.nombre,precioVenta:p.precioVenta,fuente:'inventario',inventario:p })) : [];
     const manuales: ProductoVista[] = activas.has('manual') ? Object.values(this.catalogo()).filter((p) => p.fuente?.tipo === 'manual').map((p) => ({ id:p.productoId,nombre:p.nombre,precioVenta:p.precioVenta,fuente:'manual' })) : [];
     const texto = this.filtro().trim().toLocaleLowerCase();
     return [...inventario,...manuales]
@@ -247,8 +265,26 @@ export class CatalogoPageComponent {
 
   esVisible(id:string):boolean { return this.catalogo()[id]?.visible ?? false; }
   imagenDe(id:string):string|undefined { return this.catalogo()[id]?.imagenes?.[0]; }
+  /** Foto cargada en inventario, disponible para publicarse tal cual. */
+  imagenInventarioDe(id:string):string|undefined { return this.inventario().find((p)=>p.id===id)?.imagen?.url || undefined; }
+  /** Se ofrece solo si el inventario tiene foto y la tienda muestra otra (o ninguna). */
+  puedeUsarImagenInventario(id:string):boolean { const inv=this.imagenInventarioDe(id);return !!inv && inv!==this.imagenDe(id); }
+  /** Copia la foto del inventario al bucket publico y la deja como imagen principal. */
+  async usarImagenInventario(id:string):Promise<void> { const producto=this.inventario().find((p)=>p.id===id);if(!producto?.imagen?.url)return;this.copiandoImagen.set(id);try{const copia=await this.catalogoService.copiarImagenDeInventario(producto);if(copia.estado!=='copiada'){this.avisarCopia(copia);return;}await this.cambiarImagen(id,copia.url);this.snackBar.open('Imagen publicada en la tienda','OK',{duration:2500});}catch(error){this.snackBar.open((error as Error).message||'No se pudo publicar la imagen','OK',{duration:4000});}finally{this.copiandoImagen.set(null);} }
   catalogoDe(id:string):ProductoPublicado|undefined { return this.catalogo()[id]; }
-  async alternarVisible(producto:ProductoVista,visible:boolean):Promise<void> { try { if (producto.fuente === 'manual') await this.catalogoService.setVisiblePorId(producto.id,visible); else if (producto.inventario) await this.catalogoService.setVisible(producto.inventario,visible); } catch(error) { this.snackBar.open((error as Error).message || 'No se pudo actualizar','OK',{duration:4000}); } }
+  async alternarVisible(producto:ProductoVista,visible:boolean):Promise<void> { try { if (producto.fuente === 'manual') { await this.catalogoService.setVisiblePorId(producto.id,visible);return; } if (!producto.inventario) return; this.avisarCopia(await this.catalogoService.setVisible(producto.inventario,visible),'Producto publicado sin imagen: '); } catch(error) { this.snackBar.open((error as Error).message || 'No se pudo actualizar','OK',{duration:4000}); } }
+
+  /** Un fallo tecnico no debe leerse como falta de plan: cada causa tiene su mensaje. */
+  private avisarCopia(resultado:ResultadoCopiaImagen,prefijo=''):void {
+    if (resultado.estado === 'sin-cupo') {
+      this.snackBar.open(`${prefijo}alcanzaste el limite de imagenes publicas de tu plan.`,'Ver planes',{duration:8000})
+        .onAction().subscribe(()=>this.router.navigate(['/workspace/planes']));
+      return;
+    }
+    if (resultado.estado === 'error') {
+      this.snackBar.open(`${prefijo}no se pudo copiar la imagen a la tienda. ${resultado.motivo}`,'OK',{duration:6000});
+    }
+  }
   async cambiarImagen(id:string,url:string):Promise<void> { const actuales=this.catalogo()[id]?.imagenes ?? [];await this.catalogoService.setImagenes(id,url?[url,...actuales.slice(1)]:actuales.slice(1)); }
   async guardarFicha(id:string,campo:'badge'|'descripcionLarga',valor:string):Promise<void> { const actual=this.catalogo()[id];await this.catalogoService.setFichaTienda(id,{badge:campo==='badge'?valor:actual?.badge,descripcionLarga:campo==='descripcionLarga'?valor:actual?.descripcionLarga}); }
   async refrescar():Promise<void> { this.refrescando.set(true);try { await this.catalogoService.refrescarCatalogo();this.snackBar.open('Productos actualizados desde el inventario','OK',{duration:3000}); } finally { this.refrescando.set(false); } }

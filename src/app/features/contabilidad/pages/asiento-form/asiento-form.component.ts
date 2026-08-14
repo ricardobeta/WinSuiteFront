@@ -94,7 +94,7 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
               (ngModelChange)="motivoEdicion.set($event)"
               placeholder="Ej: la compra se cargo a Suministros en lugar de Mantenimiento."
             ></textarea>
-            <mat-hint>Obligatorio. Queda en la auditoria junto con el detalle anterior y el nuevo.</mat-hint>
+            <mat-hint>{{ hintMotivo() }}</mat-hint>
           </mat-form-field>
         </section>
       }
@@ -308,8 +308,11 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
       <section class="actions-row">
         <a mat-button routerLink="/workspace/contabilidad/asientos">Cancelar</a>
         @if (modoCorreccion()) {
+          @if (avisoCorreccion()) {
+            <span class="accion-hint">{{ avisoCorreccion() }}</span>
+          }
           <button mat-raised-button color="primary" type="button" (click)="guardarCorreccion()" [disabled]="!puedeGuardarCorreccion()">
-            Guardar correccion
+            Actualizar asiento
           </button>
         } @else if (editable()) {
           <button mat-stroked-button type="button" (click)="guardarBorrador()" [disabled]="guardando()">Guardar borrador</button>
@@ -349,7 +352,8 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
     .notice-fix mat-icon { color: var(--primary); }
     .notice-locked { border-left: 4px solid var(--muted-foreground); }
     .notice-locked mat-icon { color: var(--muted-foreground); }
-    .actions-row { display: flex; justify-content: flex-end; gap: .5rem; }
+    .actions-row { display: flex; justify-content: flex-end; align-items: center; gap: .5rem; }
+    .accion-hint { color: var(--muted-foreground); font-size: .85rem; text-align: right; }
     .error-box { padding: .8rem 1rem; border-radius: .5rem; background: color-mix(in srgb, #b3261e 12%, transparent); color: #b3261e; }
     button[mat-icon-button] { color: var(--muted-foreground); }
     @media (max-width: 1100px) {
@@ -402,6 +406,8 @@ export class AsientoFormComponent implements OnInit {
   protected readonly periodoAbierto = signal(false);
   protected readonly periodoVerificado = signal(false);
   protected readonly motivoEdicion = signal('');
+  /** Version tal como se cargo: es la referencia contra la que se detecta si el usuario cambio algo. */
+  protected readonly asientoOriginal = signal<AsientoContable | null>(null);
   protected readonly totalDebeOriginal = signal(0);
   protected readonly totalHaberOriginal = signal(0);
   protected readonly ayuda = {
@@ -448,9 +454,101 @@ export class AsientoFormComponent implements OnInit {
     this.totalesBloqueados()
     && (this.totalDebe() !== this.totalDebeOriginal() || this.totalHaber() !== this.totalHaberOriginal())
   );
-  protected readonly puedeGuardarCorreccion = computed(() =>
-    !this.guardando() && this.diferencia() === 0 && !this.totalesDesalineados() && !!this.motivoEdicion().trim()
+  /**
+   * Que cambio respecto a la version cargada. Alimenta tanto la habilitacion del boton como el
+   * motivo automatico: reasignar una cuenta no mueve totales ni diferencia, asi que sin esta
+   * comparacion no habria nada que delatara la correccion.
+   */
+  protected readonly cambiosCorreccion = computed<string[]>(() => {
+    const original = this.asientoOriginal();
+    if (!original) {
+      return [];
+    }
+
+    const antes = this.lineasSignificativas(original.lineas);
+    const ahora = this.lineasSignificativas(this.lineas());
+    const cambios: string[] = [];
+    const reasignadas: string[] = [];
+    let importesCambiados = false;
+    let detallesCambiados = false;
+
+    for (let i = 0; i < Math.min(antes.length, ahora.length); i += 1) {
+      const previa = antes[i];
+      const actual = ahora[i];
+
+      if (previa.cuentaId !== actual.cuentaId) {
+        reasignadas.push(`${previa.codigoCuenta || 'sin cuenta'} -> ${actual.codigoCuenta || 'sin cuenta'}`);
+      }
+      if (this.service.roundToTwo(previa.debe) !== this.service.roundToTwo(actual.debe)
+        || this.service.roundToTwo(previa.haber) !== this.service.roundToTwo(actual.haber)) {
+        importesCambiados = true;
+      }
+      if ((previa.descripcion ?? '').trim() !== (actual.descripcion ?? '').trim()) {
+        detallesCambiados = true;
+      }
+    }
+
+    if (reasignadas.length > 0) {
+      cambios.push(`reasignacion de cuentas (${reasignadas.join(', ')})`);
+    }
+    if (antes.length !== ahora.length) {
+      cambios.push(ahora.length > antes.length ? 'lineas agregadas' : 'lineas eliminadas');
+    }
+    if (importesCambiados) {
+      cambios.push('ajuste de importes');
+    }
+    if (detallesCambiados) {
+      cambios.push('detalle de lineas actualizado');
+    }
+    if (this.fecha() !== original.fecha) {
+      cambios.push(`fecha ${original.fecha} -> ${this.fecha()}`);
+    }
+    if (this.tipo() !== original.tipo) {
+      cambios.push(`tipo ${original.tipo} -> ${this.tipo()}`);
+    }
+    if (this.glosa().trim() !== (original.glosa ?? '').trim()) {
+      cambios.push('detalle del asiento actualizado');
+    }
+    if (this.referencia().trim() !== (original.referencia ?? '').trim()) {
+      cambios.push('referencia actualizada');
+    }
+
+    return cambios;
+  });
+  protected readonly hayCambios = computed(() => this.cambiosCorreccion().length > 0);
+  protected readonly motivoSugerido = computed(() =>
+    this.hayCambios() ? `Correccion del asiento: ${this.cambiosCorreccion().join('; ')}.` : ''
   );
+  /**
+   * El motivo escrito manda; si el contador no escribe ninguno se guarda el resumen de lo que
+   * cambio, para que el boton no dependa de un texto libre pero la auditoria nunca quede vacia.
+   */
+  protected readonly motivoCorreccion = computed(() => this.motivoEdicion().trim() || this.motivoSugerido());
+  protected readonly puedeGuardarCorreccion = computed(() =>
+    !this.guardando() && this.hayCambios() && this.diferencia() === 0 && !this.totalesDesalineados()
+  );
+  /** Explica por que el boton esta apagado: sin esto un cambio invalido se ve igual que "no cambie nada". */
+  protected readonly avisoCorreccion = computed(() => {
+    if (this.guardando() || this.puedeGuardarCorreccion()) {
+      return '';
+    }
+    if (!this.hayCambios()) {
+      return 'Modifica las cuentas, los importes o el detalle para habilitar la actualizacion.';
+    }
+    if (this.diferencia() !== 0) {
+      return 'El asiento debe quedar cuadrado para actualizarlo.';
+    }
+    return 'Los totales deben coincidir con el documento que origino el asiento.';
+  });
+  protected readonly hintMotivo = computed(() => {
+    if (this.motivoEdicion().trim()) {
+      return 'Queda en la auditoria junto con el detalle anterior y el nuevo.';
+    }
+    if (this.motivoSugerido()) {
+      return `Opcional: si lo dejas vacio se registra "${this.motivoSugerido()}".`;
+    }
+    return 'Explica que se corrige. Queda en la auditoria junto con el detalle anterior y el nuevo.';
+  });
   protected readonly fechaComoDate = computed(() => this.parseFecha(this.fecha()));
   protected readonly cxpFechaVencimientoDate = computed(() => isoADate(this.cxpFechaVencimiento()));
   protected readonly montoCxP = computed(() => {
@@ -674,7 +772,7 @@ export class AsientoFormComponent implements OnInit {
       const asiento = this.construirAsiento();
 
       if (accion === 'CORRECCION') {
-        await this.service.actualizarAsientoAprobado({ asiento, motivo: this.motivoEdicion() });
+        await this.service.actualizarAsientoAprobado({ asiento, motivo: this.motivoCorreccion() });
         this.mostrarMensaje('Asiento corregido. Los saldos se ajustaron.', 'check_circle');
         await this.router.navigate(['/workspace/contabilidad/asientos']);
         return;
@@ -748,6 +846,9 @@ export class AsientoFormComponent implements OnInit {
     this.totalHaberOriginal.set(this.service.roundToTwo(asiento.totalHaber ?? 0));
     this.motivoEdicion.set('');
     this.lineas.set(asiento.lineas.length > 0 ? asiento.lineas : [this.service.crearLineaVacia(), this.service.crearLineaVacia()]);
+    // Copia propia de las lineas: la edicion crea objetos nuevos, pero el arreglo cargado no debe
+    // compartirse con el formulario o la comparacion se quedaria sin referencia.
+    this.asientoOriginal.set({ ...asiento, lineas: asiento.lineas.map((linea) => ({ ...linea })) });
     const cxp = asiento.cuentaPorPagarManual;
     this.cxpProveedorId.set(cxp?.proveedorId ?? '');
     this.cxpProveedorNombre.set(cxp?.proveedorNombre ?? '');
@@ -779,6 +880,13 @@ export class AsientoFormComponent implements OnInit {
       && !!this.cxpProveedorNombre().trim()
       && !!this.cxpFechaVencimiento()
       && !!this.cxpReferencia().trim();
+  }
+
+  /** Mismo criterio que normalizarAsiento: una linea en blanco nunca llega a guardarse. */
+  private lineasSignificativas(lineas: AsientoContableLinea[]): AsientoContableLinea[] {
+    return lineas.filter((linea) =>
+      !!linea.cuentaId || !!linea.descripcion?.trim() || Number(linea.debe || 0) > 0 || Number(linea.haber || 0) > 0
+    );
   }
 
   private importeInputKey(lineId: string, campo: 'debe' | 'haber'): string {

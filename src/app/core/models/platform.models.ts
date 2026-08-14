@@ -9,12 +9,14 @@ export type RecursoPlataforma =
   | 'facturasSri'
   | 'descargasSri'
   | 'storageBytes'
+  | 'sitesMediaBytes'
   | 'sitiosEcommerce'
   | 'sitiosLanding'
   | 'colaboradores';
 
 export interface LimitesPlan {
   storageBytes?: number | null;
+  sitesMediaBytes?: number | null;
   sitiosEcommerce?: number | null;
   sitiosLanding?: number | null;
   aiTokensMes?: number | null;
@@ -300,6 +302,7 @@ export const RECURSOS_META: Record<RecursoPlataforma, { label: string; unidad: '
   facturasSri: { label: 'Facturas emitidas al SRI', unidad: 'cantidad' },
   descargasSri: { label: 'Descargas automaticas del SRI', unidad: 'cantidad' },
   storageBytes: { label: 'Espacio de archivos', unidad: 'bytes' },
+  sitesMediaBytes: { label: 'Imagenes publicas de sitios', unidad: 'bytes' },
   sitiosEcommerce: { label: 'Sitios ecommerce', unidad: 'cantidad' },
   sitiosLanding: { label: 'Landing pages', unidad: 'cantidad' },
   colaboradores: { label: 'Colaboradores', unidad: 'cantidad' },
@@ -311,6 +314,7 @@ export const LIMITE_DE_RECURSO: Record<RecursoPlataforma, keyof LimitesPlan> = {
   facturasSri: 'facturasSriMes',
   descargasSri: 'descargasSriMes',
   storageBytes: 'storageBytes',
+  sitesMediaBytes: 'sitesMediaBytes',
   sitiosEcommerce: 'sitiosEcommerce',
   sitiosLanding: 'sitiosLanding',
   colaboradores: 'colaboradores',

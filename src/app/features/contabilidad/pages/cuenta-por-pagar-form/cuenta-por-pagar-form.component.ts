@@ -13,6 +13,7 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { firstValueFrom } from 'rxjs';
 
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
+import { TwoDecimalInputDirective } from '../../../../shared/directives/two-decimal-input.directive';
 import { dateAIso, isoADate } from '../../../../shared/utils/fecha-input.util';
 import { Proveedor } from '../../../inventario/models/inventario.models';
 import { ProveedoresService } from '../../../inventario/services/proveedores.service';
@@ -40,7 +41,8 @@ const DIA_MS = 24 * 60 * 60 * 1000;
     MatInputModule,
     MatSelectModule,
     MatSnackBarModule,
-    CuentaContableAutocompleteComponent
+    CuentaContableAutocompleteComponent,
+    TwoDecimalInputDirective
   ],
   template: `
     <section class="cxp-form-page">
@@ -90,7 +92,7 @@ const DIA_MS = 24 * 60 * 60 * 1000;
 
           <mat-form-field appearance="outline">
             <mat-label>Monto</mat-label>
-            <input matInput type="number" min="0" step="0.01" [ngModel]="monto()" (ngModelChange)="monto.set($event)" />
+            <input matInput type="text" inputmode="decimal" appTwoDecimalInput [ngModel]="monto()" (ngModelChange)="actualizarMonto($event)" name="monto" />
           </mat-form-field>
         </div>
 
@@ -187,6 +189,16 @@ export class CuentaPorPagarFormComponent implements OnInit {
       const emision = new Date(this.fechaEmision()).getTime();
       this.fechaVencimiento.set(this.isoDesde(emision + Number(proveedor.diasCredito ?? 0) * DIA_MS));
     }
+  }
+
+  /**
+   * El input es de texto (ver appTwoDecimalInput), asi que el valor llega como string mientras se
+   * teclea. El campo vacio vuelve a null y no a 0, para poder limpiarlo y reescribir el importe.
+   */
+  protected actualizarMonto(valor: string | number | null): void {
+    const texto = String(valor ?? '').trim();
+    const numero = Number(texto);
+    this.monto.set(texto && Number.isFinite(numero) ? numero : null);
   }
 
   protected actualizarFechaEmision(fecha: Date | null): void {

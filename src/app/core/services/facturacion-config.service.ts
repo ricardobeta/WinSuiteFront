@@ -259,12 +259,22 @@ export class FacturacionConfigService {
         const establecimientos = config.establecimientos ?? [];
         const puntos = config.puntosEmision ?? [];
 
-        const estab = establecimientos.find((e) => Array.isArray(e.almacenIds) && e.almacenIds.includes(almacenId));
+        const activos = establecimientos.filter((e) => e.activo !== false);
+
+        // Un establecimiento sin almacenes marcados cubre "todos los almacenes"
+        // (es lo que muestra la pantalla de configuración), pero gana siempre el
+        // que asigna el almacén de forma explícita.
+        const estab =
+          activos.find((e) => Array.isArray(e.almacenIds) && e.almacenIds.includes(almacenId)) ??
+          activos.find((e) => !Array.isArray(e.almacenIds) || e.almacenIds.length === 0);
         if (!estab) {
           return null;
         }
 
-        const punto = puntos.find((p) => p.establecimientoId === estab.id && p.activo !== false);
+        // Preferimos un punto de emisión con firma asociada: si el primero de la
+        // lista no la tiene, el almacén quedaría sin poder facturar.
+        const puntosDelEstab = puntos.filter((p) => p.establecimientoId === estab.id && p.activo !== false);
+        const punto = puntosDelEstab.find((p) => !!p.firmaId) ?? puntosDelEstab[0];
         if (!punto) {
           return null;
         }

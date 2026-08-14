@@ -72,8 +72,15 @@ export class ConfiguracionInventarioService {
       alertasStockMinimo: raw?.alertasStockMinimo ?? defaults.alertasStockMinimo,
       impuestoPorDefecto: raw?.impuestoPorDefecto ?? defaults.impuestoPorDefecto,
       metodoPrecioVentaDefecto: raw?.metodoPrecioVentaDefecto ?? defaults.metodoPrecioVentaDefecto,
-      porcentajePrecioVentaDefecto: raw?.porcentajePrecioVentaDefecto ?? defaults.porcentajePrecioVentaDefecto
+      porcentajePrecioVentaDefecto: raw?.porcentajePrecioVentaDefecto ?? defaults.porcentajePrecioVentaDefecto,
+      requerirImagenProductoVenta: raw?.requerirImagenProductoVenta ?? defaults.requerirImagenProductoVenta,
+      pasoCantidadGranelDefecto: this.normalizarPaso(raw?.pasoCantidadGranelDefecto, defaults.pasoCantidadGranelDefecto)
     };
+  }
+
+  private normalizarPaso(value: unknown, defecto: number): number {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : defecto;
   }
 
   private getDefaultConfig(): ConfiguracionInventario {
@@ -86,7 +93,9 @@ export class ConfiguracionInventarioService {
       alertasStockMinimo: true,
       impuestoPorDefecto: 12,
       metodoPrecioVentaDefecto: 'MARKUP',
-      porcentajePrecioVentaDefecto: 30
+      porcentajePrecioVentaDefecto: 30,
+      requerirImagenProductoVenta: false,
+      pasoCantidadGranelDefecto: 0.1
     };
   }
 }

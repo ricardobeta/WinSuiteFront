@@ -37,6 +37,31 @@ export type TipoUnidad = 'MASA' | 'VOLUMEN' | 'UNIDAD' | 'LONGITUD';
 
 export type TipoProductoInventario = 'SIMPLE' | 'RECETA';
 
+/**
+ * Rol comercial del producto. Es un eje independiente de `tipo`: una subreceta
+ * (masa base, salsa madre) es RECETA e INSUMO al mismo tiempo.
+ * - VENTA: aparece en el POS. Tambien puede usarse como ingrediente.
+ * - INSUMO: materia prima. Nunca aparece en el POS ni en el catalogo web.
+ */
+export type UsoProducto = 'VENTA' | 'INSUMO';
+
+/** Como se captura la cantidad en la caja. */
+export type ModoVentaProducto = 'UNIDAD' | 'GRANEL';
+
+/** Eje de variacion de un producto: 'Talla' con valores ['S', 'M', 'L']. */
+export interface AtributoVariante {
+  /** Slug estable derivado del nombre: 'talla'. */
+  id: string;
+  nombre: string;
+  valores: string[];
+}
+
+export interface ImagenProducto {
+  url: string;
+  archivoId?: string;
+  storagePath?: string;
+}
+
 export interface RecetaItem {
   productoId: string;
   cantidad: number;
@@ -73,6 +98,20 @@ export interface Producto {
   recetaItems?: RecetaItem[];
   recetaNotas?: string;
   permitirInventarioNegativo?: boolean;
+  /** Rol comercial. Ausente equivale a 'VENTA' por compatibilidad. */
+  usoProducto?: UsoProducto;
+  /** Captura de cantidad en el POS. Ausente equivale a 'UNIDAD'. */
+  modoVenta?: ModoVentaProducto;
+  /** Incremento que aplican los botones +/- del carrito. */
+  pasoCantidad?: number;
+  /** `null` limpia la imagen en un `update()` de RTDB; `undefined` haria fallar la escritura. */
+  imagen?: ImagenProducto | null;
+  /** Solo en el producto padre: ejes de variacion que generan los hijos. */
+  atributosVariante?: AtributoVariante[];
+  /** Solo en el producto hijo: id del padre que lo genero. */
+  productoPadreId?: string;
+  /** Solo en el producto hijo: { talla: 'M', color: 'Rojo' }. */
+  valoresVariante?: Record<string, string>;
   proveedorIds?: Record<string, true>;
   camposPersonalizados?: Record<string, any>;
   creadoEn?: number;
@@ -232,6 +271,10 @@ export interface ConfiguracionInventario {
   impuestoPorDefecto: number;
   metodoPrecioVentaDefecto: MetodoPrecioVenta;
   porcentajePrecioVentaDefecto: number;
+  /** Exige imagen para guardar un producto con usoProducto = 'VENTA'. */
+  requerirImagenProductoVenta: boolean;
+  /** Incremento por defecto de los productos vendidos por peso o medida. */
+  pasoCantidadGranelDefecto: number;
 }
 
 export type EntidadCamposInventario = 'producto' | 'proveedor';

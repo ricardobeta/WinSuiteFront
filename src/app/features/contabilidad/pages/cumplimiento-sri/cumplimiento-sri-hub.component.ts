@@ -1,17 +1,22 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { HttpResponse } from '@angular/common/http';
+import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
+import { AuthorizationService } from '../../../../core/services/authorization.service';
 import { ExportacionRecienteSri } from '../../models/cumplimiento-sri.models';
 import { CumplimientoSriApiService } from '../../services/cumplimiento-sri-api.service';
 
 @Component({
   selector: 'app-cumplimiento-sri-hub',
   standalone: true,
-  imports: [CommonModule, RouterLink, MatButtonModule, MatIconModule, MatProgressSpinnerModule],
+  imports: [CommonModule, RouterLink, MatButtonModule, MatIconModule, MatProgressSpinnerModule,
+    MatSnackBarModule, MatTooltipModule],
   template: `
     <section class="sri-hub">
       <header class="hub-hero">
@@ -66,6 +71,18 @@ import { CumplimientoSriApiService } from '../../services/cumplimiento-sri-api.s
                 <div class="history-main"><strong>{{ item.proyectoNombre }}</strong><span>{{ item.periodo }} · Versión {{ item.version }}</span></div>
                 <div class="history-amount"><strong>{{ item.totalIva | currency:'USD':'symbol-narrow':'1.2-2' }}</strong><span>{{ item.numeroLineas }} líneas</span></div>
                 <time>{{ item.generadoEn | date:'dd MMM y, HH:mm' }}</time>
+                <span class="file-state" [class.missing]="item.archivo?.estado !== 'DISPONIBLE'">
+                  <mat-icon>{{ item.archivo?.estado === 'DISPONIBLE' ? 'cloud_done' : 'history' }}</mat-icon>
+                  {{ item.archivo?.estado === 'DISPONIBLE' ? 'Respaldado' : 'Recuperable' }}
+                </span>
+                <button mat-icon-button type="button" color="primary"
+                  [disabled]="processing() === itemKey(item) || (item.archivo?.estado !== 'DISPONIBLE' && !canRestore())"
+                  [matTooltip]="item.archivo?.estado === 'DISPONIBLE' ? 'Descargar esta versión' : 'Restaurar y descargar esta versión'"
+                  [attr.aria-label]="item.archivo?.estado === 'DISPONIBLE' ? 'Descargar versión ' + item.version : 'Restaurar y descargar versión ' + item.version"
+                  (click)="download(item)">
+                  @if (processing() === itemKey(item)) { <mat-spinner diameter="20" /> }
+                  @else { <mat-icon>{{ item.archivo?.estado === 'DISPONIBLE' ? 'download' : 'restore' }}</mat-icon> }
+                </button>
               </div>
             }
           </div>
@@ -103,22 +120,59 @@ import { CumplimientoSriApiService } from '../../services/cumplimiento-sri-api.s
     .state-row.error { color: #a33a31; }
     .empty-history p { margin: 3px 0 0; }
     .empty-history > mat-icon { width: 36px; height: 36px; font-size: 36px; color: #77918b; }
-    .history-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto auto; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--app-border, #e3e9e7); }
+    .history-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto auto auto 44px; align-items: center; gap: 14px; padding: 14px 0; border-top: 1px solid var(--app-border, #e3e9e7); }
     .file-mark { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; background: #e7f3ef; color: #1d7567; }
-    .history-main, .history-amount { display: grid; gap: 3px; }
+    .history-main, .history-amount { display: grid; min-width: 0; gap: 3px; }
+    .history-main strong { overflow-wrap: anywhere; }
     .history-main span, .history-amount span, .history-row time { color: var(--app-text-secondary); font-size: .78rem; }
     .history-amount { min-width: 100px; text-align: right; }
-    @media (max-width: 860px) { .document-grid { grid-template-columns: 1fr; } .hero-mark { display: none; } .history-row { grid-template-columns: 42px 1fr auto; } .history-row time { grid-column: 2 / -1; } }
-    @media (max-width: 560px) { .hub-hero { padding: 26px 22px; border-radius: 18px; } .document-card, .history-card { padding: 22px; } .section-heading { align-items: flex-start; flex-direction: column; } .history-amount { display: none; } }
+    .file-state { display: inline-flex; align-items: center; gap: 5px; min-height: 30px; padding: 5px 9px; border-radius: 999px; background: #e2f3ee; color: #17685b; font-size: .75rem; font-weight: 750; white-space: nowrap; }
+    .file-state.missing { background: #f3eee3; color: #7a5b21; }
+    .file-state mat-icon { width: 16px; height: 16px; font-size: 16px; }
+    .history-row button { width: 44px; height: 44px; }
+    @media (max-width: 980px) { .document-grid { grid-template-columns: 1fr; } .hero-mark { display: none; } .history-row { grid-template-columns: 42px minmax(0, 1fr) auto 44px; } .history-amount { display: none; } .history-row time { grid-column: 2; } .file-state { grid-column: 3; grid-row: 1 / span 2; } .history-row button { grid-column: 4; grid-row: 1 / span 2; } }
+    @media (max-width: 560px) { .hub-hero { padding: 26px 22px; border-radius: 18px; } .document-card, .history-card { padding: 22px; } .section-heading { align-items: flex-start; flex-direction: column; } .history-row { grid-template-columns: 42px minmax(0, 1fr) 44px; } .history-amount { display: none; } .file-state { grid-column: 2; grid-row: 3; justify-self: start; } .history-row button { grid-column: 3; grid-row: 1 / span 3; } }
   `]
 })
 export class CumplimientoSriHubComponent implements OnInit {
   private readonly api = inject(CumplimientoSriApiService);
+  private readonly authorization = inject(AuthorizationService);
+  private readonly snack = inject(MatSnackBar);
   readonly recent = signal<ExportacionRecienteSri[]>([]);
   readonly loading = signal(true);
   readonly error = signal('');
+  readonly processing = signal('');
+  readonly canRestore = computed(() => this.authorization.canAccess('contabilidad_sri', 'create'));
 
   async ngOnInit(): Promise<void> {
+    await this.loadRecent();
+  }
+
+  itemKey(item: ExportacionRecienteSri): string { return `${item.expedienteId}-${item.version}`; }
+
+  async download(item: ExportacionRecienteSri): Promise<void> {
+    const key = this.itemKey(item);
+    if (this.processing()) return;
+    this.processing.set(key); this.error.set('');
+    try {
+      const restored = item.archivo?.estado !== 'DISPONIBLE';
+      const response = restored
+        ? await this.api.restaurarArchivo(item.expedienteId, item.version)
+        : await this.api.descargarArchivo(item.expedienteId, item.version);
+      this.saveBlob(response, item.nombreArchivo);
+      if (restored) {
+        await this.loadRecent(false);
+        this.snack.open(`Versión ${item.version} restaurada, respaldada y descargada.`, 'Cerrar', { duration: 4500 });
+      }
+    } catch (error) {
+      this.error.set(await this.downloadErrorMessage(error));
+    } finally {
+      this.processing.set('');
+    }
+  }
+
+  private async loadRecent(showLoading = true): Promise<void> {
+    if (showLoading) this.loading.set(true);
     try {
       this.recent.set(await this.api.exportacionesRecientes());
     } catch (error) {
@@ -126,6 +180,28 @@ export class CumplimientoSriHubComponent implements OnInit {
     } finally {
       this.loading.set(false);
     }
+  }
+
+  private saveBlob(response: HttpResponse<Blob>, fallback: string): void {
+    const disposition = response.headers.get('content-disposition') ?? '';
+    const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    const simple = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+    const filename = encoded ? decodeURIComponent(encoded) : (simple ?? fallback);
+    const url = URL.createObjectURL(response.body ?? new Blob());
+    const anchor = document.createElement('a');
+    anchor.href = url; anchor.download = filename; document.body.appendChild(anchor); anchor.click(); anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  private async downloadErrorMessage(error: unknown): Promise<string> {
+    const body = (error as { error?: unknown })?.error;
+    if (body instanceof Blob) {
+      try {
+        const payload = JSON.parse(await body.text()) as { error?: string; message?: string };
+        return payload.error ?? payload.message ?? this.message(error);
+      } catch { /* Se conserva el mensaje HTTP original. */ }
+    }
+    return this.message(error);
   }
 
   private message(error: unknown): string {

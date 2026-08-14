@@ -48,7 +48,12 @@ export class ConfiguracionContableService {
     return snapshot.exists() ? snapshot.val() as ConfiguracionEmpresaContable : null;
   }
 
-  async guardarEmpresa(empresa: ConfiguracionEmpresaContable): Promise<void> {
+  /**
+   * Devuelve lo que quedo escrito, no void: el guardado normaliza (recorta, fuerza USD, enciende
+   * 'configurado' y sella las marcas de tiempo), y la pantalla descarta la emision en vivo de su
+   * propia escritura. Sin este retorno se quedaria mostrando la version sin normalizar.
+   */
+  async guardarEmpresa(empresa: ConfiguracionEmpresaContable): Promise<ConfiguracionEmpresaContable> {
     const actual = await this.getEmpresaOnce();
     const timestamp = Date.now();
     const payload: ConfiguracionEmpresaContable = {
@@ -67,6 +72,7 @@ export class ConfiguracionContableService {
 
     this.validarEmpresa(payload);
     await set(ref(this.database, this.getEmpresaPath()), payload);
+    return payload;
   }
 
   getPeriodos(anio: number): Observable<PeriodoContable[]> {
