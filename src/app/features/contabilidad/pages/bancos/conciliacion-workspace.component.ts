@@ -500,10 +500,10 @@ export class ConciliacionWorkspaceComponent {
     }
     let asientoId: string | null = null;
     // Sugerencia CLASIFICAR (sin contraparte): crear el asiento antes de confirmar.
-    if (accion === 'ACEPTAR' && match.contrapartes.length === 0 && match.cuentaContableSugerida) {
+    if (accion === 'ACEPTAR' && !match.contrapartes?.length && match.cuentaContableSugerida) {
       const cuentaBancaria = this.cuentas().find((cuenta) => cuenta.id === this.cuenta.value);
       const movimientos = this.movimientos()
-        .filter((movimiento) => match.movimientoIds.includes(movimiento.id ?? ''));
+        .filter((movimiento) => (match.movimientoIds ?? []).includes(movimiento.id ?? ''));
       if (!cuentaBancaria || movimientos.length === 0) {
         this.snackBar.open('No se encontraron los movimientos de la sugerencia.', 'OK', { duration: 4500 });
         return;
@@ -620,9 +620,9 @@ export class ConciliacionWorkspaceComponent {
 
   protected descripcionMatch(match: MatchConciliacion): string {
     const movimientos = this.movimientos()
-      .filter((movimiento) => match.movimientoIds.includes(movimiento.id ?? ''))
+      .filter((movimiento) => (match.movimientoIds ?? []).includes(movimiento.id ?? ''))
       .map((movimiento) => `${movimiento.fecha} ${movimiento.descripcion}`);
-    const contraparte = match.contrapartes[0]?.detalle
+    const contraparte = match.contrapartes?.[0]?.detalle
       ?? (match.cuentaContableSugerida ? 'Clasificar a cuenta contable sugerida' : 'Marcar como no conciliable');
     return `${movimientos.join(' + ') || 'Movimiento'} → ${contraparte}`;
   }

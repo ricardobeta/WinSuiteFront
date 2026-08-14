@@ -90,7 +90,15 @@ export class BancosMovimientosService {
     const snapshot = await get(query(matchesRef, orderByChild('periodo'), equalTo(periodo)));
     const matches: MatchConciliacion[] = [];
     snapshot.forEach((child) => {
-      matches.push({ ...(child.val() as MatchConciliacion), id: child.key ?? undefined });
+      const match = child.val() as MatchConciliacion;
+      matches.push({
+        ...match,
+        id: child.key ?? undefined,
+        // RTDB no guarda listas vacías: una sugerencia de clasificar o de no
+        // conciliable llega sin contrapartes y romperia a quien las recorra.
+        movimientoIds: match.movimientoIds ?? [],
+        contrapartes: match.contrapartes ?? []
+      });
       return false;
     });
     return matches;
