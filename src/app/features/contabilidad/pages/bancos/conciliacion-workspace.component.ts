@@ -151,7 +151,17 @@ import { CrearAsientoBancoDialogComponent } from './crear-asiento-banco-dialog.c
 
       @if (sugeridos().length > 0) {
         <section class="surface-card sugerencias-card">
-          <h3><mat-icon>auto_awesome</mat-icon> Sugerencias pendientes de revisión ({{ sugeridos().length }})</h3>
+          <div class="sugerencias-header">
+            <h3><mat-icon>auto_awesome</mat-icon> Sugerencias pendientes de revisión ({{ sugeridos().length }})</h3>
+            @if (canUpdate()) {
+              <button mat-stroked-button type="button" [disabled]="procesando()"
+                      matTooltip="Descarta todas las sugerencias y deja los movimientos libres para conciliarlos a mano"
+                      (click)="descartarSugerencias()">
+                <mat-icon>back_hand</mat-icon>
+                Descartar y conciliar a mano
+              </button>
+            }
+          </div>
           <div class="sugerencias">
             @for (match of sugeridos(); track match.id) {
               <article class="sugerencia">
@@ -184,9 +194,9 @@ import { CrearAsientoBancoDialogComponent } from './crear-asiento-banco-dialog.c
       @if (consultaRealizada()) {
         <section class="paneles">
           <section class="surface-card panel">
-            <h3><mat-icon>account_balance</mat-icon> Extracto bancario · pendientes ({{ movimientosPendientes().length }})</h3>
+            <h3><mat-icon>account_balance</mat-icon> Extracto bancario · por conciliar ({{ movimientosPendientes().length }})</h3>
             @if (movimientosPendientes().length === 0) {
-              <p class="hint">No hay movimientos pendientes del extracto en este período.</p>
+              <p class="hint">No hay movimientos por conciliar del extracto en este período.</p>
             }
             @for (movimiento of movimientosPendientes(); track movimiento.id) {
               <label class="fila" [class.seleccionada]="seleccionMovimientos().has(movimiento.id!)">
@@ -196,7 +206,12 @@ import { CrearAsientoBancoDialogComponent } from './crear-asiento-banco-dialog.c
                   [disabled]="!canUpdate()"
                 />
                 <div class="fila-info">
-                  <span class="fila-titulo">{{ movimiento.descripcion }}</span>
+                  <span class="fila-titulo">
+                    {{ movimiento.descripcion }}
+                    @if (movimiento.estadoConciliacion === 'SUGERIDO') {
+                      <span class="pill pill-ia">con sugerencia</span>
+                    }
+                  </span>
                   <span class="fila-sub">{{ movimiento.fecha }}@if (movimiento.referencia) { · Ref {{ movimiento.referencia }}}</span>
                 </div>
                 <span class="fila-monto" [class.neg]="movimiento.monto < 0">
@@ -289,6 +304,8 @@ import { CrearAsientoBancoDialogComponent } from './crear-asiento-banco-dialog.c
     .hint { color: var(--muted-foreground); margin: 0; }
     .sugerencias-card { padding: 1rem 1.25rem; display: grid; gap: .75rem; }
     .sugerencias-card h3 { display: inline-flex; align-items: center; gap: .4rem; margin: 0; }
+    .sugerencias-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
+    .fila-titulo .pill { margin-left: .4rem; font-size: .68rem; vertical-align: middle; }
     .sugerencias { display: grid; gap: .5rem; }
     .sugerencia { display: flex; justify-content: space-between; gap: 1rem; align-items: center; border: 1px solid color-mix(in srgb, #7c3aed 25%, transparent); border-radius: .75rem; padding: .6rem .9rem; }
     .chips { display: flex; gap: .4rem; flex-wrap: wrap; }
@@ -343,8 +360,14 @@ export class ConciliacionWorkspaceComponent {
   protected readonly seleccionMovimientos = signal<Set<string>>(new Set());
   protected readonly seleccionPartidas = signal<Set<string>>(new Set());
 
+  /**
+   * Los movimientos con sugerencia siguen disponibles para conciliar a mano:
+   * si desaparecieran del panel, aceptar o rechazar la sugerencia sería la única
+   * salida y no habría forma de armar el match uno mismo.
+   */
   protected readonly movimientosPendientes = computed(() =>
-    this.movimientos().filter((movimiento) => movimiento.estadoConciliacion === 'PENDIENTE'));
+    this.movimientos().filter((movimiento) =>
+      movimiento.estadoConciliacion === 'PENDIENTE' || movimiento.estadoConciliacion === 'SUGERIDO'));
 
   protected readonly sugeridos = computed(() =>
     this.matches().filter((match) => match.estado === 'SUGERIDO'));
@@ -452,6 +475,21 @@ export class ConciliacionWorkspaceComponent {
       await this.refrescar();
     } catch {
       this.snackBar.open('No se pudieron obtener sugerencias de IA.', 'OK', { duration: 4500 });
+      this.procesando.set(false);
+    }
+  }
+
+  /** Cancela todas las sugerencias de una vez para seguir en modo manual. */
+  protected async descartarSugerencias(): Promise<void> {
+    this.procesando.set(true);
+    try {
+      const { descartadas } = await this.api.descartarSugerencias(this.cuenta.value, this.periodo.value);
+      this.snackBar.open(
+        `${descartadas} sugerencia(s) descartadas. Los movimientos quedaron libres para conciliar a mano.`,
+        'OK', { duration: 4500 });
+      await this.refrescar();
+    } catch {
+      this.snackBar.open('No se pudieron descartar las sugerencias.', 'OK', { duration: 4500 });
       this.procesando.set(false);
     }
   }

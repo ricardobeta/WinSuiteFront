@@ -112,6 +112,12 @@ export class BancosApiService {
     return firstValueFrom(this.http.post<{ matchId: string }>(`${this.baseUrl}/conciliacion/matches`, input));
   }
 
+  /** Vuelve al modo manual: descarta las sugerencias vivas del período. */
+  descartarSugerencias(cuentaBancariaId: string, periodo: string): Promise<{ descartadas: number }> {
+    return firstValueFrom(this.http.post<{ descartadas: number }>(
+      `${this.baseUrl}/conciliacion/sugerencias/descartar`, { cuentaBancariaId, periodo }));
+  }
+
   resolverMatch(input: {
     cuentaBancariaId: string;
     matchId: string;
