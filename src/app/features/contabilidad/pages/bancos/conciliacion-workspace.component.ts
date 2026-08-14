@@ -29,6 +29,9 @@ import { BancosCuentasService } from '../../services/bancos-cuentas.service';
 import { BancosMovimientosService } from '../../services/bancos-movimientos.service';
 import { CrearAsientoBancoDialogComponent } from './crear-asiento-banco-dialog.component';
 
+/** Tope por consulta a RTDB; se encadenan páginas con el cursor claveOrden. */
+const TAMANO_PAGINA = 100;
+
 @Component({
   selector: 'app-conciliacion-workspace',
   standalone: true,
@@ -195,8 +198,33 @@ import { CrearAsientoBancoDialogComponent } from './crear-asiento-banco-dialog.c
         <section class="paneles">
           <section class="surface-card panel">
             <h3><mat-icon>account_balance</mat-icon> Extracto bancario · por conciliar ({{ movimientosPendientes().length }})</h3>
+
+            <div class="panel-herramientas">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filtro">
+                <mat-icon matPrefix>search</mat-icon>
+                <mat-label>Filtrar por concepto o referencia</mat-label>
+                <input matInput [value]="filtroExtracto()"
+                       (input)="filtroExtracto.set($any($event.target).value)" />
+              </mat-form-field>
+              @if (canUpdate() && movimientosPendientes().length > 0) {
+                <button mat-stroked-button type="button" (click)="seleccionarVisibles()"
+                        matTooltip="Marca los {{ movimientosPendientes().length }} movimientos a la vista">
+                  <mat-icon>done_all</mat-icon>
+                  Seleccionar {{ movimientosPendientes().length }}
+                </button>
+              }
+            </div>
+            @if (filtroExtracto()) {
+              <p class="hint">
+                Suman <strong>{{ totalVisible() | currency: 'USD':'symbol-narrow':'1.2-2' }}</strong> en
+                {{ movimientosPendientes().length }} movimiento(s).
+              </p>
+            }
+
             @if (movimientosPendientes().length === 0) {
-              <p class="hint">No hay movimientos por conciliar del extracto en este período.</p>
+              <p class="hint">
+                {{ filtroExtracto() ? 'Ningún movimiento coincide con el filtro.' : 'No hay movimientos por conciliar del extracto en este período.' }}
+              </p>
             }
             @for (movimiento of movimientosPendientes(); track movimiento.id) {
               <label class="fila" [class.seleccionada]="seleccionMovimientos().has(movimiento.id!)">
@@ -218,6 +246,17 @@ import { CrearAsientoBancoDialogComponent } from './crear-asiento-banco-dialog.c
                   {{ movimiento.monto | currency: 'USD':'symbol-narrow':'1.2-2' }}
                 </span>
               </label>
+            }
+
+            @if (hayMasMovimientos()) {
+              <div class="cargar-mas">
+                <span class="hint">{{ movimientos().length }} movimientos cargados del período</span>
+                <button mat-stroked-button color="primary" type="button"
+                        [disabled]="cargandoMas()" (click)="cargarMasMovimientos()">
+                  <mat-icon>expand_more</mat-icon>
+                  {{ cargandoMas() ? 'Cargando…' : 'Cargar 100 más' }}
+                </button>
+              </div>
             }
           </section>
 
@@ -314,6 +353,9 @@ import { CrearAsientoBancoDialogComponent } from './crear-asiento-banco-dialog.c
     .paneles { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; align-items: start; }
     .panel { padding: 1rem 1.25rem; display: grid; gap: .4rem; }
     .panel h3 { display: inline-flex; align-items: center; gap: .4rem; margin: 0 0 .4rem; }
+    .panel-herramientas { display: flex; gap: .6rem; align-items: center; flex-wrap: wrap; margin-bottom: .4rem; }
+    .panel-herramientas .filtro { flex: 1 1 240px; }
+    .cargar-mas { display: flex; align-items: center; justify-content: space-between; gap: .75rem; padding-top: .6rem; margin-top: .4rem; border-top: 1px solid color-mix(in srgb, var(--muted-foreground) 18%, transparent); flex-wrap: wrap; }
     .fila { display: flex; align-items: center; gap: .6rem; border-radius: .6rem; padding: .35rem .5rem; cursor: pointer; }
     .fila:hover { background: color-mix(in srgb, var(--primary) 6%, transparent); }
     .fila.seleccionada { background: color-mix(in srgb, var(--primary) 12%, transparent); }
@@ -358,6 +400,11 @@ export class ConciliacionWorkspaceComponent {
   protected readonly matches = signal<MatchConciliacion[]>([]);
   protected readonly resumen = signal<ResumenConciliacion | null>(null);
   protected readonly seleccionMovimientos = signal<Set<string>>(new Set());
+  protected readonly filtroExtracto = signal('');
+  protected readonly cargandoMas = signal(false);
+  protected readonly hayMasMovimientos = signal(false);
+  private readonly cursorMovimientos = signal<string | null>(null);
+  private readonly paginasCargadas = signal(1);
   protected readonly seleccionPartidas = signal<Set<string>>(new Set());
 
   /**
@@ -365,9 +412,24 @@ export class ConciliacionWorkspaceComponent {
    * si desaparecieran del panel, aceptar o rechazar la sugerencia sería la única
    * salida y no habría forma de armar el match uno mismo.
    */
-  protected readonly movimientosPendientes = computed(() =>
+  protected readonly movimientosPorConciliar = computed(() =>
     this.movimientos().filter((movimiento) =>
       movimiento.estadoConciliacion === 'PENDIENTE' || movimiento.estadoConciliacion === 'SUGERIDO'));
+
+  /** Filtrar por concepto es lo que hace viable conciliar decenas de líneas iguales. */
+  protected readonly movimientosPendientes = computed(() => {
+    const texto = this.filtroExtracto().trim().toLowerCase();
+    if (!texto) {
+      return this.movimientosPorConciliar();
+    }
+    return this.movimientosPorConciliar().filter((movimiento) =>
+      movimiento.descripcion.toLowerCase().includes(texto)
+      || movimiento.referencia.toLowerCase().includes(texto));
+  });
+
+  /** Total de lo filtrado, para saber contra qué asiento puede cuadrar. */
+  protected readonly totalVisible = computed(() =>
+    Math.round(this.movimientosPendientes().reduce((total, movimiento) => total + movimiento.monto, 0) * 100) / 100);
 
   protected readonly sugeridos = computed(() =>
     this.matches().filter((match) => match.estado === 'SUGERIDO'));
@@ -418,6 +480,8 @@ export class ConciliacionWorkspaceComponent {
   }
 
   protected cargar(): void {
+    this.filtroExtracto.set('');
+    this.paginasCargadas.set(1);
     void this.refrescar(true);
   }
 
@@ -430,25 +494,77 @@ export class ConciliacionWorkspaceComponent {
     this.cargando.set(true);
     this.procesando.set(true);
     try {
-      const [pagina, matches, resumen] = await Promise.all([
-        this.movimientosService.getMovimientosPage(cuentaId, periodo, 100, null),
+      // Se recargan tantas páginas como el usuario tenía abiertas, para que
+      // conciliar no le devuelva la lista al primer bloque de 100.
+      const paginas = anunciar ? 1 : Math.max(1, this.paginasCargadas());
+      const [movimientos, matches, resumen] = await Promise.all([
+        this.cargarPaginas(cuentaId, periodo, paginas),
         this.movimientosService.getMatchesPorPeriodo(cuentaId, periodo),
         this.api.getResumen(cuentaId, periodo)
       ]);
-      this.movimientos.set(pagina.items);
+      this.movimientos.set(movimientos);
       this.matches.set(matches);
       this.resumen.set(resumen);
       this.consultaRealizada.set(true);
       this.limpiarSeleccion();
-      if (anunciar && pagina.hasMore) {
-        this.snackBar.open('Se muestran los primeros 100 movimientos del período.', 'OK', { duration: 4000 });
-      }
     } catch {
       this.snackBar.open('No se pudo cargar la conciliación del período.', 'OK', { duration: 4500 });
     } finally {
       this.cargando.set(false);
       this.procesando.set(false);
     }
+  }
+
+  /** Trae n páginas encadenando el cursor; deja anotado si aún queda más. */
+  private async cargarPaginas(cuentaId: string, periodo: string, paginas: number): Promise<MovimientoBancario[]> {
+    const acumulados: MovimientoBancario[] = [];
+    let cursor: string | null = null;
+    let hayMas = false;
+    for (let pagina = 0; pagina < paginas; pagina++) {
+      const resultado = await this.movimientosService.getMovimientosPage(cuentaId, periodo, TAMANO_PAGINA, cursor);
+      acumulados.push(...resultado.items);
+      hayMas = resultado.hasMore;
+      cursor = resultado.nextCursor;
+      if (!cursor) {
+        break;
+      }
+    }
+    this.cursorMovimientos.set(cursor);
+    this.hayMasMovimientos.set(hayMas && !!cursor);
+    this.paginasCargadas.set(paginas);
+    return acumulados;
+  }
+
+  /** Carga el siguiente bloque sin perder lo ya cargado ni la selección. */
+  protected async cargarMasMovimientos(): Promise<void> {
+    const cursor = this.cursorMovimientos();
+    if (!cursor || this.cargandoMas()) {
+      return;
+    }
+    this.cargandoMas.set(true);
+    try {
+      const resultado = await this.movimientosService.getMovimientosPage(
+        this.cuenta.value, this.periodo.value, TAMANO_PAGINA, cursor);
+      this.movimientos.update((actuales) => [...actuales, ...resultado.items]);
+      this.cursorMovimientos.set(resultado.nextCursor);
+      this.hayMasMovimientos.set(resultado.hasMore && !!resultado.nextCursor);
+      this.paginasCargadas.update((paginas) => paginas + 1);
+    } catch {
+      this.snackBar.open('No se pudieron cargar más movimientos.', 'OK', { duration: 4000 });
+    } finally {
+      this.cargandoMas.set(false);
+    }
+  }
+
+  /** Marca de una vez todo lo que quedó a la vista tras filtrar. */
+  protected seleccionarVisibles(): void {
+    const seleccion = new Set(this.seleccionMovimientos());
+    this.movimientosPendientes().forEach((movimiento) => {
+      if (movimiento.id) {
+        seleccion.add(movimiento.id);
+      }
+    });
+    this.seleccionMovimientos.set(seleccion);
   }
 
   protected async ejecutarAutomatica(): Promise<void> {
