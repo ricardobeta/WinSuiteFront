@@ -221,6 +221,10 @@ export interface ResumenConciliacion {
   generadoEn: number;
   saldoLibros: number;
   saldoExtracto?: number;
+  /** CONFIRMADO = lo escribió el usuario al importar; MOVIMIENTOS = deducido encadenando saldos. */
+  saldoExtractoOrigen?: 'CONFIRMADO' | 'MOVIMIENTOS';
+  /** Corte que dan los movimientos importados; si difiere del confirmado hay que revisarlo. */
+  saldoExtractoMovimientos?: number;
   diferencia?: number;
   saldoBancoAjustado?: number;
   saldoLibrosAjustado?: number;

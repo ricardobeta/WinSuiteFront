@@ -22,9 +22,9 @@ export type SeccionReporteFinanciero =
 
 /**
  * ACUMULADO: saldos arrastrados desde el inicio de operaciones hasta la fecha de corte.
- * PERIODO: solo los montos acumulados por las cuentas dentro del rango consultado.
+ * RANGO: saldo anterior, movimiento del periodo y saldo final dentro del mismo ejercicio.
  */
-export type ModoConsultaEstadoFinanciero = 'ACUMULADO' | 'PERIODO';
+export type ModoConsultaEstadoFinanciero = 'ACUMULADO' | 'RANGO';
 
 export type TipoContribuyente = 'RIMPE' | 'NORMAL' | 'ESPECIAL';
 
@@ -381,45 +381,84 @@ export interface BalanceComprobacionResultado {
   diferencia: number;
 }
 
-export interface EstadoFinancieroLinea {
+export interface ImportesEstadoFinanciero {
+  saldoInicial: number;
+  movimientoPeriodo: number;
+  saldoFinal: number;
+}
+
+export interface CuentaPadreNivel4Reporte {
+  cuentaId?: string;
+  codigoCuenta: string;
+  nombreCuenta: string;
+}
+
+export interface EstadoSituacionFinancieraLinea {
   cuentaId?: string;
   codigoCuenta: string;
   nombreCuenta: string;
   seccion: SeccionReporteFinanciero;
-  monto: number;
+  padreNivel4?: CuentaPadreNivel4Reporte | null;
+  importes: ImportesEstadoFinanciero;
+  nivel: number;
   orden: number;
-  esCalculada?: boolean;
+  calculada: boolean;
 }
 
-export interface EstadoFinancieroSeccion {
+export interface EstadoSituacionFinancieraSeccion {
   seccion: SeccionReporteFinanciero;
   nombre: string;
-  lineas: EstadoFinancieroLinea[];
-  total: number;
+  lineas: EstadoSituacionFinancieraLinea[];
+  total: ImportesEstadoFinanciero;
   orden: number;
 }
 
 export interface EstadoSituacionFinancieraResultado {
-  fechaCorte: string;
-  /** Solo en modo PERIODO: inicio del rango cuyos movimientos se acumulan. */
-  fechaDesde?: string;
+  tipo: 'ESF';
   modo: ModoConsultaEstadoFinanciero;
-  secciones: EstadoFinancieroSeccion[];
-  totalActivo: number;
-  totalPasivo: number;
-  totalPatrimonio: number;
-  resultadoEjercicio: number;
-  diferencia: number;
+  fechaDesde: string | null;
+  fechaHasta: string;
+  secciones: EstadoSituacionFinancieraSeccion[];
+  totales: {
+    activo: ImportesEstadoFinanciero;
+    pasivo: ImportesEstadoFinanciero;
+    patrimonioContabilizado: ImportesEstadoFinanciero;
+    resultadoCalculado: ImportesEstadoFinanciero;
+    patrimonioPresentado: ImportesEstadoFinanciero;
+    diferencia: ImportesEstadoFinanciero;
+  };
+}
+
+export interface EstadoResultadoIntegralLinea {
+  cuentaId?: string;
+  codigoCuenta: string;
+  nombreCuenta: string;
+  seccion: SeccionReporteFinanciero;
+  padreNivel4?: CuentaPadreNivel4Reporte | null;
+  monto: number;
+  nivel: number;
+  orden: number;
+}
+
+export interface EstadoResultadoIntegralSeccion {
+  seccion: SeccionReporteFinanciero;
+  nombre: string;
+  lineas: EstadoResultadoIntegralLinea[];
+  total: number;
+  orden: number;
 }
 
 export interface EstadoResultadoIntegralResultado {
+  tipo: 'ERI';
   fechaDesde: string;
   fechaHasta: string;
-  secciones: EstadoFinancieroSeccion[];
-  totalIngresos: number;
-  totalCostos: number;
-  totalGastos: number;
-  resultadoBruto: number;
-  resultadoOperacional: number;
-  resultadoNeto: number;
+  secciones: EstadoResultadoIntegralSeccion[];
+  totales: {
+    ingresos: number;
+    costos: number;
+    gastos: number;
+    resultadoBruto: number;
+    resultadoOperacional: number;
+    resultadoNeto: number;
+  };
 }

@@ -24,6 +24,7 @@ import {
   PartidaConciliatoria,
   ResumenConciliacion
 } from '../../models/bancos.models';
+import { formatImporte, parseImporte } from '../../../../shared/utils/importe-input.util';
 import { BancosApiService } from '../../services/bancos-api.service';
 import { BancosCuentasService } from '../../services/bancos-cuentas.service';
 import { BancosMovimientosService } from '../../services/bancos-movimientos.service';
@@ -128,6 +129,11 @@ const TAMANO_PAGINA = 100;
           <article class="kpi-card metric-hero">
             <p class="kpi-label">Saldo extracto</p>
             <p class="kpi-value">{{ datos.saldoExtracto != null ? (datos.saldoExtracto | currency: 'USD':'symbol-narrow':'1.2-2') : '—' }}</p>
+            @if (datos.saldoExtractoOrigen === 'CONFIRMADO') {
+              <span class="kpi-sub">Confirmado al importar</span>
+            } @else if (datos.saldoExtractoOrigen === 'MOVIMIENTOS') {
+              <span class="kpi-sub">Deducido de los movimientos</span>
+            }
           </article>
           <article class="kpi-card surface-card">
             <p class="kpi-label">Saldo libros</p>
@@ -154,6 +160,74 @@ const TAMANO_PAGINA = 100;
               (faltan {{ datos.descuadreExtracto | currency: 'USD':'symbol-narrow':'1.2-2' }}).
               Es probable que el archivo importado esté incompleto: revísalo antes de conciliar.
             </div>
+          </section>
+        }
+
+        @if (conflictoSaldo(); as conflicto) {
+          <section class="surface-card aviso-extracto">
+            <mat-icon>report_problem</mat-icon>
+            <div>
+              <strong>El saldo confirmado no coincide con los movimientos.</strong>
+              El corte guardado del período es {{ datos.saldoExtracto | currency: 'USD':'symbol-narrow':'1.2-2' }}
+              y los movimientos importados encadenan hasta
+              {{ datos.saldoExtractoMovimientos | currency: 'USD':'symbol-narrow':'1.2-2' }}
+              ({{ conflicto | currency: 'USD':'symbol-narrow':'1.2-2' }} de diferencia).
+              Manda el confirmado; si el bueno es el otro, corrígelo aquí abajo.
+            </div>
+          </section>
+        }
+
+        @if (canUpdate()) {
+          <section class="surface-card saldos-card">
+            <div class="saldos-header">
+              <h3><mat-icon>account_balance</mat-icon> Saldos del extracto</h3>
+              <button mat-button type="button" (click)="editandoSaldos.set(!editandoSaldos())">
+                {{ mostrarEditorSaldos() ? 'Ocultar' : 'Corregir saldos' }}
+              </button>
+            </div>
+            @if (mostrarEditorSaldos()) {
+              <p class="hint">
+                Escríbelos tal como los da el banco: es el corte que usa la conciliación y el que
+                sale en el reporte. Al guardar se recalculan los totales del período.
+              </p>
+              <div class="saldos-grid">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                  <mat-label>Saldo inicial</mat-label>
+                  <input matInput type="text" inputmode="decimal"
+                         [value]="saldoInicialTexto()"
+                         (input)="saldoInicialTexto.set($any($event.target).value)" />
+                </mat-form-field>
+                <span class="operador">+</span>
+                <div class="movimientos-suma">
+                  <span class="etiqueta">Movimientos del período</span>
+                  <strong>{{ movimientosDelPeriodo() | currency: 'USD':'symbol-narrow':'1.2-2' }}</strong>
+                </div>
+                <span class="operador">=</span>
+                <mat-form-field appearance="outline" subscriptSizing="dynamic">
+                  <mat-label>Saldo final</mat-label>
+                  <input matInput type="text" inputmode="decimal"
+                         [value]="saldoFinalTexto()"
+                         (input)="saldoFinalTexto.set($any($event.target).value)" />
+                </mat-form-field>
+              </div>
+              @if (descuadreEditor() !== null) {
+                @if (descuadreEditor() === 0) {
+                  <p class="cuadre ok"><mat-icon>check_circle</mat-icon> Cuadran con los movimientos del período.</p>
+                } @else {
+                  <p class="cuadre error">
+                    <mat-icon>warning</mat-icon>
+                    Diferencia de {{ descuadreEditor() | currency: 'USD':'symbol-narrow':'1.2-2' }}:
+                    faltan movimientos del período o el corte no es el de estas fechas.
+                  </p>
+                }
+              }
+              <button mat-flat-button color="primary" type="button"
+                      [disabled]="procesando() || !saldosEditados()"
+                      (click)="guardarSaldos()">
+                <mat-icon>save</mat-icon>
+                Guardar saldos y recalcular
+              </button>
+            }
           </section>
         }
 
@@ -384,8 +458,21 @@ const TAMANO_PAGINA = 100;
     .metric-hero .kpi-label { color: color-mix(in srgb, #fff 82%, transparent); }
     .kpi-card.alerta .kpi-value { color: #b45309; }
     .kpi-card.ok .kpi-value { color: #15803d; }
+    .metric-hero .kpi-sub { font-size: .72rem; color: color-mix(in srgb, #fff 78%, transparent); }
     .aviso-extracto { padding: .85rem 1.25rem; display: flex; align-items: start; gap: .6rem; border-left: 4px solid #d97706; color: #92400e; }
     .aviso-extracto mat-icon { color: #d97706; }
+    .saldos-card { padding: 1rem 1.25rem; display: grid; gap: .6rem; justify-items: start; }
+    .saldos-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; width: 100%; flex-wrap: wrap; }
+    .saldos-header h3 { display: inline-flex; align-items: center; gap: .4rem; margin: 0; }
+    .saldos-grid { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+    .saldos-grid mat-form-field { width: 180px; }
+    .operador { font-size: 1.2rem; color: var(--muted-foreground); }
+    .movimientos-suma { display: grid; }
+    .movimientos-suma .etiqueta { font-size: .75rem; color: var(--muted-foreground); }
+    .cuadre { display: flex; align-items: center; gap: .35rem; margin: 0; font-size: .85rem; }
+    .cuadre.ok { color: #15803d; }
+    .cuadre.error { color: #b45309; }
+    .cuadre mat-icon { font-size: 1.1rem; width: 1.1rem; height: 1.1rem; }
     .explicacion-card { padding: 1rem 1.25rem; display: grid; gap: .5rem; }
     .explicacion-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; flex-wrap: wrap; }
     .explicacion-header h3 { display: inline-flex; align-items: center; gap: .4rem; margin: 0; }
@@ -456,6 +543,11 @@ export class ConciliacionWorkspaceComponent {
   protected readonly observaciones = signal('');
   /** Texto tal como está guardado, para no ofrecer guardar sin cambios. */
   private readonly observacionesGuardadas = signal('');
+  /** Corte del extracto, editable a mano: en texto para no perder el punto decimal. */
+  protected readonly saldoInicialTexto = signal('');
+  protected readonly saldoFinalTexto = signal('');
+  private readonly saldosGuardados = signal('');
+  protected readonly editandoSaldos = signal(false);
   protected readonly cargandoMas = signal(false);
   protected readonly hayMasMovimientos = signal(false);
   private readonly cursorMovimientos = signal<string | null>(null);
@@ -517,6 +609,43 @@ export class ConciliacionWorkspaceComponent {
   protected readonly observacionesCambiadas = computed(() =>
     this.observaciones().trim() !== this.observacionesGuardadas().trim());
 
+  /**
+   * Diferencia entre el corte confirmado y el que encadenan los movimientos. Con
+   * dato, es la señal de que el extracto llegó incompleto o de que el saldo
+   * confirmado quedó viejo; sin verlo, la conciliación parte de una cifra que
+   * nadie sabe de dónde sale.
+   */
+  protected readonly conflictoSaldo = computed(() => {
+    const datos = this.resumen();
+    if (!datos || datos.saldoExtractoOrigen !== 'CONFIRMADO'
+      || datos.saldoExtracto == null || datos.saldoExtractoMovimientos == null) {
+      return null;
+    }
+    const diferencia = Math.round((datos.saldoExtracto - datos.saldoExtractoMovimientos) * 100) / 100;
+    return Math.abs(diferencia) <= 0.01 ? null : diferencia;
+  });
+
+  protected readonly mostrarEditorSaldos = computed(() =>
+    this.editandoSaldos() || this.conflictoSaldo() !== null);
+
+  /** Del resumen, no de la tabla: la tabla está paginada y sumaría solo lo cargado. */
+  protected readonly movimientosDelPeriodo = computed(() =>
+    this.resumen()?.movimientosExtracto ?? 0);
+
+  protected readonly saldosEditados = computed(() =>
+    `${this.saldoInicialTexto()}|${this.saldoFinalTexto()}` !== this.saldosGuardados());
+
+  /** inicial + movimientos - final; null mientras falte alguno de los dos saldos. */
+  protected readonly descuadreEditor = computed(() => {
+    const inicial = parseImporte(this.saldoInicialTexto());
+    const final = parseImporte(this.saldoFinalTexto());
+    if (inicial === null || final === null) {
+      return null;
+    }
+    const descuadre = Math.round((inicial + this.movimientosDelPeriodo() - final) * 100) / 100;
+    return Math.abs(descuadre) <= 0.01 ? 0 : descuadre;
+  });
+
   constructor() {
     this.cuentasService.getCuentas()
       .pipe(takeUntilDestroyed(this.destroyRef))
@@ -568,6 +697,12 @@ export class ConciliacionWorkspaceComponent {
         this.observaciones.set(resumen.observaciones ?? '');
       }
       this.observacionesGuardadas.set(resumen.observaciones ?? '');
+      // Los saldos se recargan siempre: son el dato del período, no un borrador.
+      const inicial = formatImporte(resumen.saldoInicialExtracto);
+      const final = formatImporte(resumen.saldoExtracto);
+      this.saldoInicialTexto.set(inicial);
+      this.saldoFinalTexto.set(final);
+      this.saldosGuardados.set(`${inicial}|${final}`);
       this.consultaRealizada.set(true);
       this.limpiarSeleccion();
     } catch {
@@ -748,6 +883,29 @@ export class ConciliacionWorkspaceComponent {
       this.snackBar.open('Período recalculado con los movimientos actuales.', 'OK', { duration: 4000 });
     } catch {
       this.snackBar.open('No se pudo recalcular el período.', 'OK', { duration: 4500 });
+      this.procesando.set(false);
+    }
+  }
+
+  /**
+   * Corrige el corte del extracto sin tocar la base de datos: lo que se escribe
+   * aquí pasa a ser el saldo del período y se recalculan los totales.
+   */
+  protected async guardarSaldos(): Promise<void> {
+    const saldoInicial = parseImporte(this.saldoInicialTexto());
+    const saldoFinal = parseImporte(this.saldoFinalTexto());
+    if (saldoFinal === null) {
+      this.snackBar.open('Escribe el saldo final del extracto.', 'OK', { duration: 4000 });
+      return;
+    }
+    this.procesando.set(true);
+    try {
+      await this.api.recalcularPeriodo(this.cuenta.value, this.periodo.value, { saldoInicial, saldoFinal });
+      await this.refrescar();
+      this.editandoSaldos.set(false);
+      this.snackBar.open('Saldos del extracto actualizados y período recalculado.', 'OK', { duration: 4000 });
+    } catch {
+      this.snackBar.open('No se pudieron guardar los saldos del período.', 'OK', { duration: 4500 });
       this.procesando.set(false);
     }
   }

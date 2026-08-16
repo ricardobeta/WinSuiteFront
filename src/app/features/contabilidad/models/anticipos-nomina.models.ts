@@ -1,11 +1,33 @@
 import { ModoAsientoAutomatico } from './contabilidad.models';
 
 /**
+ * BORRADOR: propuesta editable; todavia no hubo entrega, asiento ni descuento en el rol.
  * REGISTRADO: el dinero ya se entrego y el anticipo espera al rol del periodo.
  * DESCONTADO: el rol mensual del periodo lo descontó y quedó aprobado.
  * ANULADO: se registró por error y se reversó contablemente.
  */
-export type EstadoAnticipoNomina = 'REGISTRADO' | 'DESCONTADO' | 'ANULADO';
+export type EstadoAnticipoNomina = 'BORRADOR' | 'REGISTRADO' | 'DESCONTADO' | 'ANULADO';
+
+/** Solo el dinero efectivamente entregado puede entrar como descuento pendiente de un rol. */
+export function anticipoAfectaNomina(estado: EstadoAnticipoNomina): boolean {
+  return estado === 'REGISTRADO';
+}
+
+/** Totales operativos: entregados pendientes o ya descontados; nunca propuestas ni anulados. */
+export function anticipoEsOperativo(estado: EstadoAnticipoNomina): boolean {
+  return estado === 'REGISTRADO' || estado === 'DESCONTADO';
+}
+
+/** PDF unico que respalda la entrega de todos los empleados incluidos en el anticipo. */
+export interface ComprobanteEntregaAnticipo {
+  archivoId: string;
+  nombre: string;
+  storagePath: string;
+  downloadUrl: string;
+  sizeBytes: number;
+  subidoEn: number;
+  subidoPor?: string | null;
+}
 
 /**
  * Documento de anticipo de sueldo. Un anticipo individual es simplemente un documento con un
@@ -30,13 +52,19 @@ export interface AnticipoNomina {
   modoAsiento: ModoAsientoAutomatico;
   asientoId?: string | null;
   asientoReversionId?: string | null;
+  /** Respaldo bancario consolidado, opcional y editable solo mientras el documento es borrador. */
+  comprobanteEntrega?: ComprobanteEntregaAnticipo | null;
   /** Rol de pago que descontó el anticipo. */
   rolId?: string | null;
   rolNumero?: string | null;
   creadoEn?: number;
   actualizadoEn?: number;
+  registradoEn?: number | null;
   descontadoEn?: number | null;
   anuladoEn?: number | null;
+  /** Bloqueo efimero para hacer idempotente la confirmacion entre varias sesiones. */
+  confirmacionToken?: string | null;
+  confirmacionEn?: number | null;
 }
 
 export interface AnticipoNominaDetalle {

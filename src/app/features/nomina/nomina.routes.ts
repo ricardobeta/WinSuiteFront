@@ -50,6 +50,10 @@ export const NOMINA_ROUTES: Routes = [
     redirectTo: '/workspace/contabilidad/nomina/anticipos/nuevo'
   },
   {
+    path: 'anticipos/:anticipoId/editar',
+    redirectTo: '/workspace/contabilidad/nomina/anticipos/:anticipoId/editar'
+  },
+  {
     path: 'rubros',
     redirectTo: '/workspace/contabilidad/nomina/rubros'
   },

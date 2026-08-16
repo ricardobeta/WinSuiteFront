@@ -381,6 +381,14 @@ export const CONTABILIDAD_ROUTES: Routes = [
             }
           },
           {
+            path: 'anticipos/:anticipoId/editar',
+            component: NominaAnticipoFormComponent,
+            data: {
+              module: 'Contabilidad',
+              page: 'Editar borrador de anticipo'
+            }
+          },
+          {
             path: 'rubros',
             component: NominaRubrosComponent,
             data: {

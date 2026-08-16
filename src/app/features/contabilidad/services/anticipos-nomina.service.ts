@@ -6,6 +6,8 @@ import { AuthService } from '../../../core/services/auth.service';
 import {
   AnticipoNomina,
   AnticipoNominaDetalle,
+  anticipoAfectaNomina,
+  ComprobanteEntregaAnticipo,
   RegistrarAnticipoInput,
   ResumenAnticipoNomina
 } from '../models/anticipos-nomina.models';
@@ -107,14 +109,11 @@ export class AnticiposNominaService {
     return lineas;
   }
 
-  /**
-   * @param lineasConfirmadas Lineas revisadas por el contador en el dialogo. Si no vienen (o la
-   * contabilidad esta desactivada) el anticipo se registra sin asiento.
-   */
-  async registrarAnticipo(
+  /** Guarda una propuesta editable. Nunca crea asiento ni la expone como descuento del rol. */
+  async guardarBorrador(
     input: RegistrarAnticipoInput,
     detalles: AnticipoNominaDetalle[],
-    lineasConfirmadas?: AsientoContableLinea[]
+    anticipoId?: string
   ): Promise<string> {
     if (!/^\d{4}-\d{2}$/.test(input.periodo)) {
       throw new Error('Selecciona un periodo valido para el anticipo.');
@@ -126,15 +125,25 @@ export class AnticiposNominaService {
     if (validos.length === 0) {
       throw new Error('Selecciona al menos un empleado con monto mayor a cero.');
     }
-    await this.validarPeriodoDisponible(input.periodo);
 
-    const modoAsiento = await this.getModoAsiento();
     const anio = input.periodo.slice(0, 4);
     const total = this.roundToTwo(validos.reduce((suma, detalle) => suma + detalle.monto, 0));
     const timestamp = Date.now();
+    const existente = anticipoId ? await this.getAnticipoDetalle(anticipoId) : null;
+    if (anticipoId && !existente) {
+      throw new Error('El borrador ya no existe.');
+    }
+    if (existente && existente.anticipo.estado !== 'BORRADOR') {
+      throw new Error('Solo se pueden editar anticipos en borrador.');
+    }
+
+    const id = anticipoId || push(ref(this.database, `${this.getNominaPath()}/anticipos`)).key;
+    if (!id) {
+      throw new Error('No se pudo generar el identificador del anticipo.');
+    }
 
     const anticipo: AnticipoNomina = {
-      numero: await this.reservarNumero(anio),
+      numero: existente?.anticipo.numero || await this.reservarNumero(anio),
       periodo: input.periodo,
       fecha: input.fecha,
       concepto: this.conceptoEfectivo(input.concepto, input.periodo),
@@ -142,30 +151,21 @@ export class AnticiposNominaService {
       cuentaOrigenId: input.cuentaOrigenId,
       total,
       totalEmpleados: validos.length,
-      estado: 'REGISTRADO',
-      modoAsiento,
+      estado: 'BORRADOR',
+      modoAsiento: existente?.anticipo.modoAsiento ?? await this.getModoAsiento(),
       asientoId: null,
       asientoReversionId: null,
+      comprobanteEntrega: existente?.anticipo.comprobanteEntrega ?? null,
       rolId: null,
       rolNumero: null,
-      creadoEn: timestamp,
+      creadoEn: existente?.anticipo.creadoEn ?? timestamp,
       actualizadoEn: timestamp,
+      registradoEn: null,
       descontadoEn: null,
-      anuladoEn: null
+      anuladoEn: null,
+      confirmacionToken: null,
+      confirmacionEn: null
     };
-
-    // push() sin valor solo reserva la clave en el cliente: sirve para referenciar el anticipo
-    // desde el asiento antes de escribirlo.
-    const anticipoRef = push(ref(this.database, `${this.getNominaPath()}/anticipos`));
-    const anticipoId = anticipoRef.key!;
-
-    // El asiento va primero: si el periodo contable esta cerrado o falta una cuenta, la operacion
-    // falla sin dejar un anticipo huerfano que nadie contabilizo.
-    const asientoId = lineasConfirmadas?.length && (await this.integracionContable.contabilidadActiva())
-      ? await this.guardarAsiento(anticipo, anticipoId, lineasConfirmadas, modoAsiento)
-      : null;
-
-    await set(anticipoRef, { ...anticipo, asientoId });
 
     const detallesUpdates: Record<string, AnticipoNominaDetalle> = {};
     for (const detalle of validos) {
@@ -177,7 +177,144 @@ export class AnticiposNominaService {
         descontadoEn: null
       };
     }
-    await set(ref(this.database, `${this.getNominaPath()}/anticiposDetalles/${anticipoId}`), detallesUpdates);
+    await update(ref(this.database, this.getNominaPath()), {
+      [`anticipos/${id}`]: anticipo,
+      [`anticiposDetalles/${id}`]: detallesUpdates
+    });
+
+    return id;
+  }
+
+  async actualizarBorrador(
+    anticipoId: string,
+    input: RegistrarAnticipoInput,
+    detalles: AnticipoNominaDetalle[]
+  ): Promise<string> {
+    return this.guardarBorrador(input, detalles, anticipoId);
+  }
+
+  /** Vincula el unico respaldo consolidado. El archivo ya fue validado y subido por Archivos. */
+  async adjuntarComprobanteEntrega(anticipoId: string, comprobante: ComprobanteEntregaAnticipo): Promise<void> {
+    const resumen = await this.getAnticipoDetalle(anticipoId);
+    if (!resumen || resumen.anticipo.estado !== 'BORRADOR') {
+      throw new Error('El comprobante solo se puede cambiar mientras el anticipo esta en borrador.');
+    }
+    await update(ref(this.database, `${this.getNominaPath()}/anticipos/${anticipoId}`), {
+      comprobanteEntrega: comprobante,
+      actualizadoEn: Date.now()
+    });
+  }
+
+  async removerComprobanteEntrega(anticipoId: string): Promise<void> {
+    const resumen = await this.getAnticipoDetalle(anticipoId);
+    if (!resumen || resumen.anticipo.estado !== 'BORRADOR') {
+      throw new Error('El comprobante solo se puede cambiar mientras el anticipo esta en borrador.');
+    }
+    await update(ref(this.database, `${this.getNominaPath()}/anticipos/${anticipoId}`), {
+      comprobanteEntrega: null,
+      actualizadoEn: Date.now()
+    });
+  }
+
+  /**
+   * Confirma que el dinero salio. Un bloqueo transaccional evita dobles asientos y el vinculo por
+   * origen permite terminar limpiamente un reintento si el asiento se creo antes de actualizar la
+   * cabecera.
+   */
+  async confirmarEntrega(anticipoId: string, lineasConfirmadas?: AsientoContableLinea[]): Promise<string> {
+    const token = `${this.authService.currentUser()?.uid ?? 'usuario'}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const cabeceraRef = ref(this.database, `${this.getNominaPath()}/anticipos/${anticipoId}`);
+    const ahora = Date.now();
+    const bloqueo = await runTransaction(cabeceraRef, (actual: AnticipoNomina | null) => {
+      if (!actual || actual.estado === 'REGISTRADO' || actual.estado === 'DESCONTADO') {
+        return;
+      }
+      if (actual.estado !== 'BORRADOR') {
+        return;
+      }
+      const bloqueoVigente = !!actual.confirmacionToken
+        && ahora - Number(actual.confirmacionEn ?? 0) < 5 * 60 * 1000;
+      if (bloqueoVigente) {
+        return;
+      }
+      return { ...actual, confirmacionToken: token, confirmacionEn: ahora };
+    });
+
+    if (!bloqueo.committed) {
+      const actual = await this.getAnticipoDetalle(anticipoId);
+      if (actual?.anticipo.estado === 'REGISTRADO' || actual?.anticipo.estado === 'DESCONTADO') {
+        return anticipoId;
+      }
+      throw new Error('Otra sesion esta confirmando este anticipo. Espera un momento y vuelve a intentar.');
+    }
+
+    try {
+      const resumen = await this.getAnticipoDetalle(anticipoId);
+      if (!resumen || resumen.anticipo.confirmacionToken !== token) {
+        throw new Error('No se pudo asegurar la confirmacion del anticipo.');
+      }
+      const anticipo = resumen.anticipo;
+      const validos = resumen.detalles.filter((detalle) => this.roundToTwo(detalle.monto) > 0);
+      if (!/^\d{4}-\d{2}$/.test(anticipo.periodo) || !anticipo.fecha || validos.length === 0) {
+        throw new Error('El borrador esta incompleto. Revisa el periodo, la fecha y los empleados.');
+      }
+      await this.validarPeriodoDisponible(anticipo.periodo);
+
+      const contabilidadActiva = await this.integracionContable.contabilidadActiva();
+      if (contabilidadActiva && !lineasConfirmadas?.length) {
+        throw new Error('Revisa y confirma el asiento antes de registrar la entrega.');
+      }
+      const modoAsiento = await this.getModoAsiento();
+      let asientoId = await this.getAsientoIdPorOrigen(anticipoId);
+      if (!asientoId && contabilidadActiva) {
+        asientoId = await this.guardarAsiento(anticipo, anticipoId, lineasConfirmadas!, modoAsiento);
+      }
+
+      const registradoEn = Date.now();
+      await update(cabeceraRef, {
+        estado: 'REGISTRADO',
+        modoAsiento,
+        asientoId: asientoId ?? null,
+        actualizadoEn: registradoEn,
+        registradoEn,
+        confirmacionToken: null,
+        confirmacionEn: null
+      });
+      return anticipoId;
+    } catch (error) {
+      await runTransaction(cabeceraRef, (actual: AnticipoNomina | null) => {
+        if (!actual || actual.confirmacionToken !== token || actual.estado !== 'BORRADOR') {
+          return;
+        }
+        return { ...actual, confirmacionToken: null, confirmacionEn: null };
+      });
+      throw error;
+    }
+  }
+
+  async descartarBorrador(anticipoId: string): Promise<void> {
+    const resumen = await this.getAnticipoDetalle(anticipoId);
+    if (!resumen || resumen.anticipo.estado !== 'BORRADOR') {
+      throw new Error('Solo se pueden descartar anticipos en borrador.');
+    }
+    const timestamp = Date.now();
+    await update(ref(this.database, `${this.getNominaPath()}/anticipos/${anticipoId}`), {
+      estado: 'ANULADO',
+      actualizadoEn: timestamp,
+      anuladoEn: timestamp,
+      confirmacionToken: null,
+      confirmacionEn: null
+    });
+  }
+
+  /** Camino compatible para consumidores anteriores: persiste primero y confirma el mismo ID. */
+  async registrarAnticipo(
+    input: RegistrarAnticipoInput,
+    detalles: AnticipoNominaDetalle[],
+    lineasConfirmadas?: AsientoContableLinea[]
+  ): Promise<string> {
+    const anticipoId = await this.guardarBorrador(input, detalles);
+    await this.confirmarEntrega(anticipoId, lineasConfirmadas);
 
     return anticipoId;
   }
@@ -193,6 +330,10 @@ export class AnticiposNominaService {
     }
     if (resumen.anticipo.estado === 'ANULADO') {
       throw new Error('El anticipo ya esta anulado.');
+    }
+    if (resumen.anticipo.estado === 'BORRADOR') {
+      await this.descartarBorrador(anticipoId);
+      return;
     }
     if (resumen.anticipo.estado === 'DESCONTADO') {
       throw new Error('El anticipo ya se descontó en un rol aprobado. Reversa primero el rol.');
@@ -328,7 +469,7 @@ export class AnticiposNominaService {
     const raw = snapshot.val() as Record<string, AnticipoNomina>;
     const resumenes: ResumenAnticipoNomina[] = [];
     for (const [id, anticipo] of Object.entries(raw)) {
-      if (anticipo.periodo !== periodo || anticipo.estado !== 'REGISTRADO') {
+      if (anticipo.periodo !== periodo || !anticipoAfectaNomina(anticipo.estado)) {
         continue;
       }
       const detallesSnapshot = await get(ref(this.database, `${this.getNominaPath()}/anticiposDetalles/${id}`));
@@ -372,6 +513,12 @@ export class AnticiposNominaService {
   private async getModoAsiento(): Promise<ModoAsientoAutomatico> {
     const snapshot = await get(ref(this.database, `${this.getNominaPath()}/configuracion/modoAsiento`));
     return snapshot.val() === 'APROBADO' ? 'APROBADO' : 'BORRADOR';
+  }
+
+  private async getAsientoIdPorOrigen(anticipoId: string): Promise<string | null> {
+    const snapshot = await get(this.getAsientoOrigenRef('ANTICIPO_NOMINA', anticipoId));
+    const asientoId = snapshot.child('asientoId').val();
+    return typeof asientoId === 'string' && asientoId ? asientoId : null;
   }
 
   private async guardarAsiento(

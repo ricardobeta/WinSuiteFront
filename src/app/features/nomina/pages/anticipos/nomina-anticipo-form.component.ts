@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDatepickerModule } from '@angular/material/datepicker';
@@ -12,19 +12,25 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, lastValueFrom } from 'rxjs';
 
 import { AuthService } from '../../../../core/services/auth.service';
+import { AuthorizationService } from '../../../../core/services/authorization.service';
+import { ArchivosService } from '../../../../core/services/archivos.service';
 import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
 import { TwoDecimalInputDirective } from '../../../../shared/directives/two-decimal-input.directive';
-import { dateAIso } from '../../../../shared/utils/fecha-input.util';
+import { dateAIso, isoADate } from '../../../../shared/utils/fecha-input.util';
 import {
   RevisarAsientoData,
   RevisarAsientoDialogComponent
 } from '../../../contabilidad/components/revisar-asiento-dialog/revisar-asiento-dialog.component';
 import { CuentaContableAutocompleteComponent } from '../../../contabilidad/components/cuenta-contable-autocomplete/cuenta-contable-autocomplete.component';
-import { AnticipoNominaDetalle } from '../../../contabilidad/models/anticipos-nomina.models';
+import {
+  AnticipoNomina,
+  AnticipoNominaDetalle,
+  ComprobanteEntregaAnticipo
+} from '../../../contabilidad/models/anticipos-nomina.models';
 import { AsientoContableLinea, CuentaContable } from '../../../contabilidad/models/contabilidad.models';
 import { EmpleadoNomina } from '../../../contabilidad/models/nomina.models';
 import { AnticiposNominaService } from '../../../contabilidad/services/anticipos-nomina.service';
@@ -34,6 +40,7 @@ import {
 } from '../../../contabilidad/services/nomina-calculos.util';
 import { IntegracionContableService } from '../../../contabilidad/services/integracion-contable.service';
 import { NominaService } from '../../../contabilidad/services/nomina.service';
+import { NominaPdfApiService } from '../../../contabilidad/services/nomina-pdf-api.service';
 import { PlanCuentasService } from '../../../contabilidad/services/plan-cuentas.service';
 
 /** Fila editable de la tabla de empleados. */
@@ -86,9 +93,15 @@ interface BasePeriodo {
     <section class="anticipo-form">
       <header class="surface-card page-header">
         <div class="header-copy">
-          <p class="eyebrow">Nomina · Anticipos</p>
-          <h2>Nuevo anticipo</h2>
-          <p>Selecciona uno o varios empleados y define el monto que recibe cada uno.</p>
+          <div class="title-line">
+            <h2>{{ anticipoId() ? 'Preparar entrega del anticipo' : 'Nuevo anticipo' }}</h2>
+            @if (numero()) { <span class="draft-chip">Borrador · {{ numero() }}</span> }
+          </div>
+          <p>
+            {{ anticipoId()
+              ? 'Revisa los valores, emite las constancias y confirma cuando el dinero haya sido entregado.'
+              : 'Selecciona empleados y guarda la propuesta antes de emitir documentos o afectar la nomina.' }}
+          </p>
         </div>
         <a mat-stroked-button routerLink="/workspace/contabilidad/nomina/anticipos">
           <mat-icon>arrow_back</mat-icon>
@@ -121,7 +134,7 @@ interface BasePeriodo {
 
           <mat-form-field appearance="outline">
             <mat-label>Fecha de entrega</mat-label>
-            <input matInput [matDatepicker]="pickerEntrega" [(ngModel)]="fechaEntregaDate" name="fechaEntrega" />
+            <input matInput [matDatepicker]="pickerEntrega" [ngModel]="fechaEntregaDate()" (ngModelChange)="fechaEntregaDate.set($event)" name="fechaEntrega" />
             <mat-datepicker-toggle matSuffix [for]="pickerEntrega"></mat-datepicker-toggle>
             <mat-datepicker #pickerEntrega></mat-datepicker>
           </mat-form-field>
@@ -141,6 +154,45 @@ interface BasePeriodo {
           <mat-hint>Se copia a cada linea del asiento junto al nombre del empleado</mat-hint>
         </mat-form-field>
       </section>
+
+      @if (anticipoId()) {
+        <section class="surface-card entrega-card">
+          <div class="entrega-copy">
+            <span class="step-marker"><mat-icon>draw</mat-icon></span>
+            <div>
+              <h3>Constancias y respaldo de entrega</h3>
+              <p>Descarga una hoja por empleado para las firmas. El comprobante bancario consolidado es opcional.</p>
+            </div>
+          </div>
+
+          <div class="entrega-actions">
+            <button mat-stroked-button type="button" (click)="descargarConstancias()" [disabled]="cambiosSinGuardar() || descargandoPdf()">
+              <mat-icon>picture_as_pdf</mat-icon>
+              {{ descargandoPdf() ? 'Generando…' : 'Constancias para firmar' }}
+            </button>
+            <input #comprobanteInput hidden type="file" accept=".pdf,application/pdf" (change)="subirComprobante($event)" />
+            <button mat-stroked-button type="button" (click)="comprobanteInput.click()" [disabled]="subiendoComprobante() || cambiosSinGuardar()">
+              <mat-icon>{{ comprobante() ? 'published_with_changes' : 'upload_file' }}</mat-icon>
+              {{ subiendoComprobante() ? 'Subiendo…' : (comprobante() ? 'Reemplazar respaldo' : 'Adjuntar respaldo') }}
+            </button>
+          </div>
+
+          @if (comprobante()) {
+            <article class="archivo-row">
+              <span class="pdf-mark">PDF</span>
+              <div>
+                <strong>{{ comprobante()!.nombre }}</strong>
+                <span>{{ formatBytes(comprobante()!.sizeBytes) }} · Respaldo consolidado</span>
+              </div>
+              <button mat-icon-button type="button" (click)="abrirComprobante()" matTooltip="Abrir respaldo" aria-label="Abrir respaldo">
+                <mat-icon>open_in_new</mat-icon>
+              </button>
+            </article>
+          } @else {
+            <p class="archivo-hint"><mat-icon>info</mat-icon> Puedes continuar sin adjunto cuando no exista un comprobante bancario.</p>
+          }
+        </section>
+      }
 
       <section class="surface-card table-card">
         <header class="table-head">
@@ -303,15 +355,24 @@ interface BasePeriodo {
         <div class="resumen-acciones">
           <button mat-button type="button" (click)="limpiar()" [disabled]="seleccion().size === 0">Limpiar</button>
           <button
+            mat-stroked-button
+            type="button"
+            (click)="guardarBorrador()"
+            [disabled]="!puedeGenerar() || procesando() || !cambiosSinGuardar()"
+          >
+            <mat-icon>save</mat-icon>
+            {{ anticipoId() ? 'Guardar cambios' : 'Guardar borrador' }}
+          </button>
+          <button
             mat-raised-button
             color="primary"
             type="button"
             (click)="generar()"
-            [disabled]="!puedeGenerar() || procesando()"
+            [disabled]="!puedeConfirmar() || procesando()"
             [matTooltip]="tooltipGenerar()"
           >
             <mat-icon>account_balance_wallet</mat-icon>
-            Generar anticipo
+            Confirmar entrega
           </button>
         </div>
       </footer>
@@ -320,9 +381,10 @@ interface BasePeriodo {
   styles: [`
     .anticipo-form { display: grid; gap: 1rem; padding-bottom: 1rem; }
     .page-header { padding: 1.25rem 1.5rem; display: flex; justify-content: space-between; gap: 1rem; align-items: end; flex-wrap: wrap; background: var(--tc-surface-container-lowest); }
-    .eyebrow { margin: 0 0 .35rem; text-transform: uppercase; letter-spacing: .12em; font-size: .72rem; color: var(--primary); }
     .page-header h2 { margin: 0; font-size: 1.6rem; }
-    .header-copy > p:not(.eyebrow) { margin: .4rem 0 0; color: var(--muted-foreground); }
+    .header-copy > p { margin: .4rem 0 0; color: var(--muted-foreground); max-width: 70ch; }
+    .title-line { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
+    .draft-chip { display: inline-flex; min-height: 28px; align-items: center; padding: .15rem .65rem; border-radius: 999px; background: color-mix(in srgb, #f59e0b 16%, var(--tc-surface-container-lowest)); color: #8a4b08; font-size: .78rem; font-weight: 750; }
     .form-card, .table-card { padding: 1.25rem; background: var(--tc-surface-container-lowest); }
     .form-card h3, .table-head h3 { margin: 0 0 .85rem; font-size: 1rem; }
     .grid-datos { display: grid; grid-template-columns: minmax(180px, 220px) minmax(180px, 220px) minmax(260px, 1fr); gap: .75rem; align-items: start; }
@@ -360,9 +422,25 @@ interface BasePeriodo {
     .empty-state p { color: var(--muted-foreground); }
     .error-box { padding: .8rem 1rem; border-radius: .5rem; background: color-mix(in srgb, #b3261e 12%, transparent); color: #b3261e; }
     .aviso-box { display: flex; gap: .6rem; align-items: center; padding: .8rem 1rem; border-radius: .5rem; background: color-mix(in srgb, #f59e0b 14%, transparent); }
+    .entrega-card { padding: 1.25rem; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem 1.5rem; align-items: center; background: color-mix(in srgb, var(--primary) 5%, var(--tc-surface-container-lowest)); }
+    .entrega-copy { display: flex; gap: .85rem; align-items: center; min-width: 0; }
+    .entrega-copy h3, .entrega-copy p { margin: 0; }
+    .entrega-copy p { margin-top: .25rem; color: var(--muted-foreground); max-width: 66ch; }
+    .step-marker { width: 44px; height: 44px; flex: 0 0 44px; display: grid; place-items: center; border-radius: 14px; background: color-mix(in srgb, var(--primary) 14%, var(--tc-surface-container-lowest)); color: var(--primary); }
+    .entrega-actions { display: flex; gap: .6rem; flex-wrap: wrap; justify-content: flex-end; }
+    .entrega-actions button { min-height: 44px; }
+    .archivo-row { grid-column: 1 / -1; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: .75rem; align-items: center; padding: .8rem 1rem; border-radius: 14px; background: var(--tc-surface-container-lowest); }
+    .archivo-row strong, .archivo-row span { display: block; overflow-wrap: anywhere; }
+    .archivo-row span { margin-top: .15rem; color: var(--muted-foreground); font-size: .82rem; }
+    .pdf-mark { width: 42px; height: 42px; display: grid !important; place-items: center; border-radius: 12px; background: #a61b1b; color: #fff !important; font-size: .72rem !important; font-weight: 800; }
+    .archivo-hint { grid-column: 1 / -1; display: flex; align-items: center; gap: .45rem; margin: 0; color: var(--muted-foreground); font-size: .86rem; }
+    .archivo-hint mat-icon { font-size: 1.1rem; width: 1.1rem; height: 1.1rem; }
     @media (max-width: 900px) {
       .grid-datos { grid-template-columns: 1fr; }
       .filtros mat-form-field { width: 100%; }
+      .entrega-card { grid-template-columns: 1fr; }
+      .entrega-actions { justify-content: stretch; }
+      .entrega-actions button { flex: 1 1 220px; }
     }
   `]
 })
@@ -372,6 +450,10 @@ export class NominaAnticipoFormComponent implements OnInit {
   private readonly planCuentasService = inject(PlanCuentasService);
   private readonly integracionContable = inject(IntegracionContableService);
   private readonly authService = inject(AuthService);
+  private readonly authorization = inject(AuthorizationService);
+  private readonly archivosService = inject(ArchivosService);
+  private readonly pdfApi = inject(NominaPdfApiService);
+  private readonly route = inject(ActivatedRoute);
   private readonly dialog = inject(MatDialog);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
@@ -388,6 +470,12 @@ export class NominaAnticipoFormComponent implements OnInit {
   protected readonly procesando = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly avisoRolBorrador = signal(false);
+  protected readonly anticipoId = signal<string | null>(null);
+  protected readonly numero = signal('');
+  protected readonly comprobante = signal<ComprobanteEntregaAnticipo | null>(null);
+  protected readonly subiendoComprobante = signal(false);
+  protected readonly descargandoPdf = signal(false);
+  private readonly huellaGuardada = signal('');
 
   protected readonly periodo = signal(new Date().toISOString().slice(0, 7));
   protected readonly concepto = signal('');
@@ -403,7 +491,7 @@ export class NominaAnticipoFormComponent implements OnInit {
    * Referencia Date estable para el datepicker: un getter que derive un Date nuevo por ciclo
    * haria que matDatepicker lo lea como valor distinto en cada deteccion de cambios.
    */
-  protected fechaEntregaDate: Date | null = new Date();
+  protected readonly fechaEntregaDate = signal<Date | null>(new Date());
 
   protected readonly departamentos = computed(() => Array.from(
     new Set(this.filas().map((fila) => fila.departamento).filter((valor) => !!valor))
@@ -482,7 +570,20 @@ export class NominaAnticipoFormComponent implements OnInit {
   protected readonly puedeGenerar = computed(() =>
     this.seleccionados().length > 0 && !!this.concepto().trim() && !!this.periodo()
   );
+  protected readonly cambiosSinGuardar = computed(() => this.huellaActual() !== this.huellaGuardada());
+  protected readonly puedeConfirmar = computed(() =>
+    !!this.anticipoId()
+    && !this.cambiosSinGuardar()
+    && this.puedeGenerar()
+    && this.authorization.canAccess('contabilidad', 'update')
+  );
   protected readonly tooltipGenerar = computed(() => {
+    if (!this.anticipoId()) {
+      return 'Guarda el borrador antes de confirmar la entrega';
+    }
+    if (this.cambiosSinGuardar()) {
+      return 'Guarda los cambios antes de confirmar la entrega';
+    }
     if (!this.concepto().trim()) {
       return 'Escribe el concepto del anticipo';
     }
@@ -495,13 +596,16 @@ export class NominaAnticipoFormComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     try {
       await this.authService.waitForInitialBootstrap();
+      const anticipoId = this.route.snapshot.paramMap.get('anticipoId');
+      this.anticipoId.set(anticipoId);
       this.concepto.set(this.conceptoPorDefecto(this.periodo()));
 
-      const [empleados, cuentas, configNomina, configIntegracion] = await Promise.all([
+      const [empleados, cuentas, configNomina, configIntegracion, borrador] = await Promise.all([
         firstValueFrom(this.nominaService.getEmpleados()),
         this.planCuentasService.getCuentasOnce(),
         this.nominaService.getConfiguracionOnce(),
-        this.integracionContable.getConfiguracionOnce()
+        this.integracionContable.getConfiguracionOnce(),
+        anticipoId ? this.anticiposService.getAnticipoDetalle(anticipoId) : Promise.resolve(null)
       ]);
 
       const activos = empleados.filter((empleado) => empleado.estado === 'ACTIVO');
@@ -520,7 +624,17 @@ export class NominaAnticipoFormComponent implements OnInit {
       this.porcentajeIess.set(Number(configNomina.porcentajeAportePersonalIess ?? 9.45));
       this.cuentaAnticipoId.set(configNomina.cuentaAnticiposEmpleadosId ?? '');
       this.cuentaOrigenId.set(configIntegracion.cuentaCajaBancoId ?? '');
+      if (anticipoId) {
+        if (!borrador) {
+          throw new Error('El borrador de anticipo ya no existe.');
+        }
+        if (borrador.anticipo.estado !== 'BORRADOR') {
+          throw new Error('Este anticipo ya no se puede editar porque fue confirmado o anulado.');
+        }
+        this.aplicarBorrador(borrador.anticipo, borrador.detalles);
+      }
       await this.revisarRolDelPeriodo();
+      this.huellaGuardada.set(anticipoId ? this.huellaActual() : '');
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : 'No se pudieron cargar los datos del anticipo.');
     } finally {
@@ -643,11 +757,11 @@ export class NominaAnticipoFormComponent implements OnInit {
   }
 
   /**
-   * Registro en dos pasos, igual que compras y cuentas por pagar: se propone el asiento y el
-   * contador lo revisa antes de confirmar. Si cancela, no se registra nada.
+   * Confirma un borrador ya persistido. Si la contabilidad esta activa, conserva la revision del
+   * asiento como ultima barrera antes de declarar que el dinero fue entregado.
    */
   protected async generar(): Promise<void> {
-    if (!this.puedeGenerar()) {
+    if (!this.puedeConfirmar()) {
       return;
     }
     this.error.set(null);
@@ -657,7 +771,7 @@ export class NominaAnticipoFormComponent implements OnInit {
 
       if (!(await this.integracionContable.contabilidadActiva())) {
         this.procesando.set(false);
-        this.confirmarSinAsiento(detalles);
+        this.confirmarSinAsiento();
         return;
       }
 
@@ -687,21 +801,21 @@ export class NominaAnticipoFormComponent implements OnInit {
       }
 
       this.procesando.set(true);
-      await this.registrar(detalles, confirmadas);
+      await this.registrarConfirmado(confirmadas);
     } catch (error) {
-      this.error.set(error instanceof Error ? error.message : 'No se pudo generar el anticipo.');
+      this.error.set(error instanceof Error ? error.message : 'No se pudo confirmar la entrega.');
     } finally {
       this.procesando.set(false);
     }
   }
 
-  private confirmarSinAsiento(detalles: AnticipoNominaDetalle[]): void {
+  private confirmarSinAsiento(): void {
     const dialogRef = this.dialog.open(ConfirmDialogComponent, {
       width: '440px',
       data: {
-        title: 'Registrar anticipo',
-        message: 'La contabilidad automatica esta desactivada: el anticipo se registrara sin generar asiento. Continuar?',
-        confirmText: 'Registrar'
+        title: 'Confirmar entrega',
+        message: `Confirma que se entregaron ${this.total().toFixed(2)} USD a ${this.seleccionados().length} empleado(s). La contabilidad automatica esta desactivada y no se generara asiento.`,
+        confirmText: 'Confirmar entrega'
       }
     });
 
@@ -711,29 +825,153 @@ export class NominaAnticipoFormComponent implements OnInit {
       }
       this.procesando.set(true);
       try {
-        await this.registrar(detalles);
+        await this.registrarConfirmado();
       } catch (error) {
-        this.error.set(error instanceof Error ? error.message : 'No se pudo generar el anticipo.');
+        this.error.set(error instanceof Error ? error.message : 'No se pudo confirmar la entrega.');
       } finally {
         this.procesando.set(false);
       }
     });
   }
 
-  private async registrar(detalles: AnticipoNominaDetalle[], lineas?: AsientoContableLinea[]): Promise<void> {
-    await this.anticiposService.registrarAnticipo({
-      periodo: this.periodo(),
-      fecha: dateAIso(this.fechaEntregaDate),
-      concepto: this.concepto(),
-      cuentaAnticipoId: this.cuentaAnticipoId(),
-      cuentaOrigenId: this.cuentaOrigenId()
-    }, detalles, lineas);
+  protected async guardarBorrador(): Promise<void> {
+    if (!this.puedeGenerar()) {
+      return;
+    }
+    const idActual = this.anticipoId();
+    const permitido = idActual
+      ? this.authorization.canAccess('contabilidad', 'update')
+      : this.authorization.canAccess('contabilidad', 'create');
+    if (!permitido) {
+      this.error.set('No tienes permiso para guardar este borrador.');
+      return;
+    }
+
+    this.error.set(null);
+    this.procesando.set(true);
+    try {
+      const id = await this.anticiposService.guardarBorrador(
+        this.inputActual(),
+        this.construirDetalles(),
+        idActual ?? undefined
+      );
+      const resumen = await this.anticiposService.getAnticipoDetalle(id);
+      this.anticipoId.set(id);
+      this.numero.set(resumen?.anticipo.numero ?? this.numero());
+      this.comprobante.set(resumen?.anticipo.comprobanteEntrega ?? this.comprobante());
+      this.huellaGuardada.set(this.huellaActual());
+      this.toast(idActual ? 'Cambios del borrador guardados.' : 'Borrador guardado.', 'save');
+      if (!idActual) {
+        await this.router.navigate(
+          ['/workspace/contabilidad/nomina/anticipos', id, 'editar'],
+          { replaceUrl: true }
+        );
+      }
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : 'No se pudo guardar el borrador.');
+    } finally {
+      this.procesando.set(false);
+    }
+  }
+
+  protected async subirComprobante(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement | null;
+    const file = input?.files?.[0];
+    if (input) {
+      input.value = '';
+    }
+    const anticipoId = this.anticipoId();
+    if (!file || !anticipoId || this.cambiosSinGuardar()) {
+      return;
+    }
+    if (file.name.split('.').pop()?.toLowerCase() !== 'pdf') {
+      this.error.set('El respaldo de entrega debe ser un archivo PDF.');
+      return;
+    }
+
+    this.error.set(null);
+    this.subiendoComprobante.set(true);
+    try {
+      const resultado = await lastValueFrom(
+        this.archivosService.uploadArchivo(file, { sourceModule: 'nomina-anticipos' })
+      );
+      if (!resultado.item) {
+        throw new Error('No se recibio la referencia del archivo cargado.');
+      }
+      const item = resultado.item;
+      const comprobante: ComprobanteEntregaAnticipo = {
+        archivoId: item.id,
+        nombre: item.name,
+        storagePath: item.storagePath,
+        downloadUrl: item.downloadUrl,
+        sizeBytes: item.sizeBytes,
+        subidoEn: item.uploadedAt,
+        subidoPor: item.uploadedById ?? null
+      };
+      await this.anticiposService.adjuntarComprobanteEntrega(anticipoId, comprobante);
+      this.comprobante.set(comprobante);
+      this.toast('Respaldo de entrega adjuntado.', 'attach_file');
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : 'No se pudo adjuntar el respaldo.');
+    } finally {
+      this.subiendoComprobante.set(false);
+    }
+  }
+
+  protected abrirComprobante(): void {
+    const url = this.comprobante()?.downloadUrl;
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+    }
+  }
+
+  protected async descargarConstancias(): Promise<void> {
+    const anticipoId = this.anticipoId();
+    if (!anticipoId || this.cambiosSinGuardar()) {
+      return;
+    }
+    this.error.set(null);
+    this.descargandoPdf.set(true);
+    try {
+      const blob = await this.pdfApi.descargarConstanciasAnticipo(anticipoId);
+      this.guardarBlob(blob, `constancias-${this.numero() || anticipoId}.pdf`);
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : 'No se pudieron generar las constancias.');
+    } finally {
+      this.descargandoPdf.set(false);
+    }
+  }
+
+  protected formatBytes(bytes: number): string {
+    return bytes < 1024 * 1024
+      ? `${Math.max(0, bytes / 1024).toFixed(1)} KB`
+      : `${Math.max(0, bytes / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  private async registrarConfirmado(lineas?: AsientoContableLinea[]): Promise<void> {
+    const anticipoId = this.anticipoId();
+    if (!anticipoId) {
+      throw new Error('Guarda el borrador antes de confirmar la entrega.');
+    }
+    await this.anticiposService.confirmarEntrega(anticipoId, lineas);
 
     this.toast(
-      detalles.length === 1 ? 'Anticipo registrado.' : `Anticipo registrado para ${detalles.length} empleados.`,
+      this.seleccionados().length === 1
+        ? 'Entrega confirmada. El anticipo ya esta pendiente de descuento.'
+        : `Entrega confirmada para ${this.seleccionados().length} empleados.`,
       'account_balance_wallet'
     );
     await this.router.navigate(['/workspace/contabilidad/nomina/anticipos']);
+  }
+
+  private inputActual() {
+    return {
+      periodo: this.periodo(),
+      fecha: dateAIso(this.fechaEntregaDate()),
+      concepto: this.concepto(),
+      cuentaAnticipoId: this.cuentaAnticipoId(),
+      cuentaOrigenId: this.cuentaOrigenId()
+    };
   }
 
   private construirDetalles(): AnticipoNominaDetalle[] {
@@ -795,6 +1033,47 @@ export class NominaAnticipoFormComponent implements OnInit {
   private montoPorPorcentaje(fila: FilaEmpleado, porcentaje: number): number {
     const base = this.base(fila);
     return Math.min(this.redondear(base.sueldoPeriodo * (porcentaje / 100)), base.disponible);
+  }
+
+  private aplicarBorrador(anticipo: AnticipoNomina, detalles: AnticipoNominaDetalle[]): void {
+    const montos = new Map(detalles.map((detalle) => [detalle.empleadoId, Number(detalle.monto ?? 0)]));
+    this.numero.set(anticipo.numero ?? '');
+    this.periodo.set(anticipo.periodo ?? '');
+    this.fechaEntregaDate.set(isoADate(anticipo.fecha));
+    this.concepto.set(anticipo.concepto ?? '');
+    this.cuentaAnticipoId.set(anticipo.cuentaAnticipoId ?? '');
+    this.cuentaOrigenId.set(anticipo.cuentaOrigenId ?? '');
+    this.comprobante.set(anticipo.comprobanteEntrega ?? null);
+    this.seleccion.set(new Set(detalles.filter((detalle) => Number(detalle.monto ?? 0) > 0).map((detalle) => detalle.empleadoId)));
+    this.filas.update((filas) => filas.map((fila) => ({
+      ...fila,
+      monto: this.redondear(montos.get(fila.empleadoId) ?? 0)
+    })));
+  }
+
+  /** Huella determinista: cualquier cambio visible obliga a guardar antes de imprimir o confirmar. */
+  private huellaActual(): string {
+    return JSON.stringify({
+      periodo: this.periodo(),
+      fecha: dateAIso(this.fechaEntregaDate()),
+      concepto: this.concepto().trim(),
+      cuentaAnticipoId: this.cuentaAnticipoId(),
+      cuentaOrigenId: this.cuentaOrigenId(),
+      detalles: this.construirDetalles()
+        .map((detalle) => ({ empleadoId: detalle.empleadoId, monto: detalle.monto }))
+        .sort((a, b) => a.empleadoId.localeCompare(b.empleadoId))
+    });
+  }
+
+  private guardarBlob(blob: Blob, nombre: string): void {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = nombre;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   }
 
   private conceptoPorDefecto(periodo: string): string {

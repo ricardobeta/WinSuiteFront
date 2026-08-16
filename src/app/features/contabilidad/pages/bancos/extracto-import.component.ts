@@ -22,6 +22,7 @@ import {
   ArchivoSelectorDialogResult
 } from '../../../../shared/components/archivo-selector-dialog/archivo-selector-dialog.component';
 import { ArchivoItem } from '../../../../shared/models/archivos.models';
+import { formatImporte, parseImporte } from '../../../../shared/utils/importe-input.util';
 import {
   AnalisisExtracto,
   CuentaBancaria,
@@ -320,7 +321,7 @@ type FormatoElegido = string;
             <div class="saldos-grid">
               <mat-form-field appearance="outline" subscriptSizing="dynamic">
                 <mat-label>Saldo inicial</mat-label>
-                <input matInput type="number" step="0.01" [(ngModel)]="saldoInicial" />
+                <input matInput type="text" inputmode="decimal" [(ngModel)]="saldoInicialTexto" />
               </mat-form-field>
               <span class="operador">+</span>
               <div class="movimientos-suma">
@@ -332,10 +333,10 @@ type FormatoElegido = string;
               <span class="operador">=</span>
               <mat-form-field appearance="outline" subscriptSizing="dynamic">
                 <mat-label>Saldo final</mat-label>
-                <input matInput type="number" step="0.01" [(ngModel)]="saldoFinal" />
+                <input matInput type="text" inputmode="decimal" [(ngModel)]="saldoFinalTexto" />
               </mat-form-field>
             </div>
-            @if (saldoInicial !== null && saldoFinal !== null) {
+            @if (saldoInicial() !== null && saldoFinal() !== null) {
               @if (saldosCuadran()) {
                 <p class="cuadre ok"><mat-icon>check_circle</mat-icon> Los saldos cuadran con los movimientos del archivo.</p>
               } @else {
@@ -545,8 +546,9 @@ export class ExtractoImportComponent {
   protected guardarPlantilla = true;
   protected nombrePlantilla = '';
   protected mapeoEditable!: MapeoExtracto;
-  protected saldoInicial: number | null = null;
-  protected saldoFinal: number | null = null;
+  /** Texto, no número: los importes van en input de texto para no perder el punto decimal. */
+  protected saldoInicialTexto = '';
+  protected saldoFinalTexto = '';
   protected referenciaCol: number | null = null;
   protected debitoCol: number | null = null;
   protected creditoCol: number | null = null;
@@ -564,13 +566,23 @@ export class ExtractoImportComponent {
     }));
   });
 
+  protected saldoInicial(): number | null {
+    return parseImporte(this.saldoInicialTexto);
+  }
+
+  protected saldoFinal(): number | null {
+    return parseImporte(this.saldoFinalTexto);
+  }
+
   /** inicial + movimientos - final: si no da cero, el archivo no está completo. */
   protected descuadreSaldos(): number {
-    if (this.saldoInicial === null || this.saldoFinal === null) {
+    const inicial = this.saldoInicial();
+    const final = this.saldoFinal();
+    if (inicial === null || final === null) {
       return 0;
     }
     const suma = this.analisis()?.sumaMovimientos ?? 0;
-    return Math.round((Number(this.saldoInicial) + suma - Number(this.saldoFinal)) * 100) / 100;
+    return Math.round((inicial + suma - final) * 100) / 100;
   }
 
   protected saldosCuadran(): boolean {
@@ -727,8 +739,8 @@ export class ExtractoImportComponent {
     this.nombrePlantilla = aplicada?.nombre ?? this.nombrePlantillaPorDefecto();
     this.mapeoEditable = structuredClone(analisis.mapeo);
     this.mapeoEditable.hojaIndex = analisis.hojaIndex;
-    this.saldoInicial = analisis.saldoInicialDetectado ?? null;
-    this.saldoFinal = analisis.saldoFinalDetectado ?? null;
+    this.saldoInicialTexto = formatImporte(analisis.saldoInicialDetectado);
+    this.saldoFinalTexto = formatImporte(analisis.saldoFinalDetectado);
     this.referenciaCol = analisis.mapeo.mapeo.referencia?.col ?? null;
     this.debitoCol = analisis.mapeo.mapeo.debito?.col ?? analisis.mapeo.mapeo.montoUnico?.col ?? null;
     this.creditoCol = analisis.mapeo.mapeo.credito?.col ?? null;
@@ -783,8 +795,8 @@ export class ExtractoImportComponent {
         guardarPlantilla: this.guardarPlantilla,
         plantillaId: this.analisis()?.plantillaId ?? null,
         nombrePlantilla: this.guardarPlantilla ? this.nombrePlantilla : null,
-        saldoInicial: this.saldoInicial === null ? null : Number(this.saldoInicial),
-        saldoFinal: this.saldoFinal === null ? null : Number(this.saldoFinal)
+        saldoInicial: this.saldoInicial(),
+        saldoFinal: this.saldoFinal()
       });
       this.resultado.set(resultado);
       this.paso.set('resumen');

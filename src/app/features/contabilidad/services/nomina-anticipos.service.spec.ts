@@ -2,7 +2,11 @@ import { TestBed } from '@angular/core/testing';
 import { Database } from '@angular/fire/database';
 
 import { AuthService } from '../../../core/services/auth.service';
-import { AnticipoNominaDetalle } from '../models/anticipos-nomina.models';
+import {
+  AnticipoNominaDetalle,
+  anticipoAfectaNomina,
+  anticipoEsOperativo
+} from '../models/anticipos-nomina.models';
 import { ConfiguracionNominaContable, RolPagoDetalle, RolPagoLinea } from '../models/nomina.models';
 import { AnticiposNominaService } from './anticipos-nomina.service';
 import { AsientosContablesService } from './asientos-contables.service';
@@ -264,5 +268,20 @@ describe('anticipos · base proporcional del periodo', () => {
   it('quien ingresa despues del periodo no devenga nada y no puede recibir anticipo de ese mes', () => {
     expect(calcularDiasTrabajadosPeriodo('2026-08-01', '2026-07')).toBe(0);
     expect(calcularProporcionalMensual(600, 0)).toBe(0);
+  });
+});
+
+describe('anticipos · ciclo de borrador', () => {
+  it('un borrador no afecta el rol ni los totales entregados', () => {
+    expect(anticipoAfectaNomina('BORRADOR')).toBe(false);
+    expect(anticipoEsOperativo('BORRADOR')).toBe(false);
+  });
+
+  it('solo registrado queda pendiente de descuento y descontado sigue siendo operativo', () => {
+    expect(anticipoAfectaNomina('REGISTRADO')).toBe(true);
+    expect(anticipoAfectaNomina('DESCONTADO')).toBe(false);
+    expect(anticipoEsOperativo('REGISTRADO')).toBe(true);
+    expect(anticipoEsOperativo('DESCONTADO')).toBe(true);
+    expect(anticipoEsOperativo('ANULADO')).toBe(false);
   });
 });

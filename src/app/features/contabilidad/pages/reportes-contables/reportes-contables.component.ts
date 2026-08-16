@@ -1,4 +1,5 @@
 import { CommonModule } from '@angular/common';
+import { HttpErrorResponse } from '@angular/common/http';
 import { Component, DestroyRef, OnInit, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormsModule } from '@angular/forms';
@@ -20,9 +21,13 @@ import { CuentaContableAutocompleteComponent } from '../../components/cuenta-con
 import {
   BalanceComprobacionFila,
   BalanceComprobacionResultado,
+  CuentaPadreNivel4Reporte,
   CuentaContable,
-  EstadoFinancieroSeccion,
+  EstadoResultadoIntegralLinea,
+  EstadoResultadoIntegralSeccion,
   EstadoResultadoIntegralResultado,
+  EstadoSituacionFinancieraLinea,
+  EstadoSituacionFinancieraSeccion,
   EstadoSituacionFinancieraResultado,
   FiltrosReporteContable,
   LibroDiarioFila,
@@ -35,10 +40,25 @@ import { ReportesContablesPdfApiService } from '../../services/reportes-contable
 import { ReportesContablesService } from '../../services/reportes-contables.service';
 
 type ReporteKey = 'diario' | 'mayor' | 'balance' | 'esf' | 'eri';
-type GrupoEstadoFinanciero = {
+type GrupoEsf = {
+  nombre: string;
+  total: { saldoInicial: number; movimientoPeriodo: number; saldoFinal: number };
+  secciones: EstadoSituacionFinancieraSeccion[];
+};
+type GrupoEri = {
   nombre: string;
   total: number;
-  secciones: EstadoFinancieroSeccion[];
+  secciones: EstadoResultadoIntegralSeccion[];
+};
+type SubgrupoNivel4Esf = {
+  padre: CuentaPadreNivel4Reporte | null;
+  lineas: EstadoSituacionFinancieraLinea[];
+  total: { saldoInicial: number; movimientoPeriodo: number; saldoFinal: number };
+};
+type SubgrupoNivel4Eri = {
+  padre: CuentaPadreNivel4Reporte | null;
+  lineas: EstadoResultadoIntegralLinea[];
+  total: number;
 };
 
 @Component({
@@ -64,7 +84,6 @@ type GrupoEstadoFinanciero = {
     <section class="reportes-page">
       <header class="surface-card page-header">
         <div>
-          <p class="eyebrow">Contabilidad</p>
           <h2>
             Reportes contables
             <button mat-icon-button type="button" matTooltipPosition="above" [matTooltip]="ayudaReportes.submodulo" aria-label="Ayuda reportes contables">
@@ -401,7 +420,7 @@ type GrupoEstadoFinanciero = {
                 <div>
                   <h3>Estado de Situacion Financiera</h3>
                   <p>
-                    Presenta activos, pasivos y patrimonio acumulados a una fecha de corte, o solo los montos acumulados en un periodo.
+                    Presenta la posición financiera a una fecha y distingue el patrimonio registrado del resultado todavía pendiente de cierre.
                     <button mat-icon-button type="button" matTooltipPosition="above" [matTooltip]="ayudaReportes.esf" aria-label="Ayuda ESF">
                       <mat-icon>help_outline</mat-icon>
                     </button>
@@ -413,14 +432,14 @@ type GrupoEstadoFinanciero = {
                     <mat-label>Tipo de consulta</mat-label>
                     <mat-select [ngModel]="esfModo()" (ngModelChange)="cambiarModoEsf($event)">
                       <mat-option value="ACUMULADO">Acumulado a la fecha</mat-option>
-                      <mat-option value="PERIODO">Solo montos del periodo</mat-option>
+                      <mat-option value="RANGO">Rango con saldo inicial</mat-option>
                     </mat-select>
                     <button mat-icon-button matIconSuffix type="button" matTooltipPosition="above" [matTooltip]="ayudaReportes.modoEsf" aria-label="Ayuda tipo de consulta ESF">
                       <mat-icon>help_outline</mat-icon>
                     </button>
                   </mat-form-field>
 
-                  @if (esfModo() === 'PERIODO') {
+                  @if (esfModo() === 'RANGO') {
                     <mat-form-field appearance="outline">
                       <mat-label>Fecha desde</mat-label>
                       <input matInput [matDatepicker]="esfDesdePicker" [ngModel]="esfFechaDesde()" (ngModelChange)="actualizarFecha('esf', 'desde', $event)" />
@@ -433,10 +452,10 @@ type GrupoEstadoFinanciero = {
                   }
 
                   <mat-form-field appearance="outline">
-                    <mat-label>{{ esfModo() === 'PERIODO' ? 'Fecha hasta' : 'Fecha de corte' }}</mat-label>
+                    <mat-label>{{ esfModo() === 'RANGO' ? 'Fecha hasta' : 'Fecha de corte' }}</mat-label>
                     <input matInput [matDatepicker]="esfCortePicker" [ngModel]="esfFechaCorte()" (ngModelChange)="actualizarFecha('esf', 'hasta', $event)" />
                     <mat-datepicker-toggle matIconSuffix [for]="esfCortePicker"></mat-datepicker-toggle>
-                    <button mat-icon-button matIconSuffix type="button" matTooltipPosition="above" [matTooltip]="esfModo() === 'PERIODO' ? ayudaReportes.fechaHastaPeriodoEsf : ayudaReportes.fechaCorte" aria-label="Ayuda fecha corte ESF">
+                    <button mat-icon-button matIconSuffix type="button" matTooltipPosition="above" [matTooltip]="esfModo() === 'RANGO' ? ayudaReportes.fechaHastaPeriodoEsf : ayudaReportes.fechaCorte" aria-label="Ayuda fecha corte ESF">
                       <mat-icon>help_outline</mat-icon>
                     </button>
                     <mat-datepicker #esfCortePicker></mat-datepicker>
@@ -451,7 +470,7 @@ type GrupoEstadoFinanciero = {
                       <mat-icon>download</mat-icon>
                       Exportar CSV
                     </button>
-                    <button mat-stroked-button type="button" (click)="descargarEsfPdf()" [disabled]="descargandoEsfPdf()">
+                    <button mat-stroked-button type="button" (click)="descargarEsfPdf()" [disabled]="descargandoEsfPdf() || esf().secciones.length === 0">
                       <mat-icon>picture_as_pdf</mat-icon>
                       Descargar PDF
                     </button>
@@ -463,38 +482,138 @@ type GrupoEstadoFinanciero = {
                   <span>{{ descripcionConsultaEsf() }}</span>
                 </p>
 
-                <div class="summary-row" [class.diff-error]="esf().diferencia !== 0">
-                  <span>Total activo: <strong>{{ esf().totalActivo | number:'1.2-2' }}</strong></span>
-                  <span>Total pasivo: <strong>{{ esf().totalPasivo | number:'1.2-2' }}</strong></span>
-                  <span>Total patrimonio: <strong>{{ esf().totalPatrimonio | number:'1.2-2' }}</strong></span>
-                  <span>{{ esf().modo === 'PERIODO' ? 'Resultado del periodo' : 'Resultado ejercicio' }}: <strong>{{ esf().resultadoEjercicio | number:'1.2-2' }}</strong></span>
-                  <span>Diferencia: <strong>{{ esf().diferencia | number:'1.2-2' }}</strong></span>
-                </div>
-
-                <div class="financial-sections">
-                  @for (grupo of gruposEsf(); track grupo.nombre) {
-                    <section class="financial-group">
-                      <header>
-                        <h4>{{ grupo.nombre }}</h4>
-                        <strong>{{ grupo.total | number:'1.2-2' }}</strong>
-                      </header>
-                      @for (seccion of grupo.secciones; track seccion.seccion) {
-                        <section class="financial-section">
-                          <header>
-                            <h5>{{ seccion.nombre }}</h5>
-                            <strong>{{ seccion.total | number:'1.2-2' }}</strong>
-                          </header>
-                          @for (linea of seccion.lineas; track linea.cuentaId ?? linea.codigoCuenta) {
-                            <div class="financial-line" [class.calculated-line]="linea.esCalculada">
-                              <span>{{ linea.codigoCuenta }} - {{ linea.nombreCuenta }}</span>
-                              <strong>{{ linea.monto | number:'1.2-2' }}</strong>
-                            </div>
-                          }
-                        </section>
+                @if (esf().secciones.length > 0) {
+                  <div class="metrics-strip" [class.diff-error]="esf().totales.diferencia.saldoFinal !== 0">
+                    <div><span>Activo al cierre</span><strong>{{ esf().totales.activo.saldoFinal | number:'1.2-2' }}</strong></div>
+                    <div><span>Pasivo + patrimonio presentado</span><strong>{{ totalPasivoPatrimonioFinal() | number:'1.2-2' }}</strong></div>
+                    <div class="balance-status">
+                      <span>Comprobacion</span>
+                      @if (esf().totales.diferencia.saldoFinal === 0) {
+                        <strong>Cuadra</strong>
+                      } @else {
+                        <strong>Diferencia {{ esf().totales.diferencia.saldoFinal | number:'1.2-2' }}</strong>
                       }
-                    </section>
-                  }
-                </div>
+                    </div>
+                  </div>
+
+                  <div class="statement-ledger" [class.single-value]="esf().modo === 'ACUMULADO'">
+                    <div class="ledger-header">
+                      <span>Cuenta</span>
+                      @if (esf().modo === 'RANGO') {
+                        <span>Saldo inicial</span>
+                        <span>Movimiento</span>
+                      }
+                      <span>Saldo final</span>
+                    </div>
+                    @for (grupo of gruposEsf(); track grupo.nombre) {
+                      <section class="ledger-group">
+                        <header class="ledger-row group-row">
+                          <strong>{{ grupo.nombre }}</strong>
+                          @if (esf().modo === 'RANGO') {
+                            <strong>{{ grupo.total.saldoInicial | number:'1.2-2' }}</strong>
+                            <strong>{{ grupo.total.movimientoPeriodo | number:'1.2-2' }}</strong>
+                          }
+                          <strong>{{ grupo.total.saldoFinal | number:'1.2-2' }}</strong>
+                        </header>
+                        @for (seccion of grupo.secciones; track seccion.seccion) {
+                          <div class="ledger-row section-row">
+                            <strong>{{ seccion.nombre }}</strong>
+                            @if (esf().modo === 'RANGO') {
+                              <strong>{{ seccion.total.saldoInicial | number:'1.2-2' }}</strong>
+                              <strong>{{ seccion.total.movimientoPeriodo | number:'1.2-2' }}</strong>
+                            }
+                            <strong>{{ seccion.total.saldoFinal | number:'1.2-2' }}</strong>
+                          </div>
+                          @for (subgrupo of subgruposNivel4Esf(seccion.lineas); track subgrupo.padre?.cuentaId ?? subgrupo.padre?.codigoCuenta ?? $index) {
+                            @if (subgrupo.padre) {
+                              <div class="ledger-row parent-level-row">
+                                <span><small>{{ subgrupo.padre.codigoCuenta }}</small>{{ subgrupo.padre.nombreCuenta }} <em>Nivel 4</em></span>
+                                @if (esf().modo === 'RANGO') {
+                                  <strong>{{ subgrupo.total.saldoInicial | number:'1.2-2' }}</strong>
+                                  <strong>{{ subgrupo.total.movimientoPeriodo | number:'1.2-2' }}</strong>
+                                }
+                                <strong>{{ subgrupo.total.saldoFinal | number:'1.2-2' }}</strong>
+                              </div>
+                            }
+                            @for (linea of subgrupo.lineas; track linea.cuentaId ?? linea.codigoCuenta) {
+                              <div class="ledger-row account-row" [class.calculated-line]="linea.calculada">
+                                <span>
+                                  @if (linea.calculada) {
+                                    <small class="calculated-badge">Calculado</small>
+                                  } @else {
+                                    <small>{{ linea.codigoCuenta }}</small>
+                                  }
+                                  {{ linea.nombreCuenta }}
+                                </span>
+                                @if (esf().modo === 'RANGO') {
+                                  <strong>{{ linea.importes.saldoInicial | number:'1.2-2' }}</strong>
+                                  <strong>{{ linea.importes.movimientoPeriodo | number:'1.2-2' }}</strong>
+                                }
+                                <strong>{{ linea.importes.saldoFinal | number:'1.2-2' }}</strong>
+                              </div>
+                            }
+                          }
+                        }
+                      </section>
+                    }
+                  </div>
+
+                  <section class="equity-bridge" [class.single-value]="esf().modo === 'ACUMULADO'" aria-labelledby="equity-bridge-title">
+                    <header>
+                      <div>
+                        <h4 id="equity-bridge-title">Composición del patrimonio</h4>
+                        <p>El resultado se obtiene del ERI y se presenta sin crear ni modificar asientos patrimoniales.</p>
+                      </div>
+                      <span class="calculated-badge">Pendiente de cierre</span>
+                    </header>
+                    <div class="equity-row equity-heading">
+                      <span>Concepto</span>
+                      @if (esf().modo === 'RANGO') {
+                        <span>Saldo inicial</span>
+                        <span>Movimiento</span>
+                      }
+                      <span>Saldo final</span>
+                    </div>
+                    <div class="equity-row">
+                      <span><strong>Patrimonio contabilizado</strong><small>Solo asientos registrados en cuentas patrimoniales</small></span>
+                      @if (esf().modo === 'RANGO') {
+                        <strong>{{ esf().totales.patrimonioContabilizado.saldoInicial | number:'1.2-2' }}</strong>
+                        <strong>{{ esf().totales.patrimonioContabilizado.movimientoPeriodo | number:'1.2-2' }}</strong>
+                      }
+                      <strong>{{ esf().totales.patrimonioContabilizado.saldoFinal | number:'1.2-2' }}</strong>
+                    </div>
+                    <div class="equity-row calculated-equity">
+                      <span><strong>Resultado acumulado calculado</strong><small>Ingresos menos costos y gastos; no es un asiento</small></span>
+                      @if (esf().modo === 'RANGO') {
+                        <strong>{{ esf().totales.resultadoCalculado.saldoInicial | number:'1.2-2' }}</strong>
+                        <strong>{{ esf().totales.resultadoCalculado.movimientoPeriodo | number:'1.2-2' }}</strong>
+                      }
+                      <strong>{{ esf().totales.resultadoCalculado.saldoFinal | number:'1.2-2' }}</strong>
+                    </div>
+                    <div class="equity-row equity-total">
+                      <span><strong>Patrimonio total presentado</strong><small>Valor utilizado para comprobar el ESF</small></span>
+                      @if (esf().modo === 'RANGO') {
+                        <strong>{{ esf().totales.patrimonioPresentado.saldoInicial | number:'1.2-2' }}</strong>
+                        <strong>{{ esf().totales.patrimonioPresentado.movimientoPeriodo | number:'1.2-2' }}</strong>
+                      }
+                      <strong>{{ esf().totales.patrimonioPresentado.saldoFinal | number:'1.2-2' }}</strong>
+                    </div>
+                  </section>
+
+                  <div class="reconciliation-grid">
+                    @if (esf().modo === 'RANGO') {
+                      <div><span>Apertura</span><strong>{{ etiquetaCuadre(esf().totales.diferencia.saldoInicial) }}</strong><small>{{ esf().totales.diferencia.saldoInicial | number:'1.2-2' }}</small></div>
+                      <div><span>Movimiento</span><strong>{{ etiquetaCuadre(esf().totales.diferencia.movimientoPeriodo) }}</strong><small>{{ esf().totales.diferencia.movimientoPeriodo | number:'1.2-2' }}</small></div>
+                    }
+                    <div><span>Cierre</span><strong>{{ etiquetaCuadre(esf().totales.diferencia.saldoFinal) }}</strong><small>{{ esf().totales.diferencia.saldoFinal | number:'1.2-2' }}</small></div>
+                  </div>
+                } @else if (!cargandoEsf() && esfConsultado()) {
+                  <div class="empty-report">
+                    <mat-icon>account_balance</mat-icon>
+                    <h4>Sin saldos para presentar</h4>
+                    <p>No hay cuentas con valores distintos de cero en las fechas seleccionadas.</p>
+                  </div>
+                }
               </section>
 
               <section class="financial-block">
@@ -538,44 +657,58 @@ type GrupoEstadoFinanciero = {
                       <mat-icon>download</mat-icon>
                       Exportar CSV
                     </button>
-                    <button mat-stroked-button type="button" (click)="descargarEriPdf()" [disabled]="descargandoEriPdf()">
+                    <button mat-stroked-button type="button" (click)="descargarEriPdf()" [disabled]="descargandoEriPdf() || eri().secciones.length === 0">
                       <mat-icon>picture_as_pdf</mat-icon>
                       Descargar PDF
                     </button>
                   </div>
                 </div>
 
-                <div class="summary-row">
-                  <span>Ingresos: <strong>{{ eri().totalIngresos | number:'1.2-2' }}</strong></span>
-                  <span>Costos: <strong>{{ eri().totalCostos | number:'1.2-2' }}</strong></span>
-                  <span>Gastos: <strong>{{ eri().totalGastos | number:'1.2-2' }}</strong></span>
-                  <span>Resultado neto: <strong>{{ eri().resultadoNeto | number:'1.2-2' }}</strong></span>
-                </div>
+                @if (eri().secciones.length > 0) {
+                  <div class="metrics-strip eri-metrics">
+                    <div><span>Ingresos</span><strong>{{ eri().totales.ingresos | number:'1.2-2' }}</strong></div>
+                    <div><span>Costos y gastos</span><strong>{{ totalCostosGastos() | number:'1.2-2' }}</strong></div>
+                    <div class="balance-status"><span>Resultado neto</span><strong>{{ eri().totales.resultadoNeto | number:'1.2-2' }}</strong></div>
+                  </div>
 
-                <div class="financial-sections">
-                  @for (grupo of gruposEri(); track grupo.nombre) {
-                    <section class="financial-group">
-                      <header>
-                        <h4>{{ grupo.nombre }}</h4>
-                        <strong>{{ grupo.total | number:'1.2-2' }}</strong>
-                      </header>
-                      @for (seccion of grupo.secciones; track seccion.seccion) {
-                        <section class="financial-section">
-                          <header>
-                            <h5>{{ seccion.nombre }}</h5>
-                            <strong>{{ seccion.total | number:'1.2-2' }}</strong>
-                          </header>
-                          @for (linea of seccion.lineas; track linea.cuentaId ?? linea.codigoCuenta) {
-                            <div class="financial-line">
-                              <span>{{ linea.codigoCuenta }} - {{ linea.nombreCuenta }}</span>
-                              <strong>{{ linea.monto | number:'1.2-2' }}</strong>
-                            </div>
+                  <div class="statement-ledger single-value">
+                    <div class="ledger-header"><span>Cuenta</span><span>Monto del periodo</span></div>
+                    @for (grupo of gruposEri(); track grupo.nombre) {
+                      <section class="ledger-group">
+                        <header class="ledger-row group-row"><strong>{{ grupo.nombre }}</strong><strong>{{ grupo.total | number:'1.2-2' }}</strong></header>
+                        @for (seccion of grupo.secciones; track seccion.seccion) {
+                          <div class="ledger-row section-row"><strong>{{ seccion.nombre }}</strong><strong>{{ seccion.total | number:'1.2-2' }}</strong></div>
+                          @for (subgrupo of subgruposNivel4Eri(seccion.lineas); track subgrupo.padre?.cuentaId ?? subgrupo.padre?.codigoCuenta ?? $index) {
+                            @if (subgrupo.padre) {
+                              <div class="ledger-row parent-level-row">
+                                <span><small>{{ subgrupo.padre.codigoCuenta }}</small>{{ subgrupo.padre.nombreCuenta }} <em>Nivel 4</em></span>
+                                <strong>{{ subgrupo.total | number:'1.2-2' }}</strong>
+                              </div>
+                            }
+                            @for (linea of subgrupo.lineas; track linea.cuentaId ?? linea.codigoCuenta) {
+                              <div class="ledger-row account-row">
+                                <span><small>{{ linea.codigoCuenta }}</small>{{ linea.nombreCuenta }}</span>
+                                <strong>{{ linea.monto | number:'1.2-2' }}</strong>
+                              </div>
+                            }
                           }
-                        </section>
-                      }
-                    </section>
-                  }
-                </div>
+                        }
+                      </section>
+                    }
+                  </div>
+
+                  <div class="result-waterfall">
+                    <div><span>Resultado bruto</span><strong>{{ eri().totales.resultadoBruto | number:'1.2-2' }}</strong></div>
+                    <div><span>Resultado operacional</span><strong>{{ eri().totales.resultadoOperacional | number:'1.2-2' }}</strong></div>
+                    <div><span>Resultado neto</span><strong>{{ eri().totales.resultadoNeto | number:'1.2-2' }}</strong></div>
+                  </div>
+                } @else if (!cargandoEri() && eriConsultado()) {
+                  <div class="empty-report">
+                    <mat-icon>monitoring</mat-icon>
+                    <h4>Sin resultados para presentar</h4>
+                    <p>No hay ingresos, costos o gastos distintos de cero en el periodo seleccionado.</p>
+                  </div>
+                }
               </section>
             </section>
           </mat-tab>
@@ -589,7 +722,6 @@ type GrupoEstadoFinanciero = {
     .page-header h2 { margin: 0; font-size: 1.45rem; }
     .page-header h2 { display: inline-flex; align-items: center; gap: .35rem; }
     .page-header p { margin: .35rem 0 0; color: var(--muted-foreground); }
-    .eyebrow { margin: 0 0 .35rem; text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; color: var(--primary); }
     .tabs-card { padding: 0; overflow: hidden; background: var(--tc-surface-container-lowest); }
     .tab-panel { display: grid; gap: 1rem; padding: 1.25rem; }
     .report-help { display: flex; align-items: center; gap: .55rem; padding: .75rem .9rem; border-radius: .5rem; background: var(--tc-surface-container); color: var(--muted-foreground); }
@@ -612,26 +744,63 @@ type GrupoEstadoFinanciero = {
     .error-box { background: color-mix(in srgb, #b3261e 12%, transparent); }
     .table-wrap { overflow: auto; }
     table { width: 100%; min-width: 1080px; }
-    .financial-block { display: grid; gap: 1rem; padding: 1rem; border: 1px solid color-mix(in srgb, var(--outline) 45%, transparent); border-radius: .5rem; }
-    .financial-block h3, .financial-block p, .financial-group h4, .financial-section h5 { margin: 0; }
+    .financial-block { display: grid; gap: 1.1rem; padding: 1.25rem; border-radius: 1rem; background: var(--tc-surface-container-low); }
+    .financial-block h3, .financial-block p { margin: 0; }
     .financial-block p { color: var(--muted-foreground); }
     .financial-block p { display: inline-flex; align-items: center; gap: .35rem; flex-wrap: wrap; }
-    .financial-sections { display: grid; gap: .75rem; }
-    .financial-group { display: grid; gap: .65rem; padding: .9rem; border: 1px solid color-mix(in srgb, var(--outline) 55%, transparent); border-radius: .5rem; }
-    .financial-group > header { display: flex; justify-content: space-between; gap: 1rem; align-items: center; padding-bottom: .65rem; border-bottom: 2px solid color-mix(in srgb, var(--foreground) 65%, transparent); }
-    .financial-group > header h4, .financial-group > header strong { font-weight: 800; color: var(--foreground); }
-    .financial-group > header strong { text-align: right; font-variant-numeric: tabular-nums; }
-    .financial-section { display: grid; gap: 0; padding: .85rem; border-radius: .5rem; background: var(--tc-surface-container); }
-    .financial-section header, .financial-line { display: flex; justify-content: space-between; gap: 1rem; align-items: center; }
-    .financial-section header { margin-bottom: .35rem; padding: 0 .55rem .4rem; border-bottom: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); }
-    .financial-section header h5, .financial-section header strong { font-weight: 700; color: var(--foreground); }
-    .financial-section header strong { text-align: right; font-variant-numeric: tabular-nums; }
-    .financial-line { padding: .4rem .55rem; border-radius: .25rem; color: var(--muted-foreground); }
-    /* Filas alternas: permiten seguir la cuenta de izquierda a derecha hasta su monto. */
-    .financial-line:nth-of-type(odd) { background: color-mix(in srgb, var(--foreground) 6%, transparent); }
-    .financial-line:hover { background: color-mix(in srgb, var(--primary) 14%, transparent); }
-    .financial-line strong { color: var(--foreground); font-variant-numeric: tabular-nums; }
-    .calculated-line { color: var(--primary); }
+    .metrics-strip { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); overflow: hidden; border-radius: .875rem; background: var(--tc-surface-container-lowest); }
+    .metrics-strip > div { display: grid; gap: .3rem; min-width: 0; padding: 1rem 1.1rem; }
+    .metrics-strip > div + div { box-shadow: inset 1px 0 color-mix(in srgb, var(--outline) 18%, transparent); }
+    .metrics-strip span, .reconciliation-grid span, .result-waterfall span { color: var(--muted-foreground); font-size: .75rem; letter-spacing: .04em; text-transform: uppercase; }
+    .metrics-strip strong { text-align: right; color: var(--foreground); font-size: 1.15rem; font-variant-numeric: tabular-nums; }
+    .metrics-strip .balance-status { background: color-mix(in srgb, var(--primary) 11%, var(--tc-surface-container-lowest)); }
+    .metrics-strip.diff-error .balance-status { background: color-mix(in srgb, #b3261e 9%, var(--tc-surface-container-lowest)); }
+    .statement-ledger { overflow-x: auto; border-radius: .875rem; background: var(--tc-surface-container-lowest); }
+    .ledger-header, .ledger-row { display: grid; grid-template-columns: minmax(18rem, 1fr) repeat(3, minmax(8rem, .42fr)); align-items: center; column-gap: 1rem; min-width: 48rem; }
+    .statement-ledger.single-value .ledger-header, .statement-ledger.single-value .ledger-row { grid-template-columns: minmax(18rem, 1fr) minmax(9rem, .42fr); min-width: 34rem; }
+    .ledger-header { padding: .7rem 1rem; color: var(--muted-foreground); background: var(--tc-surface-container); font-size: .75rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+    .ledger-header span:not(:first-child), .ledger-row > strong { text-align: right; font-variant-numeric: tabular-nums; }
+    .ledger-group + .ledger-group { margin-top: .45rem; }
+    .ledger-row { padding: .65rem 1rem; }
+    .group-row { color: var(--tc-on-primary, #fff); background: var(--primary); }
+    .section-row { color: var(--foreground); background: color-mix(in srgb, var(--primary) 10%, var(--tc-surface-container-lowest)); }
+    .parent-level-row { color: var(--foreground); background: color-mix(in srgb, var(--primary) 6%, var(--tc-surface-container-lowest)); box-shadow: inset 0 1px color-mix(in srgb, var(--primary) 14%, transparent); }
+    .parent-level-row span { display: grid; grid-template-columns: minmax(5.5rem, auto) 1fr auto; gap: .65rem; align-items: baseline; font-weight: 700; }
+    .parent-level-row small { color: var(--primary); font-variant-numeric: tabular-nums; }
+    .parent-level-row em { color: var(--muted-foreground); font-size: .68rem; font-style: normal; font-weight: 700; letter-spacing: .035em; text-transform: uppercase; }
+    .account-row { color: var(--muted-foreground); }
+    .account-row:nth-child(even) { background: color-mix(in srgb, var(--foreground) 3%, transparent); }
+    .account-row:hover { background: color-mix(in srgb, var(--primary) 8%, transparent); }
+    .account-row span { display: grid; grid-template-columns: minmax(5.5rem, auto) 1fr; gap: .65rem; align-items: baseline; }
+    .account-row small { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+    .account-row strong { color: var(--foreground); }
+    .calculated-line span, .calculated-line strong { color: var(--primary); font-weight: 700; }
+    .calculated-badge { display: inline-flex; width: fit-content; align-items: center; min-height: 1.35rem; padding: .15rem .4rem; border-radius: .25rem; background: color-mix(in srgb, var(--primary) 14%, var(--tc-surface-container-lowest)); color: var(--primary); font-size: .65rem; font-weight: 800; letter-spacing: .035em; line-height: 1; text-transform: uppercase; }
+    .equity-bridge { overflow-x: auto; border-radius: .875rem; background: color-mix(in srgb, var(--primary) 8%, var(--tc-surface-container-lowest)); }
+    .equity-bridge > header { display: flex; justify-content: space-between; gap: 1rem; align-items: flex-start; padding: 1rem; }
+    .equity-bridge h4 { margin: 0; color: var(--foreground); font-size: 1rem; }
+    .equity-bridge header p { display: block; margin: .25rem 0 0; max-width: 65ch; font-size: .82rem; line-height: 1.45; }
+    .equity-row { display: grid; grid-template-columns: minmax(18rem, 1fr) repeat(3, minmax(8rem, .42fr)); align-items: center; column-gap: 1rem; min-width: 48rem; padding: .65rem 1rem; }
+    .equity-bridge.single-value .equity-row { grid-template-columns: minmax(18rem, 1fr) minmax(9rem, .42fr); min-width: 34rem; }
+    .equity-row > span:first-child { display: grid; gap: .15rem; }
+    .equity-row > span:first-child small { color: var(--muted-foreground); line-height: 1.35; }
+    .equity-row > strong { text-align: right; color: var(--foreground); font-variant-numeric: tabular-nums; }
+    .equity-heading { color: var(--muted-foreground); background: color-mix(in srgb, var(--primary) 7%, var(--tc-surface-container)); font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+    .equity-heading span:not(:first-child) { text-align: right; }
+    .calculated-equity { color: var(--primary); }
+    .calculated-equity > strong, .calculated-equity > span strong { color: var(--primary); }
+    .equity-total { box-shadow: inset 0 1px color-mix(in srgb, var(--primary) 35%, transparent); background: color-mix(in srgb, var(--primary) 10%, var(--tc-surface-container-lowest)); }
+    .equity-total > strong, .equity-total > span strong { color: var(--primary); font-size: 1.02rem; }
+    .reconciliation-grid, .result-waterfall { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin-left: auto; width: min(100%, 44rem); }
+    .reconciliation-grid > div, .result-waterfall > div { display: grid; gap: .25rem; padding: .85rem 1rem; border-radius: .75rem; background: var(--tc-surface-container-lowest); }
+    .reconciliation-grid strong, .result-waterfall strong { color: var(--primary); text-align: right; }
+    .reconciliation-grid small { color: var(--muted-foreground); text-align: right; font-variant-numeric: tabular-nums; }
+    .result-waterfall > div:last-child { background: color-mix(in srgb, var(--primary) 12%, var(--tc-surface-container-lowest)); }
+    .result-waterfall strong { font-size: 1.05rem; font-variant-numeric: tabular-nums; }
+    .empty-report { display: grid; justify-items: center; gap: .45rem; padding: 2.5rem 1rem; border-radius: .875rem; background: var(--tc-surface-container-lowest); text-align: center; }
+    .empty-report mat-icon { width: 2rem; height: 2rem; color: var(--primary); font-size: 2rem; }
+    .empty-report h4, .empty-report p { margin: 0; }
+    .empty-report p { max-width: 34rem; }
     button[mat-icon-button] { color: var(--muted-foreground); }
     @media (max-width: 1100px) {
       .filters-grid, .filters-grid.compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -640,7 +809,10 @@ type GrupoEstadoFinanciero = {
     @media (max-width: 720px) {
       .filters-grid, .filters-grid.compact { grid-template-columns: 1fr; }
       .actions-row { justify-content: flex-start; }
-      .financial-group > header, .financial-section header, .financial-line { align-items: flex-start; flex-direction: column; }
+      .financial-block { padding: 1rem; }
+      .metrics-strip, .reconciliation-grid, .result-waterfall { grid-template-columns: 1fr; width: 100%; }
+      .metrics-strip > div + div { box-shadow: inset 0 1px color-mix(in srgb, var(--outline) 18%, transparent); }
+      .equity-bridge > header { align-items: flex-start; flex-direction: column; }
     }
   `]
 })
@@ -661,7 +833,7 @@ export class ReportesContablesComponent implements OnInit {
     diario: 'Libro cronologico de asientos y lineas contables. Sirve para auditar que se registro, cuando y contra que cuenta.',
     mayor: 'Movimiento detallado por cuenta o grupo, con saldo anterior, debitos, creditos y saldo final.',
     balance: 'Resumen por cuenta para comprobar que el total debe coincide con el total haber en el rango consultado.',
-    esf: 'Foto financiera a una fecha: activos, pasivos, patrimonio y resultado calculado dinamicamente. Con el tipo de consulta se elige entre saldos acumulados historicos o solo los montos acumulados en el periodo.',
+    esf: 'Foto financiera a una fecha. Separa las cuentas patrimoniales contabilizadas del resultado acumulado calculado, que se presenta sin crear asientos.',
     eri: 'Resultado del periodo: ingresos menos costos y gastos. No usa saldos acumulados, usa movimientos del rango.',
     fechaDesde: 'Inicio del rango de movimientos a consultar. Incluye asientos desde esta fecha.',
     fechaHasta: 'Fin del rango de movimientos a consultar. Incluye asientos hasta esta fecha.',
@@ -671,10 +843,10 @@ export class ReportesContablesComponent implements OnInit {
     cuentaMayor: 'Seleccione una cuenta para ver su mayor individual. Si queda vacio se usa el grupo/tipo.',
     grupoMayor: 'Permite consultar mayores por tipo de cuenta cuando no se elige una cuenta especifica.',
     tipoBalance: 'Limita el balance de comprobacion a activos, pasivos, patrimonio, ingresos, costos o gastos.',
-    modoEsf: 'Acumulado a la fecha: saldos arrastrados desde el inicio de operaciones. Solo montos del periodo: unicamente lo acumulado por cada cuenta dentro del rango consultado, listando solo las cuentas con movimiento.',
+    modoEsf: 'Acumulado a la fecha muestra el saldo de cierre. Rango con saldo inicial separa apertura, movimiento y cierre dentro del mismo ejercicio.',
     fechaCorte: 'Fecha hasta la que se acumulan saldos del Estado de Situacion Financiera.',
-    fechaDesdePeriodoEsf: 'Inicio del periodo. Los saldos anteriores a esta fecha no se arrastran al reporte.',
-    fechaHastaPeriodoEsf: 'Cierre del periodo. Se acumulan solo los movimientos entre la fecha desde y esta fecha.',
+    fechaDesdePeriodoEsf: 'Inicio inclusivo del rango. El saldo inicial se calcula hasta el dia anterior.',
+    fechaHastaPeriodoEsf: 'Cierre inclusivo del rango. Debe pertenecer al mismo ejercicio fiscal que la fecha inicial.',
     fechaDesdeResultado: 'Inicio del periodo de ingresos, costos y gastos para el Estado de Resultado Integral.',
     fechaHastaResultado: 'Cierre del periodo de ingresos, costos y gastos para calcular el resultado neto.'
   };
@@ -696,6 +868,8 @@ export class ReportesContablesComponent implements OnInit {
   protected readonly cargandoEri = signal(false);
   protected readonly descargandoEsfPdf = signal(false);
   protected readonly descargandoEriPdf = signal(false);
+  protected readonly esfConsultado = signal(false);
+  protected readonly eriConsultado = signal(false);
 
   protected readonly diarioFechaDesde = signal<Date | null>(this.inicioMes());
   protected readonly diarioFechaHasta = signal<Date | null>(new Date());
@@ -794,11 +968,15 @@ export class ReportesContablesComponent implements OnInit {
 
   protected async consultarEsf(): Promise<void> {
     this.error.set(null);
+    this.esfConsultado.set(false);
     this.cargandoEsf.set(true);
     try {
-      this.esf.set(await this.service.generarEstadoSituacionFinanciera(this.esfFechaCorteValue, this.esfPeriodoDesde()));
-    } catch {
-      this.error.set('No se pudo generar el Estado de Situacion Financiera.');
+      this.validarRangoEsf();
+      this.esf.set(await this.pdfApi.consultarEstadoSituacionFinanciera(this.esfFechaCorteValue, this.esfPeriodoDesde()));
+      this.esfConsultado.set(true);
+    } catch (error) {
+      this.esf.set(this.esfVacio());
+      this.error.set(this.mensajeError(error, 'No se pudo generar el Estado de Situacion Financiera.'));
     } finally {
       this.cargandoEsf.set(false);
     }
@@ -806,11 +984,15 @@ export class ReportesContablesComponent implements OnInit {
 
   protected async consultarEri(): Promise<void> {
     this.error.set(null);
+    this.eriConsultado.set(false);
     this.cargandoEri.set(true);
     try {
-      this.eri.set(await this.service.generarEstadoResultadoIntegral(this.eriFechaDesdeValue, this.eriFechaHastaValue));
-    } catch {
-      this.error.set('No se pudo generar el Estado de Resultado Integral.');
+      this.validarRango(this.eriFechaDesdeValue, this.eriFechaHastaValue);
+      this.eri.set(await this.pdfApi.consultarEstadoResultadoIntegral(this.eriFechaDesdeValue, this.eriFechaHastaValue));
+      this.eriConsultado.set(true);
+    } catch (error) {
+      this.eri.set(this.eriVacio());
+      this.error.set(this.mensajeError(error, 'No se pudo generar el Estado de Resultado Integral.'));
     } finally {
       this.cargandoEri.set(false);
     }
@@ -828,6 +1010,8 @@ export class ReportesContablesComponent implements OnInit {
         this.esfFechaCorteValue = formatted;
       }
       signalTarget.set(fecha);
+      this.esf.set(this.esfVacio());
+      this.esfConsultado.set(false);
       return;
     }
 
@@ -838,6 +1022,8 @@ export class ReportesContablesComponent implements OnInit {
         this.eriFechaHastaValue = formatted;
       }
       signalTarget.set(fecha);
+      this.eri.set(this.eriVacio());
+      this.eriConsultado.set(false);
       return;
     }
 
@@ -904,67 +1090,151 @@ export class ReportesContablesComponent implements OnInit {
 
   protected exportarEsf(): void {
     const resultado = this.esf();
-    const nombre = resultado.modo === 'PERIODO' && resultado.fechaDesde
-      ? `estado-situacion-financiera-${resultado.fechaDesde}_${resultado.fechaCorte}.csv`
-      : `estado-situacion-financiera-${resultado.fechaCorte}.csv`;
-    this.service.exportarCsv(nombre, this.esf().secciones.flatMap((seccion) => [
-      { seccion: seccion.nombre, codigoCuenta: '', cuenta: 'TOTAL', monto: seccion.total },
-      ...seccion.lineas.map((linea) => ({
+    const nombre = resultado.modo === 'RANGO' && resultado.fechaDesde
+      ? `estado-situacion-financiera-${resultado.fechaDesde}_${resultado.fechaHasta}.csv`
+      : `estado-situacion-financiera-${resultado.fechaHasta}.csv`;
+    const detalle = resultado.secciones.flatMap((seccion) => [
+      {
         seccion: seccion.nombre,
-        codigoCuenta: linea.codigoCuenta,
-        cuenta: linea.nombreCuenta,
-        monto: linea.monto
-      }))
-    ]));
+        jerarquia: 'TOTAL_SECCION',
+        codigoCuenta: '',
+        cuenta: 'TOTAL',
+        saldoInicial: seccion.total.saldoInicial,
+        movimientoPeriodo: seccion.total.movimientoPeriodo,
+        saldoFinal: seccion.total.saldoFinal
+      },
+      ...this.subgruposNivel4Esf(seccion.lineas).flatMap((subgrupo) => [
+        ...(subgrupo.padre ? [{
+          seccion: seccion.nombre,
+          jerarquia: 'PADRE_NIVEL_4',
+          codigoCuenta: subgrupo.padre.codigoCuenta,
+          cuenta: subgrupo.padre.nombreCuenta,
+          saldoInicial: subgrupo.total.saldoInicial,
+          movimientoPeriodo: subgrupo.total.movimientoPeriodo,
+          saldoFinal: subgrupo.total.saldoFinal
+        }] : []),
+        ...subgrupo.lineas.map((linea) => ({
+          seccion: seccion.nombre,
+          jerarquia: linea.calculada ? 'CALCULADO' : 'CUENTA',
+          codigoCuenta: linea.calculada ? 'CALCULADO' : linea.codigoCuenta,
+          cuenta: linea.nombreCuenta,
+          saldoInicial: linea.importes.saldoInicial,
+          movimientoPeriodo: linea.importes.movimientoPeriodo,
+          saldoFinal: linea.importes.saldoFinal
+        }))
+      ])
+    ]);
+    const composicionPatrimonio = [
+      { seccion: 'COMPOSICION DEL PATRIMONIO', jerarquia: 'RESUMEN', codigoCuenta: '', cuenta: 'Patrimonio contabilizado', ...resultado.totales.patrimonioContabilizado },
+      { seccion: 'COMPOSICION DEL PATRIMONIO', jerarquia: 'CALCULADO', codigoCuenta: 'CALCULADO', cuenta: 'Resultado acumulado calculado - pendiente de cierre', ...resultado.totales.resultadoCalculado },
+      { seccion: 'COMPOSICION DEL PATRIMONIO', jerarquia: 'RESUMEN', codigoCuenta: '', cuenta: 'Patrimonio total presentado', ...resultado.totales.patrimonioPresentado }
+    ];
+    this.service.exportarCsv(nombre, [...detalle, ...composicionPatrimonio]);
     this.mostrarMensaje('Estado de Situacion Financiera exportado.', 'download');
   }
 
   protected exportarEri(): void {
     this.service.exportarCsv('estado-resultado-integral.csv', this.eri().secciones.flatMap((seccion) => [
-      { seccion: seccion.nombre, codigoCuenta: '', cuenta: 'TOTAL', monto: seccion.total },
-      ...seccion.lineas.map((linea) => ({
-        seccion: seccion.nombre,
-        codigoCuenta: linea.codigoCuenta,
-        cuenta: linea.nombreCuenta,
-        monto: linea.monto
-      }))
+      { seccion: seccion.nombre, jerarquia: 'TOTAL_SECCION', codigoCuenta: '', cuenta: 'TOTAL', monto: seccion.total },
+      ...this.subgruposNivel4Eri(seccion.lineas).flatMap((subgrupo) => [
+        ...(subgrupo.padre ? [{
+          seccion: seccion.nombre,
+          jerarquia: 'PADRE_NIVEL_4',
+          codigoCuenta: subgrupo.padre.codigoCuenta,
+          cuenta: subgrupo.padre.nombreCuenta,
+          monto: subgrupo.total
+        }] : []),
+        ...subgrupo.lineas.map((linea) => ({
+          seccion: seccion.nombre,
+          jerarquia: 'CUENTA',
+          codigoCuenta: linea.codigoCuenta,
+          cuenta: linea.nombreCuenta,
+          monto: linea.monto
+        }))
+      ])
     ]));
     this.mostrarMensaje('Estado de Resultado Integral exportado.', 'download');
   }
 
-  protected gruposEsf(): GrupoEstadoFinanciero[] {
-    return this.agruparEstadoFinanciero(this.esf().secciones, [
+  protected gruposEsf(): GrupoEsf[] {
+    return this.agruparEsf(this.esf().secciones, [
       { nombre: 'Activo', secciones: ['ACTIVO_CORRIENTE', 'ACTIVO_NO_CORRIENTE'] },
       { nombre: 'Pasivo', secciones: ['PASIVO_CORRIENTE', 'PASIVO_NO_CORRIENTE'] },
-      { nombre: 'Patrimonio', secciones: ['PATRIMONIO'] }
+      { nombre: 'Patrimonio total presentado', secciones: ['PATRIMONIO'] }
     ]);
   }
 
-  protected gruposEri(): GrupoEstadoFinanciero[] {
-    return this.agruparEstadoFinanciero(this.eri().secciones, [
+  protected gruposEri(): GrupoEri[] {
+    return this.agruparEri(this.eri().secciones, [
       { nombre: 'Ingresos', secciones: ['INGRESOS_OPERACIONALES', 'OTROS_INGRESOS'] },
       { nombre: 'Costos', secciones: ['COSTOS'] },
       { nombre: 'Gastos', secciones: ['GASTOS_ADMINISTRATIVOS', 'GASTOS_VENTAS', 'GASTOS_FINANCIEROS', 'OTROS_GASTOS'] }
     ]);
   }
 
+  protected subgruposNivel4Esf(lineas: EstadoSituacionFinancieraLinea[]): SubgrupoNivel4Esf[] {
+    const grupos = new Map<string, SubgrupoNivel4Esf>();
+    for (const linea of lineas) {
+      const padre = linea.padreNivel4 ?? null;
+      const key = padre
+        ? `PADRE:${padre.cuentaId ?? padre.codigoCuenta}`
+        : `CUENTA:${linea.cuentaId ?? linea.codigoCuenta}`;
+      const grupo = grupos.get(key) ?? {
+        padre,
+        lineas: [],
+        total: { saldoInicial: 0, movimientoPeriodo: 0, saldoFinal: 0 }
+      };
+      grupo.lineas.push(linea);
+      grupo.total = {
+        saldoInicial: this.service.roundToTwo(grupo.total.saldoInicial + linea.importes.saldoInicial),
+        movimientoPeriodo: this.service.roundToTwo(grupo.total.movimientoPeriodo + linea.importes.movimientoPeriodo),
+        saldoFinal: this.service.roundToTwo(grupo.total.saldoFinal + linea.importes.saldoFinal)
+      };
+      grupos.set(key, grupo);
+    }
+    return [...grupos.values()];
+  }
+
+  protected subgruposNivel4Eri(lineas: EstadoResultadoIntegralLinea[]): SubgrupoNivel4Eri[] {
+    const grupos = new Map<string, SubgrupoNivel4Eri>();
+    for (const linea of lineas) {
+      const padre = linea.padreNivel4 ?? null;
+      const key = padre
+        ? `PADRE:${padre.cuentaId ?? padre.codigoCuenta}`
+        : `CUENTA:${linea.cuentaId ?? linea.codigoCuenta}`;
+      const grupo = grupos.get(key) ?? { padre, lineas: [], total: 0 };
+      grupo.lineas.push(linea);
+      grupo.total = this.service.roundToTwo(grupo.total + linea.monto);
+      grupos.set(key, grupo);
+    }
+    return [...grupos.values()];
+  }
+
   protected cambiarModoEsf(modo: ModoConsultaEstadoFinanciero): void {
     this.esfModo.set(modo);
+    this.esf.set(this.esfVacio());
+    this.esfConsultado.set(false);
   }
 
   /** Descripcion del alcance del ESF actualmente mostrado (no del formulario, que puede estar sin consultar). */
   protected descripcionConsultaEsf(): string {
-    const resultado = this.esf();
-    if (resultado.modo === 'PERIODO' && resultado.fechaDesde) {
-      return `Montos acumulados del ${resultado.fechaDesde} al ${resultado.fechaCorte}. Solo se listan cuentas con movimiento en el periodo.`;
+    if (!this.esfConsultado()) {
+      return this.esfModo() === 'RANGO'
+        ? 'La apertura se calculará hasta el día anterior. El patrimonio distinguirá asientos registrados y resultado pendiente de cierre.'
+        : 'La consulta mostrará los saldos acumulados y separará el patrimonio contabilizado del resultado pendiente de cierre.';
     }
-    return `Saldos acumulados desde el inicio de operaciones hasta el ${resultado.fechaCorte}.`;
+    const resultado = this.esf();
+    if (resultado.modo === 'RANGO' && resultado.fechaDesde) {
+      return `Saldo inicial anterior al ${resultado.fechaDesde}, movimientos inclusivos hasta el ${resultado.fechaHasta} y saldo final. El resultado calculado no modifica asientos.`;
+    }
+    return `Saldos acumulados hasta el ${resultado.fechaHasta}. El resultado pendiente de cierre se presenta por separado de las cuentas patrimoniales.`;
   }
 
   protected async descargarEsfPdf(): Promise<void> {
     this.error.set(null);
     this.descargandoEsfPdf.set(true);
     try {
+      this.validarRangoEsf();
       const desde = this.esfPeriodoDesde();
       const blob = await this.pdfApi.descargarEstadoSituacionFinancieraPdf(this.esfFechaCorteValue, desde);
       const nombre = desde
@@ -972,8 +1242,8 @@ export class ReportesContablesComponent implements OnInit {
         : `estado-situacion-financiera-${this.esfFechaCorteValue}.pdf`;
       this.descargarBlob(blob, nombre);
       this.mostrarMensaje('Estado de Situacion Financiera descargado.', 'picture_as_pdf');
-    } catch {
-      this.error.set('No se pudo descargar el PDF del Estado de Situacion Financiera.');
+    } catch (error) {
+      this.error.set(this.mensajeError(error, 'No se pudo descargar el PDF del Estado de Situacion Financiera.'));
     } finally {
       this.descargandoEsfPdf.set(false);
     }
@@ -983,11 +1253,12 @@ export class ReportesContablesComponent implements OnInit {
     this.error.set(null);
     this.descargandoEriPdf.set(true);
     try {
+      this.validarRango(this.eriFechaDesdeValue, this.eriFechaHastaValue);
       const blob = await this.pdfApi.descargarEstadoResultadoIntegralPdf(this.eriFechaDesdeValue, this.eriFechaHastaValue);
       this.descargarBlob(blob, `estado-resultado-integral-${this.eriFechaDesdeValue}_${this.eriFechaHastaValue}.pdf`);
       this.mostrarMensaje('Estado de Resultado Integral descargado.', 'picture_as_pdf');
-    } catch {
-      this.error.set('No se pudo descargar el PDF del Estado de Resultado Integral.');
+    } catch (error) {
+      this.error.set(this.mensajeError(error, 'No se pudo descargar el PDF del Estado de Resultado Integral.'));
     } finally {
       this.descargandoEriPdf.set(false);
     }
@@ -1005,6 +1276,18 @@ export class ReportesContablesComponent implements OnInit {
     return etiquetas[tipo];
   }
 
+  protected totalPasivoPatrimonioFinal(): number {
+    return this.service.roundToTwo(this.esf().totales.pasivo.saldoFinal + this.esf().totales.patrimonioPresentado.saldoFinal);
+  }
+
+  protected totalCostosGastos(): number {
+    return this.service.roundToTwo(this.eri().totales.costos + this.eri().totales.gastos);
+  }
+
+  protected etiquetaCuadre(diferencia: number): string {
+    return diferencia === 0 ? 'Cuadra' : 'Diferencia';
+  }
+
   private limpiarFiltros(filtros: FiltrosReporteContable): FiltrosReporteContable {
     return {
       ...filtros,
@@ -1017,10 +1300,30 @@ export class ReportesContablesComponent implements OnInit {
     };
   }
 
-  private agruparEstadoFinanciero(
-    secciones: EstadoFinancieroSeccion[],
+  private agruparEsf(
+    secciones: EstadoSituacionFinancieraSeccion[],
     grupos: Array<{ nombre: string; secciones: string[] }>
-  ): GrupoEstadoFinanciero[] {
+  ): GrupoEsf[] {
+    return grupos
+      .map((grupo) => {
+        const seccionesGrupo = secciones.filter((seccion) => grupo.secciones.includes(seccion.seccion));
+        return {
+          nombre: grupo.nombre,
+          secciones: seccionesGrupo,
+          total: {
+            saldoInicial: this.service.roundToTwo(seccionesGrupo.reduce((total, seccion) => total + seccion.total.saldoInicial, 0)),
+            movimientoPeriodo: this.service.roundToTwo(seccionesGrupo.reduce((total, seccion) => total + seccion.total.movimientoPeriodo, 0)),
+            saldoFinal: this.service.roundToTwo(seccionesGrupo.reduce((total, seccion) => total + seccion.total.saldoFinal, 0))
+          }
+        };
+      })
+      .filter((grupo) => grupo.secciones.length > 0);
+  }
+
+  private agruparEri(
+    secciones: EstadoResultadoIntegralSeccion[],
+    grupos: Array<{ nombre: string; secciones: string[] }>
+  ): GrupoEri[] {
     return grupos
       .map((grupo) => {
         const seccionesGrupo = secciones.filter((seccion) => grupo.secciones.includes(seccion.seccion));
@@ -1057,17 +1360,69 @@ export class ReportesContablesComponent implements OnInit {
     return { filas: [], totalDebe: 0, totalHaber: 0, totalSaldoDeudor: 0, totalSaldoAcreedor: 0, diferencia: 0 };
   }
 
-  /** Fecha de inicio a enviar al servicio: solo aplica en modo PERIODO. */
+  /** Fecha de inicio a enviar al servicio: solo aplica en modo RANGO. */
   private esfPeriodoDesde(): string | undefined {
-    return this.esfModo() === 'PERIODO' ? this.esfFechaDesdeValue : undefined;
+    return this.esfModo() === 'RANGO' ? this.esfFechaDesdeValue : undefined;
   }
 
   private esfVacio(): EstadoSituacionFinancieraResultado {
-    return { fechaCorte: this.formatFecha(new Date()), modo: 'ACUMULADO', secciones: [], totalActivo: 0, totalPasivo: 0, totalPatrimonio: 0, resultadoEjercicio: 0, diferencia: 0 };
+    const cero = { saldoInicial: 0, movimientoPeriodo: 0, saldoFinal: 0 };
+    return {
+      tipo: 'ESF',
+      fechaDesde: null,
+      fechaHasta: this.formatFecha(new Date()),
+      modo: 'ACUMULADO',
+      secciones: [],
+      totales: {
+        activo: { ...cero },
+        pasivo: { ...cero },
+        patrimonioContabilizado: { ...cero },
+        resultadoCalculado: { ...cero },
+        patrimonioPresentado: { ...cero },
+        diferencia: { ...cero }
+      }
+    };
   }
 
   private eriVacio(): EstadoResultadoIntegralResultado {
-    return { fechaDesde: this.formatFecha(this.inicioMes()), fechaHasta: this.formatFecha(new Date()), secciones: [], totalIngresos: 0, totalCostos: 0, totalGastos: 0, resultadoBruto: 0, resultadoOperacional: 0, resultadoNeto: 0 };
+    return {
+      tipo: 'ERI',
+      fechaDesde: this.formatFecha(this.inicioMes()),
+      fechaHasta: this.formatFecha(new Date()),
+      secciones: [],
+      totales: { ingresos: 0, costos: 0, gastos: 0, resultadoBruto: 0, resultadoOperacional: 0, resultadoNeto: 0 }
+    };
+  }
+
+  private validarRangoEsf(): void {
+    if (!this.esfFechaCorteValue) {
+      throw new Error('Selecciona la fecha de corte del Estado de Situacion Financiera.');
+    }
+    const desde = this.esfPeriodoDesde();
+    if (!desde) return;
+    this.validarRango(desde, this.esfFechaCorteValue);
+    if (desde.slice(0, 4) !== this.esfFechaCorteValue.slice(0, 4)) {
+      throw new Error('El rango del Estado de Situacion Financiera debe pertenecer al mismo ejercicio fiscal.');
+    }
+  }
+
+  private validarRango(desde: string, hasta: string): void {
+    if (!desde || !hasta) {
+      throw new Error('Selecciona las fechas de inicio y fin del reporte.');
+    }
+    if (desde > hasta) {
+      throw new Error('La fecha de inicio no puede ser posterior a la fecha final.');
+    }
+  }
+
+  private mensajeError(error: unknown, fallback: string): string {
+    if (error instanceof HttpErrorResponse && typeof error.error?.error === 'string') {
+      return error.error.error;
+    }
+    if (error instanceof Error && error.message) {
+      return error.message;
+    }
+    return fallback;
   }
 
   private inicioMes(): Date {

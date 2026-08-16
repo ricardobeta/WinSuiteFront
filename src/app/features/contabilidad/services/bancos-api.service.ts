@@ -134,11 +134,20 @@ export class BancosApiService {
     return firstValueFrom(this.http.get<ResumenConciliacion>(`${this.baseUrl}/conciliacion/resumen`, { params }));
   }
 
-  /** Rehace saldos y totales del período desde los movimientos y devuelve el resumen. */
-  recalcularPeriodo(cuentaBancariaId: string, periodo: string): Promise<ResumenConciliacion> {
+  /**
+   * Rehace saldos y totales del período y devuelve el resumen. Los saldos son
+   * opcionales: si se envían, corrigen el corte que se confirmó al importar.
+   */
+  recalcularPeriodo(
+    cuentaBancariaId: string,
+    periodo: string,
+    saldos?: { saldoInicial?: number | null; saldoFinal?: number | null }
+  ): Promise<ResumenConciliacion> {
     return firstValueFrom(this.http.post<ResumenConciliacion>(`${this.baseUrl}/conciliacion/recalcular`, {
       cuentaBancariaId,
-      periodo
+      periodo,
+      saldoInicial: saldos?.saldoInicial ?? null,
+      saldoFinal: saldos?.saldoFinal ?? null
     }));
   }
 

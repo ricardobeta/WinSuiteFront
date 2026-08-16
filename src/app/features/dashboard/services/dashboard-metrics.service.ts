@@ -182,10 +182,10 @@ export class DashboardMetricsService {
     const hasta = this.dateInput(today);
     return from(this.reportesService.generarEstadoResultadoIntegral(desde, hasta)).pipe(
       map((value) => ({
-        totalIngresos: value.totalIngresos,
-        totalCostos: value.totalCostos,
-        totalGastos: value.totalGastos,
-        resultadoNeto: value.resultadoNeto
+        totalIngresos: value.totales.ingresos,
+        totalCostos: value.totales.costos,
+        totalGastos: value.totales.gastos,
+        resultadoNeto: value.totales.resultadoNeto
       })),
       catchError(() => of({ totalIngresos: 0, totalCostos: 0, totalGastos: 0, resultadoNeto: 0 }))
     );

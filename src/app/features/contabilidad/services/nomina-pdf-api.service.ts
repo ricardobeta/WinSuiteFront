@@ -30,4 +30,13 @@ export class NominaPdfApiService {
       responseType: 'blob'
     }));
   }
+
+  /** Constancias de anticipo: sin empleado emite una pagina A4 por cada detalle. */
+  descargarConstanciasAnticipo(anticipoId: string, empleadoId?: string): Promise<Blob> {
+    const params = empleadoId ? new HttpParams().set('empleadoId', empleadoId) : undefined;
+    return firstValueFrom(this.http.get(`${this.baseUrl}/anticipos/${anticipoId}/constancias/pdf`, {
+      params,
+      responseType: 'blob'
+    }));
+  }
 }

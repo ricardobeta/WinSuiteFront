@@ -1,5 +1,5 @@
 import { CommonModule } from '@angular/common';
-import { Component, DestroyRef, inject, signal } from '@angular/core';
+import { Component, computed, DestroyRef, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { RouterLink } from '@angular/router';
@@ -19,6 +19,7 @@ import { MatTabsModule } from '@angular/material/tabs';
 
 import { ConfigApplyResponse, ConfigScreenContext } from '../../../../core/services/ai-config-copilot.service';
 import { FacturacionConfigService } from '../../../../core/services/facturacion-config.service';
+import { PlanService } from '../../../../core/services/plan.service';
 import {
   ConfigCopilotPanelComponent,
   ConfigDocumentoImportable
@@ -77,6 +78,7 @@ export class ConfiguracionFacturacionPageComponent {
   private readonly snackBar = inject(MatSnackBar);
   private readonly dialog = inject(MatDialog);
   private readonly facturacionService = inject(FacturacionConfigService);
+  private readonly planService = inject(PlanService);
   private correoBaseline = '';
 
   protected readonly columnasCatalogo = ['value', 'toggle'];
@@ -93,6 +95,9 @@ export class ConfiguracionFacturacionPageComponent {
   protected readonly mainDirty = signal(false);
   protected readonly correoDirty = signal(false);
   protected readonly passwordConfigured = signal(false);
+  protected readonly permiteCopiaOculta = computed(
+    () => (this.planService.plan()?.planId ?? 'free').toLowerCase() !== 'free',
+  );
   /**
    * La configuracion cambio en otro sitio (el copiloto, u otra pestana) mientras habia
    * ediciones sin guardar. Se avisa en vez de pisar lo que el usuario tenia escrito.
@@ -152,7 +157,9 @@ export class ConfiguracionFacturacionPageComponent {
   protected readonly fiscalForm = this.formBuilder.nonNullable.group({
     direccionMatriz: ['', [Validators.required, Validators.maxLength(300)]],
     obligadoContabilidad: [false],
-    contribuyenteEspecial: ['', [Validators.maxLength(20)]],
+    // El XSD del SRI espera aquí el número de resolución (3-13 alfanuméricos), no un sí/no:
+    // un "NO" copiado del RUC hace que la factura no valide.
+    contribuyenteEspecial: ['', [Validators.pattern(/^[A-Za-z0-9]{3,13}$/)]],
     agenteRetencion: ['', [Validators.pattern(/^\d{0,8}$/)]],
     contribuyenteRimpe: [false],
     logoUrl: ['']
@@ -590,7 +597,7 @@ export class ConfiguracionFacturacionPageComponent {
   }
 
   protected correoConfiguracionInvalida(): boolean {
-    if (this.correoForm.controls.bccAddress.invalid) {
+    if (this.permiteCopiaOculta() && this.correoForm.controls.bccAddress.invalid) {
       return true;
     }
     if (this.correoForm.controls.mode.value === 'SAAS_DEFAULT') {
