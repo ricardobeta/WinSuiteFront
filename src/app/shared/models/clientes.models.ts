@@ -34,6 +34,8 @@ export interface EtiquetaClienteConfig {
   nombre: string;
   color: ColorEtiquetaCliente;
   activa: boolean;
+  /** La etiqueta se administra desde un formulario mientras su integracion este activa. */
+  origenFormularioId?: string;
 }
 
 export const CAMPOS_BASE_CLIENTE = [
@@ -64,6 +66,14 @@ export interface Cliente {
   tipoDeIdentificacion: TipoIdentificacion;
   etiquetas: string[];
   camposPersonalizados?: Record<string, any>;
+  /** Las altas automaticas requieren una revision humana antes de usarse en ventas. */
+  fichaIncompleta?: boolean;
+  origenCreacion?: {
+    tipo: 'formulario_sitio';
+    sitioId: string;
+    formularioId: string;
+    respuestaId: string;
+  };
   creadoEn?: number;
   actualizadoEn?: number;
 }

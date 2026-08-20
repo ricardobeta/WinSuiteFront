@@ -53,6 +53,16 @@ describe('normalizarConfiguracionClientes', () => {
       { idEtiqueta: 'lead', nombre: 'Prospecto', color: 'teal', activa: false }
     ]);
   });
+
+  it('conserva el formulario que administra una etiqueta automatica', () => {
+    const configuracion = normalizarConfiguracionClientes({
+      catalogoEtiquetas: [{
+        idEtiqueta: 'form-f1', nombre: 'Prospecto web', color: 'teal', activa: true,
+        origenFormularioId: 'f1'
+      }]
+    });
+    expect(configuracion.catalogoEtiquetas[0].origenFormularioId).toBe('f1');
+  });
 });
 
 describe('helpers de configuracion de clientes', () => {

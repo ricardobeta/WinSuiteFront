@@ -3,6 +3,7 @@ import { Database, endAt, get, limitToLast, onValue, orderByKey, query, ref, rem
 import { Observable } from 'rxjs';
 import { CampoFormulario, FormSubmission, FormularioDef, formularioDefSchema } from '@winsuite/bloques';
 import { AuthService } from '../../../core/services/auth.service';
+import { ConfiguracionClientesService } from '../../../core/services/configuracion-clientes.service';
 
 /**
  * Formularios prehechos de la EMPRESA (sitios_formularios/{tenantId}), compartidos entre
@@ -13,6 +14,7 @@ import { AuthService } from '../../../core/services/auth.service';
 export class FormulariosService {
   private readonly database = inject(Database);
   private readonly authService = inject(AuthService);
+  private readonly configuracionClientes = inject(ConfiguracionClientesService);
 
   private getTenantPath(): string {
     return `sitios_formularios/${this.authService.getTenantId()}`;
@@ -65,10 +67,30 @@ export class FormulariosService {
   async guardar(formulario: FormularioDef): Promise<void> {
     const validado = { ...formulario, actualizadoEn: Date.now() };
     formularioDefSchema.parse(validado);
+    if (validado.integracionClientes?.habilitada) {
+      await this.configuracionClientes.asegurarEtiquetaFormulario(
+        validado.formularioId,
+        validado.integracionClientes.etiquetaId,
+        validado.nombre,
+      );
+    } else if (validado.integracionClientes) {
+      await this.configuracionClientes.liberarEtiquetaFormulario(
+        validado.formularioId,
+        validado.integracionClientes.etiquetaId,
+      );
+    }
     await set(ref(this.database, `${this.getTenantPath()}/${formulario.formularioId}`), validado);
   }
 
   async eliminar(formularioId: string): Promise<void> {
+    const snapshot = await get(ref(this.database, `${this.getTenantPath()}/${formularioId}`));
+    const formulario = snapshot.exists() ? this.normalizar(snapshot.val() as FormularioDef) : null;
+    if (formulario?.integracionClientes?.etiquetaId) {
+      await this.configuracionClientes.liberarEtiquetaFormulario(
+        formularioId,
+        formulario.integracionClientes.etiquetaId,
+      );
+    }
     await remove(ref(this.database, `${this.getTenantPath()}/${formularioId}`));
   }
 
@@ -122,6 +144,14 @@ export class FormulariosService {
       : (Object.values(formulario.campos ?? {}) as CampoFormulario[]);
     return {
       ...formulario,
+      integracionClientes: formulario.integracionClientes?.habilitada
+        ? {
+            ...formulario.integracionClientes,
+            mapeos: Array.isArray(formulario.integracionClientes.mapeos)
+              ? formulario.integracionClientes.mapeos
+              : Object.values(formulario.integracionClientes.mapeos ?? {}),
+          }
+        : undefined,
       campos: campos.map((campo) =>
         campo.tipo === 'seleccion'
           ? { ...campo, opciones: Array.isArray(campo.opciones) ? campo.opciones : [] }

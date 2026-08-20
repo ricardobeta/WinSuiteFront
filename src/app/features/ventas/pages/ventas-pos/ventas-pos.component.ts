@@ -160,7 +160,7 @@ type VistaPosCompacta = 'productos' | 'cobro';
       @if (cobroPorPartesActivo()) {
         <app-cobro-por-partes
           [items]="state.carrito().items"
-          [clientes]="clientesCobroPorPartes()"
+          [clientes]="clientes()"
           [metodosPago]="metodosPago()"
           [etiquetaCuenta]="etiquetaCuenta()"
           [impuestoPorDefecto]="config().impuestoPorDefecto"
@@ -536,7 +536,10 @@ type VistaPosCompacta = 'productos' | 'cobro';
 
           <mat-autocomplete #clientesAuto="matAutocomplete" (optionSelected)="seleccionarCliente($event.option.value)">
             @for (cliente of clientesFiltrados(); track cliente.id) {
-              <mat-option [value]="cliente">{{ cliente.nombreCompleto }} · {{ cliente.identificacion }}</mat-option>
+              <mat-option [value]="cliente">
+                {{ cliente.nombreCompleto }} · {{ cliente.identificacion || 'Sin identificación' }}
+                @if (cliente.fichaIncompleta) { <span class="cliente-incompleto-opcion">· Ficha incompleta</span> }
+              </mat-option>
             }
           </mat-autocomplete>
         </section>
@@ -1075,6 +1078,7 @@ type VistaPosCompacta = 'productos' | 'cobro';
     }
     .client-row { display: grid; grid-template-columns: 1fr auto; gap: .6rem; align-items: center; }
     .client-search { grid-column: 1 / 2; }
+    .cliente-incompleto-opcion { color: var(--tc-warning); font-size: .78rem; font-weight: 700; }
     .payments { display: grid; gap: .5rem; }
     .payments header { display: flex; justify-content: space-between; align-items: center; }
     .payments h3 { margin: 0; font-family: var(--tc-font-family-heading); font-size: 1rem; }
@@ -2132,8 +2136,47 @@ export class VentasPosComponent {
   }
 
   protected seleccionarCliente(cliente: Cliente): void {
+    if (cliente.fichaIncompleta) {
+      const clienteAnterior = this.clienteSeleccionadoActual();
+      this.busquedaClienteControl.setValue(clienteAnterior?.nombreCompleto ?? '');
+      this.abrirCompletarCliente(cliente);
+      return;
+    }
     this.state.setCliente(cliente);
     this.busquedaClienteControl.setValue(cliente.nombreCompleto);
+  }
+
+  private abrirCompletarCliente(cliente: Cliente): void {
+    this.snackBar.open('Completa la ficha antes de usar este cliente en una venta.', 'Entendido', {
+      duration: 3800,
+      horizontalPosition: 'end',
+      verticalPosition: 'top',
+    });
+    const dialogRef = this.dialog.open(ClienteFormDialogComponent, {
+      width: '920px',
+      maxWidth: '95vw',
+      data: {
+        cliente,
+        camposPersonalizados: this.camposPersonalizadosClientes() ?? [],
+        modo: 'editar',
+      } satisfies ClienteDialogData,
+    });
+    dialogRef.afterClosed().subscribe((resultado) => {
+      if (!resultado?.cliente || resultado.cliente.fichaIncompleta) return;
+      this.state.setCliente(resultado.cliente);
+      this.busquedaClienteControl.setValue(resultado.cliente.nombreCompleto);
+      this.snackBar.openFromComponent(SuccessSnackbarComponent, {
+        data: { message: 'Ficha completada y vinculada a la venta.', icon: 'verified' },
+        duration: 2600,
+        horizontalPosition: 'end',
+        verticalPosition: 'top',
+      });
+    });
+  }
+
+  private clienteSeleccionadoActual(): Cliente | null {
+    const clienteId = this.state.carrito().clienteId;
+    return clienteId ? this.clientes().find((cliente) => cliente.id === clienteId) ?? null : null;
   }
 
   protected actualizarPagoMetodo(index: number, metodo: string): void {
@@ -2282,6 +2325,12 @@ export class VentasPosComponent {
   protected async cobrar(): Promise<void> {
     if (this.state.carrito().items.length === 0) {
       this.snackBar.open('Agrega productos o servicios al carrito.', 'Cerrar', { duration: 2200 });
+      return;
+    }
+
+    const clienteVenta = this.clienteSeleccionadoActual();
+    if (clienteVenta?.fichaIncompleta) {
+      this.abrirCompletarCliente(clienteVenta);
       return;
     }
 
@@ -2564,6 +2613,13 @@ export class VentasPosComponent {
 
   protected async cobrarParte(request: CobroPorPartesRequest): Promise<void> {
     if (this.cobrando() || request.items.length === 0) {
+      return;
+    }
+    const clienteVenta = request.clienteId
+      ? this.clientes().find((cliente) => cliente.id === request.clienteId)
+      : null;
+    if (clienteVenta?.fichaIncompleta) {
+      this.abrirCompletarCliente(clienteVenta);
       return;
     }
 

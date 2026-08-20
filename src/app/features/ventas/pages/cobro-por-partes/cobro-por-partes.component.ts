@@ -9,15 +9,9 @@ import { MatSelectModule } from '@angular/material/select';
 import { firstValueFrom } from 'rxjs';
 
 import { ClienteFormDialogComponent } from '../../../../shared/components/cliente-form-dialog/cliente-form-dialog.component';
-import { ClienteDialogData } from '../../../../shared/models/clientes.models';
+import { Cliente, ClienteDialogData } from '../../../../shared/models/clientes.models';
 import { CarritoItem, MetodoPagoVenta } from '../../models/ventas.models';
 import { calcularResumenVenta, obtenerTarifaIva } from '../../services/ventas-calculos.util';
-
-export interface CobroPorPartesCliente {
-  id: string;
-  nombre: string;
-  identificacion: string;
-}
 
 export interface CobroPorPartesRequest {
   items: CarritoItem[];
@@ -161,7 +155,8 @@ function claveItem(item: Pick<CarritoItem, 'itemTipo' | 'productoId'>): string {
                   <mat-option [value]="null">Consumidor final</mat-option>
                   @for (cliente of clientesDisponibles(); track cliente.id) {
                     <mat-option [value]="cliente.id">
-                      {{ cliente.nombre }} · {{ cliente.identificacion }}
+                      {{ cliente.nombreCompleto }} · {{ cliente.identificacion || 'Sin identificación' }}
+                      @if (cliente.fichaIncompleta) { · Ficha incompleta }
                     </mat-option>
                   }
                 </mat-select>
@@ -446,7 +441,7 @@ export class CobroPorPartesComponent {
   private readonly dialog = inject(MatDialog);
 
   readonly items = input.required<CarritoItem[]>();
-  readonly clientes = input<CobroPorPartesCliente[]>([]);
+  readonly clientes = input<Cliente[]>([]);
   readonly metodosPago = input<string[]>([]);
   readonly etiquetaCuenta = input('Cuenta');
   readonly impuestoPorDefecto = input(0);
@@ -461,18 +456,18 @@ export class CobroPorPartesComponent {
 
   protected readonly seleccion = signal<Record<string, number>>({});
   protected readonly clienteId = signal<string | null>(null);
-  protected readonly clientesCreados = signal<CobroPorPartesCliente[]>([]);
+  protected readonly clientesCreados = signal<Cliente[]>([]);
   protected readonly metodoPago = signal<MetodoPagoVenta>('EFECTIVO');
   protected readonly referencia = signal('');
   protected readonly efectivoRecibido = signal<number | null>(null);
   private ultimoReset = -1;
 
   protected readonly clientesDisponibles = computed(() => {
-    const porId = new Map<string, CobroPorPartesCliente>();
+    const porId = new Map<string, Cliente>();
     for (const cliente of [...this.clientes(), ...this.clientesCreados()]) {
-      porId.set(cliente.id, cliente);
+      if (cliente.id) porId.set(cliente.id, cliente);
     }
-    return [...porId.values()].sort((a, b) => a.nombre.localeCompare(b.nombre));
+    return [...porId.values()].sort((a, b) => a.nombreCompleto.localeCompare(b.nombreCompleto));
   });
 
   protected readonly metodosNormalizados = computed<MetodoPagoVenta[]>(() => {
@@ -557,6 +552,14 @@ export class CobroPorPartesComponent {
   }
 
   protected seleccionarCliente(clienteId: string | null): void {
+    const cliente = clienteId
+      ? this.clientesDisponibles().find((item) => item.id === clienteId)
+      : null;
+    if (cliente?.fichaIncompleta) {
+      this.clienteId.set(null);
+      void this.completarCliente(cliente);
+      return;
+    }
     this.clienteId.set(clienteId ?? null);
   }
 
@@ -577,11 +580,7 @@ export class CobroPorPartesComponent {
 
     this.clientesCreados.update((actual) => [
       ...actual.filter((item) => item.id !== cliente.id),
-      {
-        id: cliente.id as string,
-        nombre: cliente.nombreCompleto,
-        identificacion: cliente.identificacion
-      }
+      cliente,
     ]);
     this.clienteId.set(cliente.id);
   }
@@ -636,7 +635,7 @@ export class CobroPorPartesComponent {
     this.cobrar.emit({
       items,
       clienteId,
-      clienteNombre: cliente?.nombre ?? 'CLIENTE FINAL',
+      clienteNombre: cliente?.nombreCompleto ?? 'CLIENTE FINAL',
       metodoPago: this.metodoPago(),
       referencia: this.referencia().trim(),
       efectivoRecibido: this.efectivoRecibido()
@@ -645,5 +644,25 @@ export class CobroPorPartesComponent {
 
   private round(value: number): number {
     return Math.round((value + Number.EPSILON) * 100) / 100;
+  }
+
+  private async completarCliente(cliente: Cliente): Promise<void> {
+    const dialogRef = this.dialog.open(ClienteFormDialogComponent, {
+      width: '920px',
+      maxWidth: '95vw',
+      data: {
+        cliente,
+        camposPersonalizados: this.camposPersonalizados() ?? [],
+        modo: 'editar',
+      } satisfies ClienteDialogData,
+    });
+    const resultado = await firstValueFrom(dialogRef.afterClosed());
+    const actualizado = resultado?.cliente;
+    if (!actualizado?.id || actualizado.fichaIncompleta) return;
+    this.clientesCreados.update((actual) => [
+      ...actual.filter((item) => item.id !== actualizado.id),
+      actualizado,
+    ]);
+    this.clienteId.set(actualizado.id);
   }
 }

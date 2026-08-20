@@ -9,6 +9,8 @@ import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { ActivatedRoute } from '@angular/router';
+import { firstValueFrom, take } from 'rxjs';
 
 import { Cliente, CampoPersonalizado, ClienteDialogData, EtiquetaClienteConfig } from '../../../../shared/models/clientes.models';
 import { ClientesService } from '../../../../core/services/clientes.service';
@@ -63,7 +65,12 @@ import { TableColumnDefinition } from '../../../../shared/models/table-preferenc
         <table mat-table [dataSource]="dataSource" matSort>
           <ng-container matColumnDef="nombreCompleto">
             <th mat-header-cell *matHeaderCellDef mat-sort-header>Nombre completo</th>
-            <td mat-cell *matCellDef="let row">{{ row.nombreCompleto }}</td>
+            <td mat-cell *matCellDef="let row">
+              <div class="client-name">
+                <span>{{ row.nombreCompleto }}</span>
+                @if (row.fichaIncompleta) { <span class="incomplete-badge">Ficha incompleta</span> }
+              </div>
+            </td>
           </ng-container>
 
           <ng-container matColumnDef="email">
@@ -153,6 +160,8 @@ import { TableColumnDefinition } from '../../../../shared/models/table-preferenc
     thead tr { background: var(--tc-surface-container-low); }
     td mat-icon { font-size: 1.1rem; }
     .client-tags { display: flex; min-width: 180px; max-width: 360px; gap: .35rem; flex-wrap: wrap; padding: .3rem 0; }
+    .client-name { display: grid; gap: .3rem; justify-items: start; }
+    .incomplete-badge { display: inline-flex; padding: .2rem .55rem; border-radius: 999px; background: var(--tc-warning-container); color: var(--tc-on-warning-container); font-size: .72rem; font-weight: 700; }
     @media (max-width: 900px) { .toolbar { align-items: start; flex-direction: column; } }
   `]
 })
@@ -162,6 +171,7 @@ export class ListaClientesComponent implements OnInit, AfterViewInit {
   private readonly dialog = inject(MatDialog);
   private readonly snackBar = inject(MatSnackBar);
   private readonly destroyRef = inject(DestroyRef);
+  private readonly route = inject(ActivatedRoute);
 
   @ViewChild(MatSort) protected sort!: MatSort;
 
@@ -194,6 +204,7 @@ export class ListaClientesComponent implements OnInit, AfterViewInit {
   protected readonly hasMore = signal(false);
   protected readonly totalEstimado = signal(0);
   private readonly cursors = new Map<number, { value: string; key: string } | null>([[0, null]]);
+  private ultimoClienteEnlace = '';
 
   ngOnInit(): void {
     void this.cargarPagina(0, this.pageSize());
@@ -201,6 +212,13 @@ export class ListaClientesComponent implements OnInit, AfterViewInit {
     this.configuracionService.getConfiguracion().pipe(takeUntilDestroyed(this.destroyRef)).subscribe((configuracion) => {
       this.camposPersonalizados.set(configuracion.camposPersonalizados ?? []);
       this.catalogoEtiquetas.set(configuracion.catalogoEtiquetas ?? []);
+    });
+    this.route.queryParamMap.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      const clienteId = params.get('clienteId') ?? '';
+      if (clienteId && clienteId !== this.ultimoClienteEnlace) {
+        this.ultimoClienteEnlace = clienteId;
+        void this.abrirClienteDesdeEnlace(clienteId);
+      }
     });
   }
 
@@ -311,5 +329,14 @@ export class ListaClientesComponent implements OnInit, AfterViewInit {
       horizontalPosition: 'end',
       verticalPosition: 'top'
     });
+  }
+
+  private async abrirClienteDesdeEnlace(clienteId: string): Promise<void> {
+    const cliente = await firstValueFrom(this.clientesService.getClienteById(clienteId).pipe(take(1)));
+    if (!cliente) {
+      this.snackBar.open('El cliente vinculado ya no existe.', 'Cerrar', { duration: 3500 });
+      return;
+    }
+    this.modificarCliente(cliente);
   }
 }

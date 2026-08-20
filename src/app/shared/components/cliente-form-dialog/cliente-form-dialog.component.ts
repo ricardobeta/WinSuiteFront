@@ -62,12 +62,18 @@ interface ItemFormularioCliente {
     <div class="dialog-title-block">
       <span class="dialog-icon" aria-hidden="true"><mat-icon>{{ modoFormulario() === 'editar' ? 'person_edit' : 'person_add' }}</mat-icon></span>
       <div>
-        <h2 mat-dialog-title>{{ modoFormulario() === 'editar' ? 'Modificar cliente' : 'Nuevo cliente' }}</h2>
-        <p>{{ modoFormulario() === 'editar' ? 'Actualiza la información y conserva una ficha consistente.' : 'Registra los datos en el orden definido por tu equipo.' }}</p>
+        <h2 mat-dialog-title>{{ clienteActual()?.fichaIncompleta ? 'Completar ficha del cliente' : (modoFormulario() === 'editar' ? 'Modificar cliente' : 'Nuevo cliente') }}</h2>
+        <p>{{ clienteActual()?.fichaIncompleta ? 'Revisa los datos recibidos desde el sitio antes de usar este cliente en ventas.' : (modoFormulario() === 'editar' ? 'Actualiza la información y conserva una ficha consistente.' : 'Registra los datos en el orden definido por tu equipo.') }}</p>
       </div>
     </div>
 
     <mat-dialog-content>
+      @if (clienteActual()?.fichaIncompleta) {
+        <div class="incomplete-notice" role="alert">
+          <mat-icon>assignment_late</mat-icon>
+          <div><strong>Ficha pendiente de validación</strong><p>Completa los campos obligatorios y guarda para habilitar este cliente en el POS.</p></div>
+        </div>
+      }
       @if (estadoConfiguracion() === 'loading') {
         <div class="form-state" role="status"><mat-spinner diameter="34" /><div><strong>Preparando formulario</strong><p>Cargando etiquetas y campos configurados.</p></div></div>
       } @else if (estadoConfiguracion() === 'error') {
@@ -184,6 +190,8 @@ interface ItemFormularioCliente {
     .chip-dot, .option-tag i { display: inline-block; width: 7px; height: 7px; margin-right: .35rem; border-radius: 50%; background: currentColor; opacity: .72; }
     .option-tag { display: inline-flex; min-height: 28px; align-items: center; padding: .15rem .62rem; border-radius: 999px; background: var(--tag-bg, #d8f3ed); color: var(--tag-fg, #075b50); font-size: .77rem; font-weight: 700; }
     .form-state { display: flex; min-height: 180px; align-items: center; justify-content: center; gap: 1rem; }.form-state strong { display: block; }.form-state p { margin: .2rem 0 0; color: var(--muted-foreground); }
+    .incomplete-notice { display: flex; gap: .8rem; margin: 0 0 1rem; padding: .85rem 1rem; border-radius: 12px; background: var(--tc-warning-container); color: var(--tc-on-warning-container); }
+    .incomplete-notice mat-icon { flex: 0 0 auto; }.incomplete-notice strong { display: block; }.incomplete-notice p { margin: .2rem 0 0; }
     .error-state { justify-content: flex-start; }.error-state > mat-icon { width: 34px; height: 34px; color: var(--tc-error); font-size: 34px; }.error-state button { margin-left: auto; }
     mat-dialog-actions button[mat-flat-button] { min-width: 150px; } mat-dialog-actions mat-spinner { display: inline-block; margin-right: .4rem; }
     :host-context(html.theme-dark) mat-chip-row[data-color='teal'], :host-context(html.theme-dark) .option-tag[data-color='teal'] { --tag-bg: #163f38; --tag-fg: #a9eee0; }
@@ -322,8 +330,19 @@ export class ClienteFormDialogComponent implements OnInit {
           ...(this.clienteActual()?.camposPersonalizados ?? {}),
           ...(rawValue.camposPersonalizados ?? {})
         },
+        fichaIncompleta: false,
+        ...(this.clienteActual()?.origenCreacion
+          ? { origenCreacion: this.clienteActual()?.origenCreacion }
+          : {}),
         actualizadoEn: Date.now()
       };
+      const duplicado = await this.clientesService.buscarClientePorIdentificacion(
+        payload.identificacion,
+        payload.tipoDeIdentificacion,
+      );
+      if (duplicado?.id && duplicado.id !== this.clienteActual()?.id) {
+        throw new Error('Ya existe un cliente con este tipo y número de identificación.');
+      }
       if (this.clienteActual()?.creadoEn !== undefined) payload.creadoEn = this.clienteActual()?.creadoEn;
 
       const existente = this.clienteActual();

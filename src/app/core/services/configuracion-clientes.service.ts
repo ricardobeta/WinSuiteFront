@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, get, onValue, ref, set } from '@angular/fire/database';
+import { Database, get, onValue, ref, runTransaction, set } from '@angular/fire/database';
 import { Observable } from 'rxjs';
 
 import { AuthService } from './auth.service';
@@ -89,11 +89,13 @@ function normalizarCatalogoEtiquetas(value: unknown): EtiquetaClienteConfig[] {
       ? rawColor as ColorEtiquetaCliente
       : 'teal';
 
+    const origenFormularioId = texto(rawEtiqueta['origenFormularioId']);
     return [{
       idEtiqueta,
       nombre,
       color,
-      activa: rawEtiqueta['activa'] !== false
+      activa: rawEtiqueta['activa'] !== false,
+      ...(origenFormularioId ? { origenFormularioId } : {}),
     } satisfies EtiquetaClienteConfig];
   });
 }
@@ -157,6 +159,49 @@ export class ConfiguracionClientesService {
     await set(ref(this.database, this.getConfigPath()), normalizarConfiguracionClientes(config));
   }
 
+  /** Crea o renombra la etiqueta estable que pertenece a un formulario integrado. */
+  async asegurarEtiquetaFormulario(formularioId: string, etiquetaId: string, nombre: string): Promise<void> {
+    const nombreLimpio = nombre.trim();
+    if (!nombreLimpio) throw new Error('El formulario necesita un nombre para crear su etiqueta.');
+
+    await runTransaction(ref(this.database, this.getConfigPath()), (actual) => {
+      const config = normalizarConfiguracionClientes(actual);
+      const comparable = textoComparableEtiqueta(nombreLimpio);
+      const indice = config.catalogoEtiquetas.findIndex((item) => item.idEtiqueta === etiquetaId);
+      const colision = config.catalogoEtiquetas.find(
+        (item) => item.idEtiqueta !== etiquetaId && textoComparableEtiqueta(item.nombre) === comparable,
+      );
+      if (colision) {
+        throw new Error(`Ya existe la etiqueta "${colision.nombre}". Renombra el formulario antes de activar la integracion.`);
+      }
+
+      const etiqueta: EtiquetaClienteConfig = {
+        idEtiqueta: etiquetaId,
+        nombre: nombreLimpio,
+        color: indice >= 0 ? config.catalogoEtiquetas[indice].color : 'teal',
+        activa: true,
+        origenFormularioId: formularioId,
+      };
+      const catalogoEtiquetas = [...config.catalogoEtiquetas];
+      if (indice >= 0) catalogoEtiquetas[indice] = etiqueta;
+      else catalogoEtiquetas.push(etiqueta);
+      return { ...config, catalogoEtiquetas };
+    });
+  }
+
+  /** Conserva la etiqueta historica, pero deja de bloquear su edicion al desactivar la integracion. */
+  async liberarEtiquetaFormulario(formularioId: string, etiquetaId: string): Promise<void> {
+    await runTransaction(ref(this.database, this.getConfigPath()), (actual) => {
+      const config = normalizarConfiguracionClientes(actual);
+      const catalogoEtiquetas = config.catalogoEtiquetas.map((etiqueta) => {
+        if (etiqueta.idEtiqueta !== etiquetaId || etiqueta.origenFormularioId !== formularioId) return etiqueta;
+        const { origenFormularioId: _origen, ...historica } = etiqueta;
+        return historica;
+      });
+      return { ...config, catalogoEtiquetas };
+    });
+  }
+
   async agregarCampo(campo: CampoPersonalizado): Promise<void> {
     const config = await this.getConfiguracionOnce();
     const nuevoCampo = { ...campo, orden: config.camposPersonalizados.length };
@@ -198,6 +243,9 @@ export class ConfiguracionClientesService {
 
   async actualizarEtiqueta(etiqueta: EtiquetaClienteConfig): Promise<void> {
     const config = await this.getConfiguracionOnce();
+    if (config.catalogoEtiquetas.find((item) => item.idEtiqueta === etiqueta.idEtiqueta)?.origenFormularioId) {
+      throw new Error('Esta etiqueta se administra desde su formulario de Sitios.');
+    }
     this.validarNombreEtiqueta(etiqueta.nombre, config.catalogoEtiquetas, etiqueta.idEtiqueta);
     await this.guardarConfiguracion({
       ...config,
@@ -210,6 +258,10 @@ export class ConfiguracionClientesService {
 
   async cambiarEstadoEtiqueta(idEtiqueta: string, activa: boolean): Promise<void> {
     const config = await this.getConfiguracionOnce();
+    const etiqueta = config.catalogoEtiquetas.find((item) => item.idEtiqueta === idEtiqueta);
+    if (!activa && etiqueta?.origenFormularioId) {
+      throw new Error('Esta etiqueta pertenece a un formulario con sincronizacion activa.');
+    }
     await this.guardarConfiguracion({
       ...config,
       catalogoEtiquetas: config.catalogoEtiquetas.map((etiqueta) =>

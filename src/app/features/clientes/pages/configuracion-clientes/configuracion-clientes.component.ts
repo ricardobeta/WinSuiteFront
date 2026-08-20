@@ -131,12 +131,15 @@ const CAMPOS_BASE: Record<string, Omit<ItemOrdenFormulario, 'key'>> = {
                       <article class="tag-row" [class.is-inactive]="!etiqueta.activa" role="listitem">
                         <div class="tag-identity">
                           <app-etiqueta-cliente-chip [valor]="etiqueta.idEtiqueta" [catalogo]="configuracion().catalogoEtiquetas" [mostrarEstado]="false" />
-                          <span>{{ etiqueta.activa ? 'Disponible para asignar' : 'Desactivada · se conserva en clientes' }}</span>
+                          <span>
+                            @if (etiqueta.origenFormularioId) { Administrada por un formulario de Sitios }
+                            @else { {{ etiqueta.activa ? 'Disponible para asignar' : 'Desactivada · se conserva en clientes' }} }
+                          </span>
                         </div>
                         <div class="row-actions">
-                          <button mat-icon-button type="button" [attr.aria-label]="'Editar ' + etiqueta.nombre" matTooltip="Editar etiqueta" (click)="editarEtiqueta(etiqueta)"><mat-icon>edit</mat-icon></button>
+                          <button mat-icon-button type="button" [disabled]="!!etiqueta.origenFormularioId" [attr.aria-label]="'Editar ' + etiqueta.nombre" [matTooltip]="etiqueta.origenFormularioId ? 'Cambia el nombre desde el formulario de Sitios' : 'Editar etiqueta'" (click)="editarEtiqueta(etiqueta)"><mat-icon>edit</mat-icon></button>
                           @if (etiqueta.activa) {
-                            <button mat-icon-button type="button" [attr.aria-label]="'Desactivar ' + etiqueta.nombre" matTooltip="Desactivar etiqueta" (click)="desactivarEtiqueta(etiqueta)"><mat-icon>visibility_off</mat-icon></button>
+                            <button mat-icon-button type="button" [disabled]="!!etiqueta.origenFormularioId" [attr.aria-label]="'Desactivar ' + etiqueta.nombre" [matTooltip]="etiqueta.origenFormularioId ? 'Desactiva primero la sincronización del formulario' : 'Desactivar etiqueta'" (click)="desactivarEtiqueta(etiqueta)"><mat-icon>visibility_off</mat-icon></button>
                           } @else {
                             <button mat-icon-button type="button" color="primary" [attr.aria-label]="'Reactivar ' + etiqueta.nombre" matTooltip="Reactivar etiqueta" (click)="reactivarEtiqueta(etiqueta)"><mat-icon>refresh</mat-icon></button>
                           }
@@ -371,10 +374,12 @@ export class ConfiguracionClientesComponent implements OnInit, AfterViewInit {
   }
 
   protected editarEtiqueta(etiqueta: EtiquetaClienteConfig): void {
+    if (etiqueta.origenFormularioId) return;
     this.abrirDialogoEtiqueta(etiqueta);
   }
 
   protected desactivarEtiqueta(etiqueta: EtiquetaClienteConfig): void {
+    if (etiqueta.origenFormularioId) return;
     this.dialog.open(ConfirmDialogComponent, {
       width: '440px',
       data: {

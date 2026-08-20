@@ -716,6 +716,11 @@
         }
       }
     },
+    "client_sync_outbox": {
+      ".read": false,
+      ".write": false,
+      ".indexOn": ["siguienteIntentoEn"]
+    },
     "subdominios": {
       ".read": false,
       "$subdominio": {
