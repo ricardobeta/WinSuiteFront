@@ -1,11 +1,13 @@
 import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { toSignal, takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { BreakpointObserver } from '@angular/cdk/layout';
 import { FormArray, FormBuilder, FormsModule, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatDialog } from '@angular/material/dialog';
+import { MatExpansionModule } from '@angular/material/expansion';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
@@ -14,7 +16,7 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatTabsModule } from '@angular/material/tabs';
-import { firstValueFrom } from 'rxjs';
+import { firstValueFrom, map } from 'rxjs';
 
 import { AuthService } from '../../../../core/services/auth.service';
 import {
@@ -62,6 +64,8 @@ import { ProductosService } from '../../services/productos.service';
 import { RecetasService } from '../../services/recetas.service';
 import { UnidadesService } from '../../services/unidades.service';
 
+type SeccionProducto = 'general' | 'venta' | 'inventario' | 'receta' | 'variantes' | 'adicional';
+
 @Component({
   selector: 'app-producto-form',
   standalone: true,
@@ -72,6 +76,7 @@ import { UnidadesService } from '../../services/unidades.service';
     RouterLink,
     MatButtonModule,
     MatCardModule,
+    MatExpansionModule,
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
@@ -94,19 +99,7 @@ import { UnidadesService } from '../../services/unidades.service';
 
       <section class="surface-card form-card">
         <form class="producto-form" [formGroup]="form" (ngSubmit)="guardar()">
-          <mat-tab-group
-            animationDuration="0ms"
-            [selectedIndex]="pestanaActiva()"
-            (selectedIndexChange)="pestanaActiva.set($event)"
-          >
-            <mat-tab>
-              <ng-template mat-tab-label>
-                General
-                @if (erroresDe(camposGeneral) > 0) {
-                  <span class="tab-badge">{{ erroresDe(camposGeneral) }}</span>
-                }
-              </ng-template>
-
+          <ng-template #generalSection>
               <section class="tab-body identidad">
                 <div class="identidad-imagen">
                   <label class="campo-label">Imagen{{ imagenRequerida() ? ' *' : '' }}</label>
@@ -173,16 +166,9 @@ import { UnidadesService } from '../../services/unidades.service';
                   <mat-slide-toggle formControlName="activo">Activo</mat-slide-toggle>
                 </div>
               </section>
-            </mat-tab>
+          </ng-template>
 
-            <mat-tab>
-              <ng-template mat-tab-label>
-                Venta
-                @if (erroresDe(camposVenta) > 0) {
-                  <span class="tab-badge">{{ erroresDe(camposVenta) }}</span>
-                }
-              </ng-template>
-
+          <ng-template #ventaSection>
               <section class="tab-body">
                 <fieldset class="opciones">
                   <legend>Uso del producto</legend>
@@ -253,16 +239,9 @@ import { UnidadesService } from '../../services/unidades.service';
                   </div>
                 }
               </section>
-            </mat-tab>
+          </ng-template>
 
-            <mat-tab>
-              <ng-template mat-tab-label>
-                Inventario
-                @if (erroresDe(camposInventario) > 0) {
-                  <span class="tab-badge">{{ erroresDe(camposInventario) }}</span>
-                }
-              </ng-template>
-
+          <ng-template #inventarioSection>
               <section class="tab-body">
                 <div class="grid-4">
                   <mat-form-field appearance="outline">
@@ -325,17 +304,9 @@ import { UnidadesService } from '../../services/unidades.service';
                   </section>
                 }
               </section>
-            </mat-tab>
+          </ng-template>
 
-            @if (esReceta()) {
-              <mat-tab>
-                <ng-template mat-tab-label>
-                  Receta
-                  @if (erroresDe(camposReceta) > 0) {
-                    <span class="tab-badge">{{ erroresDe(camposReceta) }}</span>
-                  }
-                </ng-template>
-
+          <ng-template #recetaSection>
                 <section class="tab-body">
                   <div class="section-header-row">
                     <h3>Ingredientes de receta</h3>
@@ -362,6 +333,7 @@ import { UnidadesService } from '../../services/unidades.service';
 
                     @for (group of ingredientesReceta().controls; track $index) {
                       <div class="receta-grid" [formGroup]="group">
+                        <strong class="mobile-row-title">Ingrediente {{ $index + 1 }}</strong>
                         <mat-form-field appearance="outline">
                           <mat-label>Ingrediente (producto o subreceta)</mat-label>
                           <mat-select formControlName="productoId" (selectionChange)="onIngredienteProductoChange($index)">
@@ -386,8 +358,16 @@ import { UnidadesService } from '../../services/unidades.service';
                           <input matInput formControlName="notas" />
                         </mat-form-field>
 
-                        <button mat-icon-button type="button" color="warn" (click)="removerIngrediente($index)">
+                        <button
+                          mat-icon-button
+                          type="button"
+                          color="warn"
+                          class="row-delete"
+                          [attr.aria-label]="'Eliminar ingrediente ' + ($index + 1)"
+                          (click)="removerIngrediente($index)"
+                        >
                           <mat-icon>delete</mat-icon>
+                          <span class="mobile-action-label">Eliminar ingrediente</span>
                         </button>
                       </div>
                     }
@@ -402,18 +382,9 @@ import { UnidadesService } from '../../services/unidades.service';
                     <textarea matInput rows="2" formControlName="recetaNotas"></textarea>
                   </mat-form-field>
                 </section>
-              </mat-tab>
-            }
+          </ng-template>
 
-            @if (puedeTenerVariantes()) {
-              <mat-tab>
-                <ng-template mat-tab-label>
-                  Variantes
-                  @if (variantesActivas()) {
-                    <span class="tab-badge tab-badge-neutro">{{ combinaciones().length }}</span>
-                  }
-                </ng-template>
-
+          <ng-template #variantesSection>
                 <section class="tab-body">
                   <mat-slide-toggle
                     [checked]="variantesActivas()"
@@ -462,7 +433,11 @@ import { UnidadesService } from '../../services/unidades.service';
                             @for (valor of atributo.valores; track valor) {
                               <span class="valor-chip">
                                 {{ valor }}
-                                <button type="button" (click)="quitarValor(indiceAtributo, valor)" aria-label="Quitar valor">
+                                <button
+                                  type="button"
+                                  (click)="quitarValor(indiceAtributo, valor)"
+                                  [attr.aria-label]="'Quitar valor ' + valor + ' de ' + atributo.nombre"
+                                >
                                   <mat-icon>close</mat-icon>
                                 </button>
                               </span>
@@ -471,13 +446,22 @@ import { UnidadesService } from '../../services/unidades.service';
                             <input
                               class="valor-input"
                               placeholder="Escribe y pulsa Enter"
+                              [attr.aria-label]="'Agregar valor para ' + atributo.nombre"
                               (keydown.enter)="agregarValor(indiceAtributo, $event)"
                               (blur)="agregarValor(indiceAtributo, $event)"
                             />
                           </div>
 
-                          <button mat-icon-button type="button" color="warn" (click)="quitarAtributo(indiceAtributo)">
+                          <button
+                            mat-icon-button
+                            type="button"
+                            color="warn"
+                            class="atributo-delete"
+                            [attr.aria-label]="'Eliminar eje ' + atributo.nombre"
+                            (click)="quitarAtributo(indiceAtributo)"
+                          >
                             <mat-icon>delete</mat-icon>
+                            <span class="mobile-action-label">Eliminar eje</span>
                           </button>
                         </article>
                       }
@@ -522,7 +506,7 @@ import { UnidadesService } from '../../services/unidades.service';
 
                           @for (fila of filasVariantes().controls; track fila.value.clave) {
                             <div class="variante-fila" [formGroup]="fila">
-                              <mat-slide-toggle formControlName="generar" />
+                              <mat-slide-toggle formControlName="generar">Generar variante</mat-slide-toggle>
                               <span class="variante-etiqueta">
                                 {{ fila.value.etiqueta }}
                                 @if (fila.value.existeId) {
@@ -530,20 +514,25 @@ import { UnidadesService } from '../../services/unidades.service';
                                 }
                               </span>
                               <mat-form-field appearance="outline">
+                                <mat-label>SKU</mat-label>
                                 <input matInput formControlName="sku" />
                               </mat-form-field>
                               <mat-form-field appearance="outline">
+                                <mat-label>Codigo de barras</mat-label>
                                 <input matInput formControlName="codigoBarras" />
                               </mat-form-field>
                               <mat-form-field appearance="outline">
+                                <mat-label>Precio</mat-label>
                                 <input matInput type="text" inputmode="decimal" appTwoDecimalInput formControlName="precioVenta" />
                               </mat-form-field>
                               @if (esReceta()) {
                                 <mat-form-field appearance="outline">
+                                  <mat-label>Factor receta</mat-label>
                                   <input matInput type="number" min="0.01" step="0.01" formControlName="factorReceta" />
                                 </mat-form-field>
                               } @else {
                                 <mat-form-field appearance="outline">
+                                  <mat-label>Stock inicial</mat-label>
                                   <input matInput type="number" min="0" formControlName="stockInicial" [readonly]="!!fila.value.existeId" />
                                 </mat-form-field>
                               }
@@ -559,27 +548,93 @@ import { UnidadesService } from '../../services/unidades.service';
                     }
                   }
                 </section>
-              </mat-tab>
-            }
+          </ng-template>
 
-            @if (camposCustom().length > 0) {
-              <mat-tab>
-                <ng-template mat-tab-label>
-                  Adicional
-                  @if (erroresDe(camposAdicional) > 0) {
-                    <span class="tab-badge">{{ erroresDe(camposAdicional) }}</span>
-                  }
-                </ng-template>
-
+          <ng-template #adicionalSection>
                 <section class="tab-body">
                   <app-campos-custom-form
                     formControlName="camposPersonalizados"
                     [campos]="camposCustom()"
                   />
                 </section>
+          </ng-template>
+
+          @if (esPantallaMovil()) {
+            <mat-accordion class="mobile-form-sections">
+              <mat-expansion-panel [expanded]="seccionMovilActiva() === 'general'" (opened)="activarSeccionMovil('general')">
+                <mat-expansion-panel-header id="producto-section-general">
+                  <mat-panel-title>General</mat-panel-title>
+                  @if (erroresDe(camposGeneral) > 0) { <span class="tab-badge">{{ erroresDe(camposGeneral) }}</span> }
+                </mat-expansion-panel-header>
+                <ng-container [ngTemplateOutlet]="generalSection" />
+              </mat-expansion-panel>
+              <mat-expansion-panel [expanded]="seccionMovilActiva() === 'venta'" (opened)="activarSeccionMovil('venta')">
+                <mat-expansion-panel-header id="producto-section-venta">
+                  <mat-panel-title>Venta</mat-panel-title>
+                  @if (erroresDe(camposVenta) > 0) { <span class="tab-badge">{{ erroresDe(camposVenta) }}</span> }
+                </mat-expansion-panel-header>
+                <ng-container [ngTemplateOutlet]="ventaSection" />
+              </mat-expansion-panel>
+              <mat-expansion-panel [expanded]="seccionMovilActiva() === 'inventario'" (opened)="activarSeccionMovil('inventario')">
+                <mat-expansion-panel-header id="producto-section-inventario">
+                  <mat-panel-title>Inventario</mat-panel-title>
+                  @if (erroresDe(camposInventario) > 0) { <span class="tab-badge">{{ erroresDe(camposInventario) }}</span> }
+                </mat-expansion-panel-header>
+                <ng-container [ngTemplateOutlet]="inventarioSection" />
+              </mat-expansion-panel>
+              @if (esReceta()) {
+                <mat-expansion-panel [expanded]="seccionMovilActiva() === 'receta'" (opened)="activarSeccionMovil('receta')">
+                  <mat-expansion-panel-header id="producto-section-receta">
+                    <mat-panel-title>Receta</mat-panel-title>
+                    @if (erroresDe(camposReceta) > 0) { <span class="tab-badge">{{ erroresDe(camposReceta) }}</span> }
+                  </mat-expansion-panel-header>
+                  <ng-container [ngTemplateOutlet]="recetaSection" />
+                </mat-expansion-panel>
+              }
+              @if (puedeTenerVariantes()) {
+                <mat-expansion-panel [expanded]="seccionMovilActiva() === 'variantes'" (opened)="activarSeccionMovil('variantes')">
+                  <mat-expansion-panel-header id="producto-section-variantes">
+                    <mat-panel-title>Variantes</mat-panel-title>
+                    @if (erroresVariantes() > 0) { <span class="tab-badge">{{ erroresVariantes() }}</span> }
+                  </mat-expansion-panel-header>
+                  <ng-container [ngTemplateOutlet]="variantesSection" />
+                </mat-expansion-panel>
+              }
+              @if (camposCustom().length > 0) {
+                <mat-expansion-panel [expanded]="seccionMovilActiva() === 'adicional'" (opened)="activarSeccionMovil('adicional')">
+                  <mat-expansion-panel-header id="producto-section-adicional">
+                    <mat-panel-title>Adicional</mat-panel-title>
+                    @if (erroresDe(camposAdicional) > 0) { <span class="tab-badge">{{ erroresDe(camposAdicional) }}</span> }
+                  </mat-expansion-panel-header>
+                  <ng-container [ngTemplateOutlet]="adicionalSection" />
+                </mat-expansion-panel>
+              }
+            </mat-accordion>
+          } @else {
+            <mat-tab-group animationDuration="0ms" [selectedIndex]="pestanaActiva()" (selectedIndexChange)="pestanaActiva.set($event)">
+              <mat-tab>
+                <ng-template mat-tab-label>General @if (erroresDe(camposGeneral) > 0) { <span class="tab-badge">{{ erroresDe(camposGeneral) }}</span> }</ng-template>
+                <ng-container [ngTemplateOutlet]="generalSection" />
               </mat-tab>
-            }
-          </mat-tab-group>
+              <mat-tab>
+                <ng-template mat-tab-label>Venta @if (erroresDe(camposVenta) > 0) { <span class="tab-badge">{{ erroresDe(camposVenta) }}</span> }</ng-template>
+                <ng-container [ngTemplateOutlet]="ventaSection" />
+              </mat-tab>
+              <mat-tab>
+                <ng-template mat-tab-label>Inventario @if (erroresDe(camposInventario) > 0) { <span class="tab-badge">{{ erroresDe(camposInventario) }}</span> }</ng-template>
+                <ng-container [ngTemplateOutlet]="inventarioSection" />
+              </mat-tab>
+              @if (esReceta()) {
+                <mat-tab><ng-template mat-tab-label>Receta @if (erroresDe(camposReceta) > 0) { <span class="tab-badge">{{ erroresDe(camposReceta) }}</span> }</ng-template><ng-container [ngTemplateOutlet]="recetaSection" /></mat-tab>
+              }
+              @if (puedeTenerVariantes()) {
+                <mat-tab><ng-template mat-tab-label>Variantes @if (erroresVariantes() > 0) { <span class="tab-badge">{{ erroresVariantes() }}</span> }</ng-template><ng-container [ngTemplateOutlet]="variantesSection" /></mat-tab>
+              }
+              @if (camposCustom().length > 0) {
+                <mat-tab><ng-template mat-tab-label>Adicional @if (erroresDe(camposAdicional) > 0) { <span class="tab-badge">{{ erroresDe(camposAdicional) }}</span> }</ng-template><ng-container [ngTemplateOutlet]="adicionalSection" /></mat-tab>
+              }
+            </mat-tab-group>
+          }
 
           <div class="actions-row">
             <a mat-button routerLink="/workspace/inventario/productos">Cancelar</a>
@@ -614,7 +669,7 @@ import { UnidadesService } from '../../services/unidades.service';
       display: inline-grid; place-items: center;
       min-width: 18px; height: 18px; margin-left: .4rem; padding: 0 .3rem;
       border-radius: 999px; font-size: .7rem; font-weight: 600; line-height: 1;
-      background: var(--tc-error); color: var(--tc-on-error, #fff);
+      background: var(--tc-error); color: var(--tc-on-error);
     }
     .identidad { grid-template-columns: minmax(0, 220px) minmax(0, 1fr); align-items: start; gap: 1.5rem; }
     .identidad-imagen { display: grid; gap: .4rem; }
@@ -647,7 +702,7 @@ import { UnidadesService } from '../../services/unidades.service';
       background: color-mix(in srgb, var(--primary) 14%, transparent);
       color: var(--primary); font-size: .82rem; font-weight: 600;
     }
-    .valor-chip button { display: grid; place-items: center; border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; }
+    .valor-chip button { display: grid; width: 28px; height: 28px; place-items: center; border: 0; padding: 0; background: transparent; color: inherit; cursor: pointer; }
     .valor-chip mat-icon { font-size: 15px; width: 15px; height: 15px; }
     .valor-input { flex: 1 1 140px; min-width: 120px; border: 0; background: transparent; color: inherit; font: inherit; outline: none; }
 
@@ -665,6 +720,10 @@ import { UnidadesService } from '../../services/unidades.service';
       background: color-mix(in srgb, var(--foreground) 10%, transparent);
       color: var(--muted-foreground); font-size: .68rem; font-weight: 600;
     }
+    .mobile-row-title, .mobile-action-label { display: none; }
+    .mobile-form-sections { display: grid; gap: .65rem; }
+    .mobile-form-sections mat-expansion-panel { border-radius: 12px; background: var(--tc-surface-container-low); box-shadow: none; }
+    .mobile-form-sections mat-panel-title { font-weight: 700; }
 
     @media (max-width: 900px) {
       .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
@@ -672,6 +731,60 @@ import { UnidadesService } from '../../services/unidades.service';
       .section-header-row { flex-direction: column; align-items: flex-start; }
       .receta-grid { grid-template-columns: 1fr; }
       .actions-row { justify-content: flex-start; }
+    }
+    @media (max-width: 900px) {
+      .header-card, .form-card { padding: .85rem; }
+      .tab-body { padding: .8rem 0 0; }
+      .section-header-row, .acciones-masivas { width: 100%; }
+      .section-header-row button, .acciones-masivas button { width: 100%; }
+      .receta-grid-head, .variante-cabecera { display: none; }
+      .receta-grid:not(.receta-grid-head),
+      .atributo-fila,
+      .variante-fila:not(.variante-cabecera) {
+        grid-template-columns: minmax(0, 1fr);
+        min-width: 0;
+        padding: .85rem;
+        border-radius: 12px;
+        background: var(--tc-surface-container-low);
+      }
+      .mobile-row-title { display: block; margin-bottom: .15rem; }
+      .mobile-action-label { display: inline; }
+      .receta-grid .row-delete,
+      .atributo-delete {
+        display: inline-flex;
+        width: 100%;
+        min-height: 44px;
+        align-items: center;
+        justify-content: center;
+        gap: .4rem;
+        border-radius: 10px;
+        background: var(--tc-error-container);
+        color: var(--tc-on-error-container);
+      }
+      .atributo-valores { min-width: 0; }
+      .valor-chip { min-height: 44px; padding-block: 0; }
+      .valor-chip button { width: 44px; height: 44px; }
+      .valor-input { min-height: 44px; padding-inline: .35rem; }
+      .valor-input:focus-visible { outline: 3px solid color-mix(in srgb, var(--primary) 38%, transparent); outline-offset: 2px; }
+      .variantes-tabla { overflow: visible; }
+      .variante-fila mat-form-field { width: 100%; margin-bottom: 0; }
+      .acciones-masivas { flex-wrap: wrap; }
+      .precio-masivo { width: 100%; margin-bottom: 0; }
+      .actions-row {
+        position: sticky;
+        bottom: 0;
+        z-index: 10;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        padding: .75rem .2rem max(.75rem, env(safe-area-inset-bottom));
+        background: color-mix(in srgb, var(--tc-surface-container-lowest) 94%, transparent);
+        box-shadow: 0 -12px 28px rgb(15 23 42 / 12%);
+        backdrop-filter: blur(12px);
+      }
+      .actions-row a, .actions-row button { width: 100%; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .actions-row, .mobile-form-sections mat-expansion-panel { scroll-behavior: auto; }
     }
   `]
 })
@@ -690,6 +803,7 @@ export class ProductoFormComponent implements OnInit {
   private readonly recetasService = inject(RecetasService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly dialog = inject(MatDialog);
+  private readonly breakpointObserver = inject(BreakpointObserver);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly guardando = signal(false);
@@ -715,6 +829,11 @@ export class ProductoFormComponent implements OnInit {
   private pasoGranelDefecto = 0.1;
 
   protected readonly pestanaActiva = signal(0);
+  protected readonly seccionMovilActiva = signal<SeccionProducto>('general');
+  protected readonly esPantallaMovil = toSignal(
+    this.breakpointObserver.observe('(max-width: 767px)').pipe(map((result) => result.matches)),
+    { initialValue: false }
+  );
   protected readonly usoSeleccionado = signal<UsoProducto>('VENTA');
   protected readonly modoVentaSeleccionado = signal<ModoVentaProducto>('UNIDAD');
   protected readonly unidadSeleccionadaId = signal('');
@@ -1138,6 +1257,10 @@ export class ProductoFormComponent implements OnInit {
     }
   }
 
+  protected activarSeccionMovil(seccion: SeccionProducto): void {
+    this.seccionMovilActiva.set(seccion);
+  }
+
   private generarSku(): string {
     const prefix = (this.skuPrefix || 'PROD-').trim() || 'PROD-';
     const base = Date.now().toString(36).toUpperCase();
@@ -1153,27 +1276,57 @@ export class ProductoFormComponent implements OnInit {
     }).length;
   }
 
+  protected erroresVariantes(): number {
+    if (!this.variantesActivas()) return 0;
+
+    const erroresMatriz = this.filasVariantes().controls.reduce((total, fila) =>
+      total + Object.values(fila.controls).filter((control) =>
+        control.invalid && (control.touched || control.dirty)
+      ).length, 0);
+
+    return erroresMatriz + (this.excedeTopeCombinaciones() ? 1 : 0);
+  }
+
   /**
    * Con pestanas, un error escondido deja el boton sin efecto aparente.
    * Al guardar se salta a la primera pestana que lo contenga.
    */
   private saltarAPrimeraPestanaConError(): void {
-    const grupos: string[][] = [this.camposGeneral, this.camposVenta, this.camposInventario];
+    const grupos: Array<{ seccion: SeccionProducto; campos: string[] }> = [
+      { seccion: 'general', campos: this.camposGeneral },
+      { seccion: 'venta', campos: this.camposVenta },
+      { seccion: 'inventario', campos: this.camposInventario }
+    ];
 
     if (this.esReceta()) {
-      grupos.push(this.camposReceta);
+      grupos.push({ seccion: 'receta', campos: this.camposReceta });
+    }
+
+    if (this.puedeTenerVariantes() && this.variantesActivas()) {
+      grupos.push({ seccion: 'variantes', campos: ['variantes'] });
     }
 
     if (this.camposCustom().length > 0) {
-      grupos.push(this.camposAdicional);
+      grupos.push({ seccion: 'adicional', campos: this.camposAdicional });
     }
 
-    const indice = grupos.findIndex((campos) =>
+    const grupoInvalido = grupos.find(({ campos }) =>
       campos.some((campo) => this.form.get(campo)?.invalid === true)
     );
 
-    if (indice >= 0) {
-      this.pestanaActiva.set(indice);
+    if (grupoInvalido) {
+      const seccionesVisibles: SeccionProducto[] = ['general', 'venta', 'inventario'];
+      if (this.esReceta()) seccionesVisibles.push('receta');
+      if (this.puedeTenerVariantes()) seccionesVisibles.push('variantes');
+      if (this.camposCustom().length > 0) seccionesVisibles.push('adicional');
+
+      this.seccionMovilActiva.set(grupoInvalido.seccion);
+      this.pestanaActiva.set(Math.max(0, seccionesVisibles.indexOf(grupoInvalido.seccion)));
+      queueMicrotask(() => {
+        const header = document.getElementById(`producto-section-${grupoInvalido.seccion}`);
+        header?.scrollIntoView({ block: 'nearest', behavior: 'auto' });
+        header?.focus();
+      });
     }
 
     this.snackBar.open('Revisa los campos marcados antes de guardar.', 'Cerrar', { duration: 3000 });

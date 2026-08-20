@@ -157,6 +157,13 @@ import { AlmacenesService } from '../../services/almacenes.service';
     .skeleton-grid .skeleton-card { height: 180px; border-radius: .75rem; background: linear-gradient(90deg, rgba(180,180,180,.18), rgba(180,180,180,.28), rgba(180,180,180,.18)); animation: shimmer 1.4s infinite; }
     @keyframes shimmer { 0% { background-position: -320px 0; } 100% { background-position: 320px 0; } }
     @media (max-width: 900px) { .header-card { align-items: flex-start; flex-direction: column; } }
+    @media (max-width: 600px) {
+      .header-card, .stock-card, .empty-card { padding: .85rem; }
+      .header-card > button { width: 100%; }
+      .cards-grid { grid-template-columns: minmax(0, 1fr); }
+      .card-actions button { flex: 1 1 120px; }
+    }
+    @media (prefers-reduced-motion: reduce) { .skeleton-card { animation: none !important; } }
   `]
 })
 export class AlmacenesComponent implements OnInit {

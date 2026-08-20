@@ -108,6 +108,7 @@ import { ProductosService } from '../../services/productos.service';
         </section>
       } @else {
         <section class="surface-card table-card">
+          <p class="mobile-scroll-hint"><mat-icon aria-hidden="true">swipe</mat-icon>Desliza horizontalmente para ver más columnas</p>
           <div class="table-wrap">
             <table mat-table [dataSource]="movimientosFiltrados()">
               <ng-container matColumnDef="fecha">
@@ -180,7 +181,7 @@ import { ProductosService } from '../../services/productos.service';
     .kpi-card p { margin: .45rem 0 0; font-size: 1.25rem; font-weight: 700; }
     .table-wrap { overflow: auto; }
     table { width: 100%; min-width: 1100px; }
-    .out { color: #b3261e; font-weight: 700; }
+    .out { color: var(--tc-error); font-weight: 700; }
     .empty-card h3 { margin: 0; }
     .empty-card p, .loading-card p { margin: .35rem 0 0; color: var(--muted-foreground); }
     @media (max-width: 900px) {
@@ -188,6 +189,11 @@ import { ProductosService } from '../../services/productos.service';
       .header-actions { width: 100%; }
       .filtros-grid { grid-template-columns: 1fr; }
       .kpi-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .header-card, .filtros-card, .table-card, .loading-card, .empty-card { padding: .85rem; }
+      .header-actions { display: grid; grid-template-columns: 1fr; }
+      .header-actions a, .header-actions button, .filtros-grid button { width: 100%; }
     }
   `]
 })

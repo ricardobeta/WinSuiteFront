@@ -9,6 +9,7 @@ import {
   OnDestroy,
   Output,
   SimpleChanges,
+  ViewChild,
   inject,
   signal
 } from '@angular/core';
@@ -70,7 +71,18 @@ import { DataTableFramePaginatorIntl } from './data-table-frame-paginator-intl';
         </div>
       </div>
 
-      <div class="data-table-surface">
+      @if (horizontalOverflow()) {
+        <p class="data-table-scroll-hint">
+          <mat-icon aria-hidden="true">swipe</mat-icon>
+          Desliza horizontalmente para ver más columnas
+        </p>
+      }
+
+      <div
+        class="data-table-surface"
+        [class.can-scroll-backward]="canScrollBackward()"
+        [class.can-scroll-forward]="canScrollForward()"
+      >
         @if (preferencesEnabled()) {
           <div class="table-surface-tools">
             <button
@@ -88,7 +100,13 @@ import { DataTableFramePaginatorIntl } from './data-table-frame-paginator-intl';
             </button>
           </div>
         }
-        <div class="data-table-viewport" tabindex="0" aria-label="Tabla desplazable horizontalmente">
+        <div
+          #tableViewport
+          class="data-table-viewport"
+          tabindex="0"
+          aria-label="Tabla desplazable horizontalmente"
+          (scroll)="onViewportScroll()"
+        >
           <ng-content />
         </div>
       </div>
@@ -115,12 +133,39 @@ import { DataTableFramePaginatorIntl } from './data-table-frame-paginator-intl';
     .data-table-filters:empty { display: none; }
     .data-table-toolbar:not(:has(.data-table-search)):has(.data-table-filters:empty) { display: none; }
     .data-table-surface {
+      position: relative;
       min-width: 0;
       max-width: 100%;
       overflow: hidden;
       border-radius: var(--tc-radius-md);
       background: var(--tc-surface-container-lowest);
+      isolation: isolate;
     }
+    .data-table-surface::before,
+    .data-table-surface::after {
+      position: absolute;
+      inset-block: 44px 0;
+      z-index: 3;
+      width: 18px;
+      pointer-events: none;
+      content: '';
+      opacity: 0;
+      transition: opacity .16s ease;
+    }
+    .data-table-surface::before { inset-inline-start: 0; background: linear-gradient(90deg, rgb(0 0 0 / 13%), transparent); }
+    .data-table-surface::after { inset-inline-end: 0; background: linear-gradient(-90deg, rgb(0 0 0 / 13%), transparent); }
+    .data-table-surface.can-scroll-backward::before,
+    .data-table-surface.can-scroll-forward::after { opacity: 1; }
+    .data-table-scroll-hint {
+      display: none;
+      align-items: center;
+      gap: .4rem;
+      margin: 0;
+      color: var(--muted-foreground);
+      font-size: .8rem;
+      font-weight: 650;
+    }
+    .data-table-scroll-hint mat-icon { width: 18px; height: 18px; font-size: 18px; }
     .table-surface-tools {
       display: flex;
       min-height: 44px;
@@ -143,6 +188,7 @@ import { DataTableFramePaginatorIntl } from './data-table-frame-paginator-intl';
       min-width: 0;
       max-width: 100%;
       overflow-x: auto;
+      touch-action: pan-x pan-y;
       overscroll-behavior-inline: contain;
       scrollbar-gutter: stable;
       background: var(--tc-surface-container-lowest);
@@ -154,10 +200,17 @@ import { DataTableFramePaginatorIntl } from './data-table-frame-paginator-intl';
       .data-table-search { max-width: none; flex-basis: 100%; }
       .data-table-tools { width: 100%; justify-content: space-between; margin-inline-start: 0; }
       .data-table-filters { justify-content: flex-start; }
+      .data-table-scroll-hint { display: inline-flex; }
+      .table-surface-tools { min-height: 40px; }
+      mat-paginator { max-width: 100%; overflow-x: auto; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .data-table-surface::before, .data-table-surface::after { transition: none; }
     }
   `]
 })
 export class DataTableFrameComponent implements AfterViewInit, OnChanges, OnDestroy {
+  @ViewChild('tableViewport') private tableViewport?: ElementRef<HTMLElement>;
   @Input() searchPlaceholder = 'Buscar';
   @Input() searchValue = '';
   @Input() showSearch = true;
@@ -186,6 +239,9 @@ export class DataTableFrameComponent implements AfterViewInit, OnChanges, OnDest
     updatedBy: null
   });
   protected readonly preferencesEnabled = signal(false);
+  protected readonly horizontalOverflow = signal(false);
+  protected readonly canScrollBackward = signal(false);
+  protected readonly canScrollForward = signal(false);
 
   private readonly catalog = signal<readonly TableColumnDefinition[]>([]);
   private readonly searchInput = new Subject<string>();
@@ -197,6 +253,7 @@ export class DataTableFrameComponent implements AfterViewInit, OnChanges, OnDest
   private readonly preferences = inject(TablePreferencesService);
   private readonly paginatorIntl = inject(DataTableFramePaginatorIntl);
   private observer: MutationObserver | null = null;
+  private resizeObserver: ResizeObserver | null = null;
   private viewInitialized = false;
   private loadedKey = '';
   private loadSequence = 0;
@@ -226,16 +283,44 @@ export class DataTableFrameComponent implements AfterViewInit, OnChanges, OnDest
     this.observer = new MutationObserver(() => {
       if (this.columns.length === 0) this.refreshDiscoveredColumns();
       this.applyColumnVisibility();
+      queueMicrotask(() => this.updateOverflowState());
     });
     this.observer.observe(this.elementRef.nativeElement, { childList: true, subtree: true });
     queueMicrotask(() => {
       if (this.columns.length === 0) this.refreshDiscoveredColumns();
       void this.initializePreferences();
+      this.setupOverflowObserver();
     });
   }
 
   ngOnDestroy(): void {
     this.observer?.disconnect();
+    this.resizeObserver?.disconnect();
+  }
+
+  protected onViewportScroll(): void {
+    this.updateOverflowState();
+  }
+
+  private setupOverflowObserver(): void {
+    const viewport = this.tableViewport?.nativeElement;
+    if (!viewport) return;
+    this.updateOverflowState();
+    if (typeof ResizeObserver === 'undefined') return;
+    this.resizeObserver = new ResizeObserver(() => this.updateOverflowState());
+    this.resizeObserver.observe(viewport);
+    const content = viewport.firstElementChild;
+    if (content instanceof HTMLElement) this.resizeObserver.observe(content);
+  }
+
+  private updateOverflowState(): void {
+    const viewport = this.tableViewport?.nativeElement;
+    if (!viewport) return;
+    const maxScroll = Math.max(0, viewport.scrollWidth - viewport.clientWidth);
+    const overflow = maxScroll > 2;
+    this.horizontalOverflow.set(overflow);
+    this.canScrollBackward.set(overflow && viewport.scrollLeft > 2);
+    this.canScrollForward.set(overflow && viewport.scrollLeft < maxScroll - 2);
   }
 
   protected onSearchInput(event: Event): void {

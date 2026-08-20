@@ -827,6 +827,88 @@ app-ventas-pos {
 	}
 }
 
+.mobile-scroll-hint {
+	display: none;
+	align-items: center;
+	gap: .4rem;
+	margin: 0 0 .5rem;
+	color: var(--muted-foreground);
+	font-size: .8rem;
+	font-weight: 650;
+}
+
+.mobile-scroll-hint mat-icon { width: 18px; height: 18px; font-size: 18px; }
+
+@media (max-width: 720px) {
+	.mobile-scroll-hint { display: inline-flex; }
+}
+
+/* Inventario conserva tablas completas en movil: la identidad y las acciones
+   permanecen disponibles mientras el resto de columnas se desplaza. */
+@media (max-width: 767px) {
+	app-inventario-shell app-data-table-frame .mat-mdc-header-cell,
+	app-inventario-shell app-data-table-frame .mat-mdc-cell,
+	app-inventario-shell .table-wrap .mat-mdc-header-cell,
+	app-inventario-shell .table-wrap .mat-mdc-cell {
+		padding-inline: .65rem;
+	}
+
+	app-inventario-shell .mat-column-acciones {
+		position: sticky;
+		right: 0;
+		z-index: 3;
+		min-width: 112px;
+		background: var(--tc-surface-container-lowest);
+		box-shadow: -10px 0 18px rgb(15 23 42 / 8%);
+	}
+
+	app-inventario-shell .mat-mdc-header-cell.mat-column-acciones { z-index: 5; background: var(--tc-surface-container-low); }
+
+	app-productos-list .mat-column-nombre,
+	app-recetas-list .mat-column-nombre,
+	app-proveedores-list .mat-column-nombre,
+	app-ordenes-compra-list .mat-column-numero,
+	app-costos .mat-column-producto,
+	app-almacenes .mat-column-nombre,
+	app-producto-kardex .mat-column-fecha,
+	app-receta-auditoria .mat-column-fecha,
+	app-configuracion-inventario .mat-column-nombre {
+		position: sticky;
+		left: 0;
+		z-index: 2;
+		background: var(--tc-surface-container-lowest);
+		box-shadow: 10px 0 18px rgb(15 23 42 / 6%);
+	}
+
+	app-campos-config .mat-column-nombreMostrar {
+		position: sticky;
+		left: 0;
+		z-index: 2;
+		background: var(--tc-surface-container-lowest);
+		box-shadow: 10px 0 18px rgb(15 23 42 / 6%);
+	}
+
+	app-productos-list .mat-mdc-header-cell.mat-column-nombre,
+	app-recetas-list .mat-mdc-header-cell.mat-column-nombre,
+	app-proveedores-list .mat-mdc-header-cell.mat-column-nombre,
+	app-ordenes-compra-list .mat-mdc-header-cell.mat-column-numero,
+	app-costos .mat-mdc-header-cell.mat-column-producto,
+	app-almacenes .mat-mdc-header-cell.mat-column-nombre,
+	app-producto-kardex .mat-mdc-header-cell.mat-column-fecha,
+	app-receta-auditoria .mat-mdc-header-cell.mat-column-fecha,
+	app-configuracion-inventario .mat-mdc-header-cell.mat-column-nombre {
+		z-index: 4;
+		background: var(--tc-surface-container-low);
+	}
+
+	app-campos-config .mat-mdc-header-cell.mat-column-nombreMostrar {
+		z-index: 4;
+		background: var(--tc-surface-container-low);
+	}
+
+	app-inventario-shell .mat-mdc-button-base { min-height: 44px; }
+}
+
 @container pos-surface (min-width: 1200px) {
 	app-ventas-pos {
 		.panel-right.panel-right {

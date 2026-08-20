@@ -134,6 +134,21 @@ import { ProveedoresService } from '../../services/proveedores.service';
       .grid-2 { grid-template-columns: 1fr; }
       .actions-row { justify-content: flex-start; }
     }
+    @media (max-width: 600px) {
+      .header-card, .form-card { padding: .85rem; }
+      .actions-row {
+        position: sticky;
+        bottom: 0;
+        z-index: 10;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        padding: .75rem .2rem max(.75rem, env(safe-area-inset-bottom));
+        background: color-mix(in srgb, var(--tc-surface-container-lowest) 94%, transparent);
+        box-shadow: 0 -12px 28px rgb(15 23 42 / 12%);
+        backdrop-filter: blur(12px);
+      }
+      .actions-row a, .actions-row button { width: 100%; }
+    }
   `]
 })
 export class ProveedorFormComponent implements OnInit {

@@ -65,7 +65,7 @@ export function calculateVisibleNavIndices(
   selector: 'app-module-shell',
   imports: [RouterLink, MatButtonModule, MatIconModule, MatMenuModule, TourTriggerButtonComponent],
   template: `
-    <section class="module-shell">
+    <section class="module-shell" [class.module-shell--compact-mobile]="compactOnMobile()">
       @if (!immersive()) {
       <header class="module-hero surface-card" [id]="tourId('header')">
         <div class="module-hero__copy">
@@ -244,11 +244,11 @@ export function calculateVisibleNavIndices(
     .module-nav__link { transition: color .16s ease, background-color .16s ease, transform .16s ease; }
     .module-nav__link:hover { color: var(--primary); background: var(--tc-surface-container-highest); transform: translateY(-1px); }
     .module-nav__link.active {
-      color: #fff;
+      color: var(--tc-on-primary);
       background: var(--mat-sys-primary);
       box-shadow: 0 7px 18px color-mix(in srgb, var(--mat-sys-primary) 22%, transparent);
     }
-    .module-nav__link.active mat-icon { color: #fff; }
+    .module-nav__link.active mat-icon { color: var(--tc-on-primary); }
 
     :host-context(html.theme-dark) .module-nav__link.active,
     :host-context(html.theme-dark) .module-nav__link.active mat-icon {
@@ -273,6 +273,11 @@ export function calculateVisibleNavIndices(
       .module-hero__icon { display: none; }
       .module-hero__aside { display: contents; }
       .module-hero { display: grid; grid-template-columns: minmax(0, 1fr); }
+      .module-shell--compact-mobile { gap: .7rem; }
+      .module-shell--compact-mobile .module-hero { min-height: 0; padding: .85rem 1rem; }
+      .module-shell--compact-mobile .module-hero__description { display: none; }
+      .module-shell--compact-mobile .module-hero h1 { font-size: 1.45rem; }
+      .module-shell--compact-mobile .module-nav { padding: .3rem; }
     }
   `],
 })
@@ -285,6 +290,7 @@ export class ModuleShellComponent implements AfterViewInit {
   readonly items = input<readonly ModuleNavItem[]>([]);
   readonly navigationLabel = input('Navegación del módulo');
   readonly tourEnabled = input(true);
+  readonly compactOnMobile = input(false);
   /** Oculta el hero y la navegación del módulo (modo inmersivo/pantalla completa). */
   readonly immersive = input(false);
 

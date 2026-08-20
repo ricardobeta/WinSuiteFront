@@ -109,6 +109,12 @@ import { OrdenesCompraService } from '../../services/ordenes-compra.service';
     .skeleton-row { height: 48px; border-radius: .5rem; background: linear-gradient(90deg, rgba(180,180,180,.18), rgba(180,180,180,.28), rgba(180,180,180,.18)); animation: shimmer 1.3s infinite; }
     @keyframes shimmer { 0% { background-position: -320px 0; } 100% { background-position: 320px 0; } }
     @media (max-width: 900px) { .header { align-items: flex-start; flex-direction: column; } }
+    @media (max-width: 600px) {
+      .page-card { padding: .85rem; }
+      .header-actions, .header-actions a { width: 100%; }
+      .header-actions a { justify-content: center; }
+    }
+    @media (prefers-reduced-motion: reduce) { .skeleton-row { animation: none; } }
   `]
 })
 export class OrdenesCompraListComponent implements OnInit {

@@ -117,6 +117,10 @@ import { ProveedoresService } from '../../services/proveedores.service';
     .table-wrap { overflow: auto; }
     table { width: 100%; min-width: 840px; }
     @media (max-width: 900px) { .header { align-items: flex-start; flex-direction: column; } }
+    @media (max-width: 600px) {
+      .page-card { padding: .85rem; }
+      .header > a { width: 100%; justify-content: center; }
+    }
   `]
 })
 export class ProveedoresListComponent implements OnInit {

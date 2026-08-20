@@ -183,6 +183,7 @@ const EXTENSIONES_PDF = ['pdf', 'png', 'jpg', 'jpeg', 'webp'];
           <div formArrayName="items" class="items-grid">
             @for (item of items.controls; track $index) {
               <div class="item-row" [formGroupName]="$index">
+                <strong class="mobile-item-title">Item {{ $index + 1 }}</strong>
                 <mat-form-field appearance="outline">
                   <mat-label>Producto</mat-label>
                   <mat-select formControlName="productoId" [disabled]="soloLectura()" (selectionChange)="actualizarDescripcionDesdeProducto($index)">
@@ -218,8 +219,16 @@ const EXTENSIONES_PDF = ['pdf', 'png', 'jpg', 'jpeg', 'webp'];
                 </mat-form-field>
 
                 @if (!soloLectura()) {
-                  <button mat-icon-button type="button" color="warn" (click)="eliminarItem($index)">
+                  <button
+                    mat-icon-button
+                    type="button"
+                    color="warn"
+                    class="item-delete"
+                    [attr.aria-label]="'Eliminar item ' + ($index + 1)"
+                    (click)="eliminarItem($index)"
+                  >
                     <mat-icon>delete</mat-icon>
+                    <span class="mobile-action-label">Eliminar item</span>
                   </button>
                 }
               </div>
@@ -329,7 +338,7 @@ const EXTENSIONES_PDF = ['pdf', 'png', 'jpg', 'jpeg', 'webp'];
     .archivo-chip { display: flex; align-items: center; gap: .6rem; padding: .6rem .85rem; border-radius: .75rem; background: color-mix(in srgb, var(--primary) 8%, var(--card)); }
     .archivo-chip > mat-icon { color: var(--primary); }
     .archivo-chip span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .warn-hint { display: flex; align-items: center; gap: .4rem; margin: 0; color: var(--tc-error, #b3261e); font-size: .9rem; }
+    .warn-hint { display: flex; align-items: center; gap: .4rem; margin: 0; color: var(--tc-error); font-size: .9rem; }
     .items-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
     .items-header h3 { margin: 0; }
     .items-grid { display: grid; gap: .75rem; }
@@ -341,11 +350,12 @@ const EXTENSIONES_PDF = ['pdf', 'png', 'jpg', 'jpeg', 'webp'];
     .panel-toggle { padding-left: 0; }
     .panel-body { display: grid; gap: 1rem; padding-top: .5rem; }
     .panel-body .muted { margin: 0; color: var(--muted-foreground); }
-    .pricing-card { padding: .8rem; border-radius: .75rem; background: color-mix(in srgb, var(--tc-surface-container-low) 92%, white); display: grid; gap: .75rem; }
+    .pricing-card { padding: .8rem; border-radius: .75rem; background: var(--tc-surface-container-low); display: grid; gap: .75rem; }
     .pricing-head { display: flex; flex-wrap: wrap; gap: 1rem; color: var(--muted-foreground); }
     .pricing-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
     .pricing-actions { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
     .actions-row { display: flex; justify-content: flex-end; gap: .75rem; }
+    .mobile-item-title, .mobile-action-label { display: none; }
     @media (max-width: 1200px) { .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } .item-row { grid-template-columns: 1fr 1fr 1fr; } }
     @media (max-width: 900px) {
       .grid-4 { grid-template-columns: 1fr; }
@@ -354,6 +364,40 @@ const EXTENSIONES_PDF = ['pdf', 'png', 'jpg', 'jpeg', 'webp'];
       .pricing-actions { justify-content: flex-start; flex-wrap: wrap; }
       .actions-row, .items-header { justify-content: flex-start; }
       .item-row { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 600px) {
+      .header-card, .form-card { padding: .85rem; }
+      .items-header { display: grid; grid-template-columns: 1fr; }
+      .items-header button, .almacen-field { width: 100%; max-width: none; }
+      .item-row { padding: .85rem; border-radius: 12px; background: var(--tc-surface-container-low); }
+      .mobile-item-title { display: block; }
+      .mobile-action-label { display: inline; }
+      .item-delete {
+        display: inline-flex;
+        width: 100%;
+        min-height: 44px;
+        align-items: center;
+        justify-content: center;
+        gap: .4rem;
+        border-radius: 10px;
+        background: var(--tc-error-container);
+        color: var(--tc-on-error-container);
+      }
+      .pricing-actions { display: grid; grid-template-columns: 1fr; }
+      .pricing-actions button { width: 100%; }
+      .actions-row {
+        position: sticky;
+        bottom: 0;
+        z-index: 10;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        padding: .75rem .2rem max(.75rem, env(safe-area-inset-bottom));
+        background: color-mix(in srgb, var(--tc-surface-container-lowest) 94%, transparent);
+        box-shadow: 0 -12px 28px rgb(15 23 42 / 12%);
+        backdrop-filter: blur(12px);
+      }
+      .actions-row a, .actions-row button { width: 100%; }
+      .actions-row > :only-child { grid-column: 1 / -1; }
     }
   `]
 })

@@ -125,7 +125,7 @@ interface RecetaRow {
   styles: [`
     .page-card { padding: 1.25rem; background: var(--tc-surface-container-lowest); display: grid; gap: 1rem; }
     .header { display: flex; justify-content: space-between; align-items: end; gap: 1rem; }
-    .header-actions { display: flex; gap: .5rem; }
+    .header-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
     .warehouse-select { min-width: 240px; }
     .header h2 { margin: 0; }
     .header p { margin: .35rem 0 0; color: var(--muted-foreground); }
@@ -133,7 +133,7 @@ interface RecetaRow {
     .table-wrap { overflow: auto; }
     table { width: 100%; min-width: 980px; }
     mat-chip.inactivo { opacity: .65; }
-    mat-chip.danger { background: color-mix(in srgb, #b3261e 16%, transparent); color: #b3261e; }
+    mat-chip.danger { background: var(--tc-error-container); color: var(--tc-on-error-container); }
     .empty-card { padding: 1rem; border: 1px dashed color-mix(in srgb, var(--outline) 55%, transparent); border-radius: .75rem; }
     .empty-card h3 { margin: 0; }
     .empty-card p { margin: .4rem 0 0; color: var(--muted-foreground); }
@@ -141,6 +141,12 @@ interface RecetaRow {
     .skeleton-row { height: 48px; border-radius: .5rem; background: linear-gradient(90deg, rgba(180,180,180,.18), rgba(180,180,180,.28), rgba(180,180,180,.18)); animation: shimmer 1.3s infinite; }
     @keyframes shimmer { 0% { background-position: -320px 0; } 100% { background-position: 320px 0; } }
     @media (max-width: 900px) { .header { align-items: flex-start; flex-direction: column; } }
+    @media (max-width: 600px) {
+      .page-card { padding: .85rem; }
+      .header-actions, .warehouse-select, .header-actions a { width: 100%; }
+      .header-actions a { justify-content: center; }
+    }
+    @media (prefers-reduced-motion: reduce) { .skeleton-row { animation: none; } }
   `]
 })
 export class RecetasListComponent implements OnInit {

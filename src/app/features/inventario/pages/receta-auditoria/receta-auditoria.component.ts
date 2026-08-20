@@ -5,6 +5,7 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatIconModule } from '@angular/material/icon';
 import { MatTableModule } from '@angular/material/table';
 
 import { Producto, RecetaAuditoria } from '../../models/inventario.models';
@@ -20,6 +21,7 @@ import { RecetasService } from '../../services/recetas.service';
     MatButtonModule,
     MatCardModule,
     MatChipsModule,
+    MatIconModule,
     MatTableModule
   ],
   template: `
@@ -61,6 +63,7 @@ import { RecetasService } from '../../services/recetas.service';
         </section>
       } @else {
         <section class="surface-card table-card">
+          <p class="mobile-scroll-hint"><mat-icon aria-hidden="true">swipe</mat-icon>Desliza horizontalmente para ver más columnas</p>
           <div class="table-wrap">
             <table mat-table [dataSource]="auditoriaFiltrada()">
               <ng-container matColumnDef="fecha">
@@ -105,13 +108,18 @@ import { RecetasService } from '../../services/recetas.service';
     .eyebrow { margin: 0 0 .35rem; text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; color: var(--primary); }
     .table-wrap { overflow: auto; }
     table { width: 100%; min-width: 900px; }
-    mat-chip.warn { background: color-mix(in srgb, #b3261e 18%, transparent); color: #b3261e; }
+    mat-chip.warn { background: var(--tc-error-container); color: var(--tc-on-error-container); }
     .detail-text { margin: 0; white-space: normal; }
     .empty-card h3 { margin: 0; }
     .empty-card p, .loading-card p { margin: .35rem 0 0; color: var(--muted-foreground); }
     @media (max-width: 900px) {
       .header-card { align-items: flex-start; flex-direction: column; }
       .header-actions { width: 100%; }
+    }
+    @media (max-width: 600px) {
+      .header-card, .table-card, .loading-card, .empty-card { padding: .85rem; }
+      .header-actions { display: grid; grid-template-columns: 1fr; }
+      .header-actions a { width: 100%; }
     }
   `]
 })

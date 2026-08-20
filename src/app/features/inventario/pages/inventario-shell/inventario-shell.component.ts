@@ -14,11 +14,15 @@ import { ModuleNavItem, ModuleShellComponent } from '../../../../shared/componen
       description="Gestiona productos, proveedores, órdenes de compra, existencias y configuración del inventario."
       icon="inventory_2"
       navigationLabel="Navegación de inventario"
+      [compactOnMobile]="true"
       [items]="navigationItems"
     >
       <router-outlet />
     </app-module-shell>
   `,
+  styles: [`
+    :host { display: block; --muted-foreground: var(--tc-on-surface-variant); }
+  `],
 })
 export class InventarioShellComponent {
   protected readonly navigationItems: readonly ModuleNavItem[] = [

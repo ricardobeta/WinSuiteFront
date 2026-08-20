@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { Database } from '@angular/fire/database';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { AuthService } from '../../../core/services/auth.service';
 import { AuditService } from '../../../core/services/audit.service';
@@ -10,9 +10,16 @@ import { KardexService } from './kardex.service';
 import { ProductosService } from './productos.service';
 import { RecetasService } from './recetas.service';
 
-const firebaseMocks = vi.hoisted(() => ({
-  ref: vi.fn(() => ({})),
-  runTransaction: vi.fn(async (_reference: unknown, updater: (current: unknown) => unknown) => {
+vi.mock('@angular/fire/database', () => ({
+  Database: class Database {},
+  ref: () => ({}),
+  get: async () => ({ exists: () => false, val: () => null }),
+  onValue: () => () => undefined,
+  push: () => ({ key: 'mock-key' }),
+  remove: async () => undefined,
+  set: async () => undefined,
+  update: async () => undefined,
+  runTransaction: async (_reference: unknown, updater: (current: unknown) => unknown) => {
     const value = updater(null) as { token?: string } | null;
     return {
       committed: true,
@@ -22,17 +29,8 @@ const firebaseMocks = vi.hoisted(() => ({
         })
       }
     };
-  })
+  }
 }));
-
-vi.mock('@angular/fire/database', async (importOriginal) => {
-  const original = await importOriginal<typeof import('@angular/fire/database')>();
-  return {
-    ...original,
-    ref: firebaseMocks.ref,
-    runTransaction: firebaseMocks.runTransaction
-  };
-});
 
 function producto(overrides: Partial<Producto>): Producto {
   return {
@@ -73,9 +71,6 @@ describe('RecetasService', () => {
   beforeEach(() => {
     actualizarStock = vi.fn().mockResolvedValue({ exito: true, saldo: 100 });
     registrarMovimiento = vi.fn().mockResolvedValue(undefined);
-    firebaseMocks.ref.mockClear();
-    firebaseMocks.runTransaction.mockClear();
-
     TestBed.configureTestingModule({
       providers: [
         RecetasService,

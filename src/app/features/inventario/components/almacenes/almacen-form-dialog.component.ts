@@ -116,10 +116,10 @@ export interface AlmacenFormDialogData {
     .dialog-form { display: grid; gap: 1rem; padding-top: .5rem; }
     .grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
     .toggles { display: flex; gap: 1rem; flex-wrap: wrap; }
-    .select-search { padding: .5rem .75rem; position: sticky; top: 0; z-index: 1; background: var(--mat-sys-surface, #fff); }
-    .select-search input { width: 100%; box-sizing: border-box; border: 1px solid var(--mat-sys-outline-variant, #c4c7c5); border-radius: .5rem; padding: .65rem .75rem; font: inherit; color: inherit; background: transparent; outline: none; }
-    .select-search input:focus { border-color: var(--mat-sys-primary, #3f51b5); }
-    .load-error { color: var(--mat-sys-error, #ba1a1a); }
+    .select-search { padding: .5rem .75rem; position: sticky; top: 0; z-index: 1; background: var(--tc-surface-container-lowest); }
+    .select-search input { width: 100%; min-height: 44px; box-sizing: border-box; border: 1px solid var(--tc-ghost-border); border-radius: .5rem; padding: .65rem .75rem; font: inherit; color: inherit; background: transparent; outline: none; }
+    .select-search input:focus-visible { border-color: var(--tc-primary); box-shadow: 0 0 0 3px color-mix(in srgb, var(--tc-primary) 24%, transparent); }
+    .load-error { color: var(--tc-error); }
     @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
   `]
 })

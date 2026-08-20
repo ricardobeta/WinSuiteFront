@@ -66,17 +66,23 @@ const EXTENSIONES_IMAGEN = ['png', 'jpg', 'jpeg', 'webp'];
       </div>
 
       <div class="controles">
-        <label class="accion" [class.inactiva]="subiendo() || deshabilitado()">
+        <button
+          type="button"
+          class="accion"
+          [disabled]="subiendo() || deshabilitado()"
+          (click)="fileInput.click()"
+        >
           <mat-icon>upload</mat-icon>
           {{ subiendo() ? 'Subiendo...' : (valor()?.url ? 'Cambiar' : 'Subir') }}
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp"
-            hidden
-            [disabled]="subiendo() || deshabilitado()"
-            (change)="subir($event)"
-          />
-        </label>
+        </button>
+        <input
+          #fileInput
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          hidden
+          [disabled]="subiendo() || deshabilitado()"
+          (change)="subir($event)"
+        />
 
         <button
           type="button"
@@ -130,7 +136,7 @@ const EXTENSIONES_IMAGEN = ['png', 'jpg', 'jpeg', 'webp'];
     .controles { display: flex; flex-wrap: wrap; gap: .4rem; }
     .accion {
       display: inline-flex; align-items: center; gap: .3rem;
-      padding: .4rem .65rem; border-radius: 8px; cursor: pointer;
+      min-height: 44px; padding: .55rem .75rem; border-radius: 8px; cursor: pointer;
       font-size: .82rem; white-space: nowrap;
       border: 1px solid var(--tc-ghost-border);
       background: var(--tc-surface-container-lowest);

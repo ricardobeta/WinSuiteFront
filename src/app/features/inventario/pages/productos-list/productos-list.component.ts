@@ -76,6 +76,7 @@ type FiltroUso = 'TODOS' | 'VENTA' | 'INSUMO';
                 type="button"
                 class="uso-chip"
                 [class.activo]="filtroUso() === opcion.valor"
+                [attr.aria-pressed]="filtroUso() === opcion.valor"
                 (click)="seleccionarFiltroUso(opcion.valor)"
               >
                 {{ opcion.etiqueta }}
@@ -211,7 +212,7 @@ type FiltroUso = 'TODOS' | 'VENTA' | 'INSUMO';
   styles: [`
     .page-card { padding: 1.25rem; background: var(--tc-surface-container-lowest); display: grid; gap: 1rem; }
     .header { display: flex; justify-content: space-between; align-items: end; gap: 1rem; }
-    .header-actions { display: flex; gap: .5rem; }
+    .header-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
     .warehouse-select { min-width: 240px; }
     .header h2 { margin: 0; }
     .header p { margin: .35rem 0 0; color: var(--muted-foreground); }
@@ -219,11 +220,11 @@ type FiltroUso = 'TODOS' | 'VENTA' | 'INSUMO';
     .table-wrap { overflow: auto; }
     table { width: 100%; min-width: 1020px; }
     .inactivo { opacity: .65; }
-    .chip-low { margin-left: .35rem; background: color-mix(in srgb, #b3261e 14%, transparent); color: #b3261e; }
-    .chip-receta { margin-left: .35rem; background: rgb(249 115 22 / 20%); color: rgb(154 52 18); }
+    .chip-low { margin-left: .35rem; background: var(--tc-error-container); color: var(--tc-on-error-container); }
+    .chip-receta { margin-left: .35rem; background: var(--tc-warning-container); color: var(--tc-on-warning-container); }
     .chip-insumo { background: color-mix(in srgb, var(--foreground) 10%, transparent); color: var(--muted-foreground); }
     .chip-venta { background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
-    .chip-granel { margin-left: .35rem; background: rgb(14 165 233 / 18%); color: rgb(3 105 161); }
+    .chip-granel { margin-left: .35rem; background: var(--tc-info-container); color: var(--tc-on-info-container); }
     .miniatura { display: block; width: 40px; height: 40px; border-radius: 8px; object-fit: cover; }
     .miniatura-vacia {
       display: grid; place-items: center;
@@ -232,7 +233,7 @@ type FiltroUso = 'TODOS' | 'VENTA' | 'INSUMO';
     }
     .uso-filtros { display: flex; flex-wrap: wrap; gap: .4rem; }
     .uso-chip {
-      padding: .35rem .75rem; border-radius: 999px; cursor: pointer;
+      min-height: 44px; padding: .5rem .8rem; border-radius: 999px; cursor: pointer;
       border: 1px solid var(--border); background: transparent;
       color: var(--muted-foreground); font-size: .8rem; font-weight: 600;
     }
@@ -244,6 +245,12 @@ type FiltroUso = 'TODOS' | 'VENTA' | 'INSUMO';
     .skeleton-row { height: 48px; border-radius: .5rem; background: linear-gradient(90deg, rgba(180,180,180,.18), rgba(180,180,180,.28), rgba(180,180,180,.18)); animation: shimmer 1.3s infinite; }
     @keyframes shimmer { 0% { background-position: -320px 0; } 100% { background-position: 320px 0; } }
     @media (max-width: 900px) { .header { align-items: flex-start; flex-direction: column; } }
+    @media (max-width: 600px) {
+      .page-card { padding: .85rem; }
+      .header-actions, .warehouse-select, .header-actions a { width: 100%; }
+      .header-actions a { justify-content: center; }
+    }
+    @media (prefers-reduced-motion: reduce) { .skeleton-row { animation: none; } }
   `]
 })
 export class ProductosListComponent implements OnInit {

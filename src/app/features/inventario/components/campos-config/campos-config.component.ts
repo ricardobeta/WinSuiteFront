@@ -53,6 +53,7 @@ import { CampoFormDialogComponent } from './campo-form-dialog.component';
         </button>
       </div>
 
+      <p class="mobile-scroll-hint"><mat-icon aria-hidden="true">swipe</mat-icon>Desliza horizontalmente para ver más columnas</p>
       <div class="table-wrap">
         <table mat-table [dataSource]="dataSource">
           <ng-container matColumnDef="nombreMostrar">
@@ -85,10 +86,10 @@ import { CampoFormDialogComponent } from './campo-form-dialog.component';
           <ng-container matColumnDef="acciones">
             <th mat-header-cell *matHeaderCellDef>Acciones</th>
             <td mat-cell *matCellDef="let row">
-              <button mat-icon-button type="button" matTooltip="Editar" (click)="editarCampo(row)">
+              <button mat-icon-button type="button" matTooltip="Editar" [attr.aria-label]="'Editar campo ' + row.nombreMostrar" (click)="editarCampo(row)">
                 <mat-icon>edit</mat-icon>
               </button>
-              <button mat-icon-button color="warn" type="button" matTooltip="Eliminar" (click)="eliminarCampo(row)">
+              <button mat-icon-button color="warn" type="button" matTooltip="Eliminar" [attr.aria-label]="'Eliminar campo ' + row.nombreMostrar" (click)="eliminarCampo(row)">
                 <mat-icon>delete</mat-icon>
               </button>
             </td>
@@ -111,6 +112,10 @@ import { CampoFormDialogComponent } from './campo-form-dialog.component';
     .table-wrap { overflow: auto; }
     table { width: 100%; min-width: 760px; }
     .options-cell { max-width: 340px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    @media (max-width: 600px) {
+      .campos-card { padding: .85rem; }
+      .actions-row, .actions-row button { width: 100%; }
+    }
   `]
 })
 export class CamposConfigComponent implements OnInit {

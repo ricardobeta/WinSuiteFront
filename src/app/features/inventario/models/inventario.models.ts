@@ -299,18 +299,61 @@ export interface AlmacenStockRow {
 export interface CostoAnalisisRow {
   productoId: string;
   producto: string;
+  sku: string;
   saldoInicial: number;
+  valorInicial: number;
   entradas: number;
+  valorEntradas: number;
   salidas: number;
+  costoSalidas: number;
+  costoVentas: number;
   saldoFinal: number;
+  saldoRegistrado: number | null;
+  diferenciaStock: number | null;
   costoPromedio: number;
   valorTotal: number;
   cogs: number;
+  cantidadSinCosto: number;
+  diferenciaConciliacion: number;
+  movimientosPeriodo: number;
+  estado: 'CONCILIADO' | 'REVISAR';
 }
 
 export interface CostoAnalisisResultado {
   rows: CostoAnalisisRow[];
+  movimientos: CostoMovimientoValorizado[];
+  valorInicialInventario: number;
+  valorEntradasTotal: number;
+  costoSalidasTotal: number;
   valorTotalInventario: number;
   cogsTotal: number;
-  margenBrutoEstimado: number;
+  diferenciaConciliacion: number;
+  productosRevisar: number;
+  esCorteActual: boolean;
+  generadoEn: number;
+}
+
+export interface CostoAnalisisFiltros {
+  metodo: MetodoCosteo;
+  productoId?: string;
+  fechaDesde?: number;
+  fechaHasta?: number;
+}
+
+export interface CostoMovimientoValorizado {
+  productoId: string;
+  producto: string;
+  sku: string;
+  movimientoId: string;
+  fecha: number;
+  tipo: TipoMovimientoKardex;
+  motivo: MotivoMovimientoKardex;
+  cantidadEntrada: number;
+  cantidadSalida: number;
+  costoUnitarioOrigen: number;
+  costoAplicado: number;
+  saldoCantidad: number;
+  saldoValor: number;
+  incluidoEnValorizacion: boolean;
+  observacion: string;
 }

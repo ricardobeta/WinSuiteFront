@@ -15,7 +15,6 @@ import { AuthService } from '../../../core/services/auth.service';
 import { SITES_STORAGE } from '../../../core/firebase/sites-firebase.tokens';
 import { SitesFirebaseSessionService } from '../../../core/services/sites-firebase-session.service';
 import { ArchivoItem } from '../../../shared/models/archivos.models';
-import { IMAGEN_PRODUCTO_MAX_BYTES, redimensionarImagen } from '../../../shared/utils/imagen.util';
 
 const TAMANO_MAXIMO = 5 * 1024 * 1024; // debe coincidir con sites-storage.rules
 const TAMANO_PAGINA = 50;
@@ -46,43 +45,28 @@ export class SitioMediaService {
   }
 
   /**
-   * Copia al bucket publico una imagen que vive en el Storage privado de archivos.
-   *
-   * <p>Las fotos de producto se cargan en `archivos/{tenantId}/...`, que es privado y sin cache
-   * de CDN. Publicarlas tal cual funcionaria (la URL lleva token), pero la tienda las serviria
-   * lentas y se romperian si alguien borra el archivo. Por eso la tienda usa siempre una copia
-   * propia en el proyecto de sitios.
-   *
-   * @returns la URL publica, o `null` si la copia no cabe en el plan.
-   * @throws si la imagen no se pudo descargar o subir por un motivo distinto a la cuota.
+   * Pide al backend copiar una imagen privada de inventario al bucket publico de sitios.
+   * El navegador nunca descarga los bytes: asi no depende del CORS del bucket privado y el
+   * servidor puede comprobar que el archivo pertenece a la empresa autenticada.
    */
-  async copiarDesdeUrl(url: string, nombreSugerido = 'imagen'): Promise<string | null> {
-    const respuesta = await fetch(url);
-    if (!respuesta.ok) {
-      throw new Error('No se pudo leer la imagen original.');
-    }
-
-    const blob = await respuesta.blob();
-    if (!blob.type.startsWith('image/')) {
-      throw new Error('El archivo original no es una imagen.');
-    }
-
-    const extension = blob.type.split('/')[1]?.split('+')[0] || 'jpg';
-    const original = new File([blob], `${nombreSugerido}.${extension}`, { type: blob.type });
-
-    // La tienda es publica: se recomprime al mismo tope que el resto de fotos de producto
-    // por si el origen es anterior al limite, o se subio sin pasar por el compresor.
-    const archivo = await redimensionarImagen(original, { maxBytes: IMAGEN_PRODUCTO_MAX_BYTES });
-    if (archivo.size > IMAGEN_PRODUCTO_MAX_BYTES) {
-      throw new Error('La imagen supera 1 MB incluso comprimida. Sube una version mas liviana en WebP.');
-    }
-
+  async copiarDesdeInventario(archivoId: string, nombreSugerido = 'imagen'): Promise<string | null> {
     try {
-      return await this.subirImagen(archivo);
+      const respuesta = await firstValueFrom(
+        this.http.post<{ url: string; storagePath: string }>(
+          `${environment.apiBaseUrl}/api/tenants/current/sitios/media/copiar-inventario`,
+          { archivoId, nombre: nombreSugerido },
+        ),
+      );
+      return respuesta.url;
     } catch (error) {
-      // Quedarse sin cupo no es un fallo: el producto se publica sin foto.
-      if (error instanceof CuotaImagenesPublicasError) {
+      if (error instanceof HttpErrorResponse && error.status === 402) {
         return null;
+      }
+      if (error instanceof HttpErrorResponse) {
+        const motivo = error.error?.error;
+        if (typeof motivo === 'string' && motivo.trim()) {
+          throw new Error(motivo);
+        }
       }
       throw error;
     }

@@ -111,15 +111,48 @@ export class CatalogoPublicacionService {
    * seria enganoso.
    */
   async copiarImagenDeInventario(producto: Producto): Promise<ResultadoCopiaImagen> {
-    const origen = producto.imagen?.url;
-    if (!origen) return { estado: 'sin-imagen' };
+    const imagen = producto.imagen;
+    if (!imagen?.url) return { estado: 'sin-imagen' };
+
+    const archivoId = imagen.archivoId
+      || this.archivoIdDesdeStoragePath(imagen.storagePath)
+      || this.archivoIdDesdeUrl(imagen.url);
+    if (!archivoId) {
+      return {
+        estado: 'error',
+        motivo: 'La imagen es antigua y no tiene un archivo de inventario asociado. Vuelve a seleccionarla en el producto.',
+      };
+    }
 
     try {
-      const url = await this.sitioMedia.copiarDesdeUrl(origen, slugify(producto.nombre) || 'producto');
+      const url = await this.sitioMedia.copiarDesdeInventario(
+        archivoId,
+        slugify(producto.nombre) || 'producto',
+      );
       return url ? { estado: 'copiada', url } : { estado: 'sin-cupo' };
     } catch (error) {
       console.warn('No se pudo copiar la imagen del producto al espacio publico', error);
       return { estado: 'error', motivo: error instanceof Error ? error.message : 'Error desconocido' };
+    }
+  }
+
+  /** Compatibilidad con productos guardados antes de persistir `archivoId`. */
+  private archivoIdDesdeStoragePath(storagePath?: string): string | null {
+    if (!storagePath) return null;
+    const partes = storagePath.split('/');
+    return partes[0] === 'archivos' && partes.length >= 4 && partes[2] ? partes[2] : null;
+  }
+
+  /** Recupera solo el id; el backend vuelve a resolverlo bajo el tenant del token. */
+  private archivoIdDesdeUrl(url: string): string | null {
+    try {
+      const parsed = new URL(url);
+      if (parsed.hostname !== 'firebasestorage.googleapis.com') return null;
+      const match = parsed.pathname.match(/\/o\/([^/]+)$/);
+      if (!match?.[1]) return null;
+      return this.archivoIdDesdeStoragePath(decodeURIComponent(match[1]));
+    } catch {
+      return null;
     }
   }
 

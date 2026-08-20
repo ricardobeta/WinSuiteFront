@@ -82,6 +82,7 @@ import { UnidadesService } from '../../services/unidades.service';
                 <button mat-raised-button color="primary" type="button" (click)="crearCategoria()">Nueva categoria</button>
               </div>
 
+              <p class="mobile-scroll-hint"><mat-icon aria-hidden="true">swipe</mat-icon>Desliza horizontalmente para ver más columnas</p>
               <div class="table-wrap">
                 <table mat-table [dataSource]="categoriasDataSource">
                   <ng-container matColumnDef="nombre">
@@ -124,6 +125,7 @@ import { UnidadesService } from '../../services/unidades.service';
                 <button mat-raised-button color="primary" type="button" (click)="crearUnidad()">Nueva unidad</button>
               </div>
 
+              <p class="mobile-scroll-hint"><mat-icon aria-hidden="true">swipe</mat-icon>Desliza horizontalmente para ver más columnas</p>
               <div class="table-wrap">
                 <table mat-table [dataSource]="unidadesDataSource">
                   <ng-container matColumnDef="nombre">
@@ -302,6 +304,19 @@ import { UnidadesService } from '../../services/unidades.service';
       :host ::ng-deep .config-tabs .mat-mdc-tab { min-width: 145px; height: 52px; }
       .tab-content { padding: 1.1rem; }
       .section-toolbar { flex-direction: column; align-items: flex-start; }
+    }
+    @media (max-width: 600px) {
+      .page-header { display: grid; gap: .75rem; }
+      .header-actions, .section-toolbar button { width: 100%; }
+      .tab-content { padding: .85rem; }
+      .section-heading { gap: .65rem; margin-bottom: 1rem; }
+      .save-bar {
+        bottom: 0;
+        display: grid;
+        grid-template-columns: 1fr;
+        padding-bottom: max(.7rem, env(safe-area-inset-bottom));
+      }
+      .save-bar button { width: 100%; }
     }
   `]
 })
