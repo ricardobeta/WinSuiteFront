@@ -192,6 +192,11 @@ import { bytesAMegabytes, formatearBytes, formatearCantidad, megabytesABytes } f
             <div class="toggle">
               <mat-slide-toggle formControlName="sriWorkerHabilitado">Incluye el agente sri-worker</mat-slide-toggle>
             </div>
+            <div class="toggle">
+              <mat-slide-toggle formControlName="whatsappManualHabilitado">
+                Permite conectar WhatsApp a mano
+              </mat-slide-toggle>
+            </div>
           </div>
 
           <h4>Modulos incluidos</h4>
@@ -281,6 +286,7 @@ export class PlanesEmpresaComponent implements OnInit {
       descargasSriMes: [null as number | null],
       colaboradores: [null as number | null],
       sriWorkerHabilitado: [true],
+      whatsappManualHabilitado: [false],
     }),
   });
 
@@ -310,6 +316,7 @@ export class PlanesEmpresaComponent implements OnInit {
       limites: {
         storageMb: null, sitesMediaMb: null, sitiosEcommerce: null, sitiosLanding: null, aiTokensMes: null,
         facturasSriMes: null, descargasSriMes: null, colaboradores: null, sriWorkerHabilitado: true,
+        whatsappManualHabilitado: false,
       },
     });
     this.modulos.set([]);
@@ -337,6 +344,7 @@ export class PlanesEmpresaComponent implements OnInit {
         descargasSriMes: plan.limites?.descargasSriMes ?? null,
         colaboradores: plan.limites?.colaboradores ?? null,
         sriWorkerHabilitado: plan.limites?.sriWorkerHabilitado ?? true,
+        whatsappManualHabilitado: plan.limites?.whatsappManualHabilitado ?? false,
       },
     });
     this.modulos.set(plan.modulos ?? []);
@@ -378,6 +386,7 @@ export class PlanesEmpresaComponent implements OnInit {
         descargasSriMes: valores.limites.descargasSriMes,
         colaboradores: valores.limites.colaboradores,
         sriWorkerHabilitado: valores.limites.sriWorkerHabilitado,
+        whatsappManualHabilitado: valores.limites.whatsappManualHabilitado,
       },
     };
 

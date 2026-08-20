@@ -210,6 +210,13 @@ interface FilaConsumo {
               </mat-slide-toggle>
               <small>Permite la descarga automatica de los documentos recibidos del SRI.</small>
             </div>
+
+            <div class="toggle">
+              <mat-slide-toggle formControlName="whatsappManualHabilitado">
+                Puede conectar un numero de WhatsApp a mano
+              </mat-slide-toggle>
+              <small>Para probar el asistente de ventas con el numero de prueba de Meta mientras la app esta en revision.</small>
+            </div>
           </div>
 
           <h3>Modulos adicionales</h3>
@@ -377,6 +384,7 @@ export class EmpresaDetalleComponent implements OnInit {
       descargasSriMes: [null as number | null],
       colaboradores: [null as number | null],
       sriWorkerHabilitado: [true],
+      whatsappManualHabilitado: [false],
     }),
   });
 
@@ -435,6 +443,7 @@ export class EmpresaDetalleComponent implements OnInit {
         descargasSriMes: override.descargasSriMes ?? null,
         colaboradores: override.colaboradores ?? null,
         sriWorkerHabilitado: detalle.planEfectivo.limites.sriWorkerHabilitado ?? true,
+        whatsappManualHabilitado: detalle.planEfectivo.limites.whatsappManualHabilitado ?? false,
       },
     });
     this.modulosExtra.set(detalle.suscripcion?.modulosExtra ?? []);
@@ -474,6 +483,7 @@ export class EmpresaDetalleComponent implements OnInit {
       descargasSriMes: limites.descargasSriMes,
       colaboradores: limites.colaboradores,
       sriWorkerHabilitado: limites.sriWorkerHabilitado,
+      whatsappManualHabilitado: limites.whatsappManualHabilitado,
     };
 
     const payload: ActualizarSuscripcionEmpresa = {

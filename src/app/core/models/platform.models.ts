@@ -24,6 +24,7 @@ export interface LimitesPlan {
   descargasSriMes?: number | null;
   colaboradores?: number | null;
   sriWorkerHabilitado?: boolean | null;
+  whatsappManualHabilitado?: boolean | null;
 }
 
 export interface PlanEmpresa {

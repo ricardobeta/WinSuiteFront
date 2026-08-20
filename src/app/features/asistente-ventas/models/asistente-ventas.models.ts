@@ -11,6 +11,25 @@ export interface WhatsAppInstance {
   status: string;
   createdAt: number;
   updatedAt: number;
+  /** La conexion se cargo a mano con las credenciales de Meta, sin Embedded Signup. */
+  manual?: boolean;
+  /** Ultima vez que se guardo el token; en las manuales caduca cada pocas horas. */
+  tokenUpdatedAt?: number | null;
+}
+
+/** Que puede hacer la empresa hoy con WhatsApp; lo resuelve el backend. */
+export interface WhatsAppCapabilities {
+  /** La app de WinSuit ya esta aprobada por Meta y el Embedded Signup funciona. */
+  embeddedSignupEnabled: boolean;
+  /** La empresa esta autorizada a cargar las credenciales del numero de prueba a mano. */
+  manualEnabled: boolean;
+}
+
+/** Resultado de preguntar a Meta si el token guardado sigue sirviendo. */
+export interface ConnectionCheck {
+  ok: boolean;
+  mensaje: string;
+  displayPhoneNumber?: string | null;
 }
 
 export type TemplateButtonType = 'QUICK_REPLY' | 'URL' | 'PHONE_NUMBER';
