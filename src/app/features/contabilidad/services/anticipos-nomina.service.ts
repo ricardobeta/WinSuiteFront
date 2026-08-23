@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, equalTo, get, onValue, orderByChild, push, query, ref, runTransaction, set, update } from '@angular/fire/database';
+import { Database, DatabaseReference, equalTo, get, onValue, orderByChild, push, query, ref, runTransaction, set, TransactionResult, update } from '@angular/fire/database';
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
@@ -7,6 +7,7 @@ import {
   AnticipoNomina,
   AnticipoNominaDetalle,
   anticipoAfectaNomina,
+  bloqueoConfirmacionAjeno,
   ComprobanteEntregaAnticipo,
   RegistrarAnticipoInput,
   ResumenAnticipoNomina
@@ -217,35 +218,47 @@ export class AnticiposNominaService {
   }
 
   /**
-   * Confirma que el dinero salio. Un bloqueo transaccional evita dobles asientos y el vinculo por
-   * origen permite terminar limpiamente un reintento si el asiento se creo antes de actualizar la
-   * cabecera.
+   * Confirma que el dinero salio. Un bloqueo transaccional evita que dos personas confirmen a la
+   * vez y el vinculo por origen permite terminar limpiamente un reintento si el asiento se creo
+   * antes de actualizar la cabecera; es ese vinculo, y no el bloqueo, lo que impide el doble
+   * asiento, asi que un bloqueo propio abandonado se retoma en lugar de hacer esperar al usuario.
    */
   async confirmarEntrega(anticipoId: string, lineasConfirmadas?: AsientoContableLinea[]): Promise<string> {
-    const token = `${this.authService.currentUser()?.uid ?? 'usuario'}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const uid = this.authService.currentUser()?.uid ?? 'usuario';
+    const token = `${uid}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
     const cabeceraRef = ref(this.database, `${this.getNominaPath()}/anticipos/${anticipoId}`);
     const ahora = Date.now();
-    const bloqueo = await runTransaction(cabeceraRef, (actual: AnticipoNomina | null) => {
-      if (!actual || actual.estado === 'REGISTRADO' || actual.estado === 'DESCONTADO') {
-        return;
-      }
-      if (actual.estado !== 'BORRADOR') {
-        return;
-      }
-      const bloqueoVigente = !!actual.confirmacionToken
-        && ahora - Number(actual.confirmacionEn ?? 0) < 5 * 60 * 1000;
-      if (bloqueoVigente) {
-        return;
+
+    // El diagnostico se hace antes de la transaccion, leyendo del servidor: una transaccion solo
+    // sabe decir que no pudo, y traducir cualquier aborto suyo a "otra sesion" es lo que hacia que
+    // el usuario viera ese mensaje sin que hubiera nadie mas confirmando.
+    const previo = await this.getAnticipoDetalle(anticipoId);
+    if (!previo) {
+      throw new Error('El anticipo ya no existe.');
+    }
+    if (previo.anticipo.estado === 'REGISTRADO' || previo.anticipo.estado === 'DESCONTADO') {
+      return anticipoId;
+    }
+    if (previo.anticipo.estado !== 'BORRADOR') {
+      throw new Error('El anticipo esta anulado: ya no se puede confirmar la entrega.');
+    }
+    const ajeno = bloqueoConfirmacionAjeno(previo.anticipo, uid, ahora);
+    if (ajeno) {
+      const minutos = Math.max(1, Math.round((ahora - ajeno.desdeEn) / 60000));
+      throw new Error(`Otro usuario esta confirmando este anticipo desde hace ${minutos} minuto${minutos === 1 ? '' : 's'}. Espera a que termine.`);
+    }
+
+    const bloqueo = await this.transaccionCabecera(anticipoId, (actual) => {
+      if (actual.estado !== 'BORRADOR' || bloqueoConfirmacionAjeno(actual, uid, ahora)) {
+        return undefined;
       }
       return { ...actual, confirmacionToken: token, confirmacionEn: ahora };
     });
 
-    if (!bloqueo.committed) {
-      const actual = await this.getAnticipoDetalle(anticipoId);
-      if (actual?.anticipo.estado === 'REGISTRADO' || actual?.anticipo.estado === 'DESCONTADO') {
-        return anticipoId;
-      }
-      throw new Error('Otra sesion esta confirmando este anticipo. Espera un momento y vuelve a intentar.');
+    // Llegar aqui sin bloqueo ya solo puede significar una carrera real contra otra sesion, porque
+    // el estado y el bloqueo previo se acaban de comprobar contra el servidor.
+    if (!bloqueo.committed || !bloqueo.snapshot.exists()) {
+      throw new Error('Otra sesion tomo la confirmacion de este anticipo justo ahora. Vuelve a intentar en un momento.');
     }
 
     try {
@@ -282,14 +295,66 @@ export class AnticiposNominaService {
       });
       return anticipoId;
     } catch (error) {
-      await runTransaction(cabeceraRef, (actual: AnticipoNomina | null) => {
-        if (!actual || actual.confirmacionToken !== token || actual.estado !== 'BORRADOR') {
-          return;
+      await this.transaccionCabecera(anticipoId, (actual) => {
+        if (actual.confirmacionToken !== token || actual.estado !== 'BORRADOR') {
+          return undefined;
         }
         return { ...actual, confirmacionToken: null, confirmacionEn: null };
       });
       throw error;
     }
+  }
+
+  /**
+   * Transaccion sobre la cabecera de un anticipo, con el valor ya presente en el cache local.
+   *
+   * runTransaction resuelve su primera pasada de forma sincrona contra el cache local y, si esa
+   * pasada devuelve undefined, aborta sin consultar jamas al servidor. La cabecera de un anticipo
+   * no esta en ese cache cuando se confirma desde el formulario: el unico onValue sobre los
+   * anticipos vive en la pantalla de lista y muere al navegar, y get() no deja nada cacheado. El
+   * nodo llegaba entonces null en la primera pasada, la transaccion moria ahi sin tocar el
+   * servidor, y el llamador lo interpretaba como que otra sesion tenia tomado el anticipo.
+   *
+   * Mantener un listener vivo durante toda la transaccion resuelve la causa: la primera pasada ya
+   * recibe el valor real y el reintento interno del SDK tambien lo tiene a mano. El nodo ausente
+   * se traduce ademas a un objeto vacio, que sirve de red por si el valor no alcanzo a llegar
+   * (sin red, por ejemplo): en vez de abortar en seco fuerza el viaje al servidor. RTDB no
+   * persiste objetos vacios, asi que un anticipo inexistente tampoco se crea por ese camino; el
+   * llamador lo reconoce porque el snapshot resultante no existe.
+   */
+  private async transaccionCabecera(
+    anticipoId: string,
+    aplicar: (actual: AnticipoNomina) => AnticipoNomina | undefined
+  ): Promise<TransactionResult> {
+    const cabeceraRef = ref(this.database, `${this.getNominaPath()}/anticipos/${anticipoId}`);
+    const soltarCabecera = await this.cachearCabecera(cabeceraRef);
+    try {
+      return await runTransaction(
+        cabeceraRef,
+        (actual: AnticipoNomina | null) => (actual === null ? {} : aplicar(actual))
+      );
+    } finally {
+      soltarCabecera();
+    }
+  }
+
+  /**
+   * Suscribe la cabecera y espera al primer valor para que quede en el cache local. Devuelve la
+   * funcion que suelta la suscripcion, que hay que llamar siempre: mientras viva, el nodo sigue
+   * sincronizado. Si el valor no llega en unos segundos se continua igual, porque la transaccion
+   * sabe defenderse de un nodo ausente y es preferible intentarlo a dejar la pantalla colgada.
+   */
+  private async cachearCabecera(cabeceraRef: DatabaseReference): Promise<() => void> {
+    let desuscribir: (() => void) | null = null;
+    await new Promise<void>((resolve) => {
+      const temporizador = setTimeout(resolve, 5000);
+      const terminar = () => {
+        clearTimeout(temporizador);
+        resolve();
+      };
+      desuscribir = onValue(cabeceraRef, terminar, terminar);
+    });
+    return () => desuscribir?.();
   }
 
   async descartarBorrador(anticipoId: string): Promise<void> {

@@ -100,3 +100,36 @@ export interface RegistrarAnticipoInput {
   cuentaAnticipoId: string;
   cuentaOrigenId: string;
 }
+
+/**
+ * Cuanto vive el bloqueo efimero de confirmacion antes de darse por abandonado. Pasado ese tiempo
+ * se asume que la sesion que lo tomo murio sin liberarlo (recarga, red caida, pestaña cerrada).
+ */
+export const BLOQUEO_CONFIRMACION_MS = 5 * 60 * 1000;
+
+/** El token de confirmacion es `uid_timestamp_aleatorio`; solo las dos ultimas partes son fijas. */
+export function uidDelTokenConfirmacion(token?: string | null): string {
+  const partes = (token ?? '').split('_');
+  return partes.length >= 3 ? partes.slice(0, -2).join('_') : '';
+}
+
+/**
+ * Bloqueo que de verdad obliga a esperar: uno vigente y de otro usuario. Un bloqueo propio es un
+ * intento anterior del mismo contador que quedo colgado, y hacerle esperar cinco minutos por su
+ * propio reintento no protege nada: contra el doble asiento no cuida este bloqueo sino el indice
+ * asientosOrigen, que devuelve el asiento que ya creo el intento previo.
+ */
+export function bloqueoConfirmacionAjeno(
+  anticipo: Pick<AnticipoNomina, 'confirmacionToken' | 'confirmacionEn'>,
+  uid: string,
+  ahora: number
+): { desdeEn: number } | null {
+  if (!anticipo.confirmacionToken) {
+    return null;
+  }
+  const desdeEn = Number(anticipo.confirmacionEn ?? 0);
+  if (ahora - desdeEn >= BLOQUEO_CONFIRMACION_MS) {
+    return null;
+  }
+  return uidDelTokenConfirmacion(anticipo.confirmacionToken) === uid ? null : { desdeEn };
+}

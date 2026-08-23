@@ -6,7 +6,6 @@ import { AbstractControl, FormArray, FormBuilder, FormGroup, FormsModule, Reacti
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatButtonToggleModule } from '@angular/material/button-toggle';
-import { MatNativeDateModule } from '@angular/material/core';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MatDialog } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -29,6 +28,7 @@ import { esComprable } from '../../../inventario/utils/producto.util';
 import { AlmacenesService } from '../../../inventario/services/almacenes.service';
 import { ProductosService } from '../../../inventario/services/productos.service';
 import {
+  autorizacionDocumentoModificadoValida,
   CODIGOS_SUSTENTO,
   CatalogoItem,
   DocumentoModificado,
@@ -69,7 +69,6 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
-    MatNativeDateModule,
     MatSelectModule,
     MatSlideToggleModule,
     MatSnackBarModule,
@@ -283,7 +282,8 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
                   </mat-form-field>
                   <mat-form-field appearance="outline">
                     <mat-label>Autorización doc. modificado</mat-label>
-                    <input matInput formControlName="docModAutorizacion" />
+                    <input matInput formControlName="docModAutorizacion" inputmode="numeric" maxlength="49" />
+                    <mat-hint>Entre 3 y 49 dígitos</mat-hint>
                   </mat-form-field>
                 </div>
                 <div class="grid-3">
@@ -301,7 +301,7 @@ import { RevisarAsientoCompraData, RevisarAsientoCompraDialogComponent, RevisarA
                   </mat-form-field>
                 </div>
                 <div class="docmod-actions">
-                  <button mat-stroked-button type="button" (click)="completarAutorizacionDocModificado(true)" [disabled]="buscandoDocMod() || soloLectura()">
+                  <button mat-stroked-button type="button" (click)="completarAutorizacionDocModificado(true)" [disabled]="buscandoDocMod() || (soloLectura() && !edicionLimitada())">
                     <mat-icon>search</mat-icon> {{ buscandoDocMod() ? 'Buscando…' : 'Buscar autorización' }}
                   </button>
                   @if (docModVinculado()) {
@@ -794,10 +794,12 @@ export class FacturaCompraFormComponent implements OnInit {
   protected readonly facturaId = signal<string | null>(null);
   protected readonly estado = signal<'BORRADOR' | 'REGISTRADA' | 'ANULADA'>('BORRADOR');
   protected readonly soloLectura = computed(() => this.estado() !== 'BORRADOR');
-  /** Edición acotada de una compra ya REGISTRADA (solo proveedor, sustento tributario y forma de pago). */
+  /** Edición acotada de una compra ya REGISTRADA, incluidos los datos tributarios corregibles. */
   protected readonly edicionLimitada = signal(false);
   /** Únicos controles editables en una compra registrada. */
-  private readonly CONTROLES_EDICION_REGISTRADA = ['tpIdProv', 'idProv', 'razonSocialProv', 'parteRel', 'codSustento', 'formasDePago'] as const;
+  private readonly CONTROLES_EDICION_REGISTRADA = [
+    'tpIdProv', 'idProv', 'razonSocialProv', 'parteRel', 'codSustento', 'formasDePago', 'docModAutorizacion'
+  ] as const;
   protected readonly productos = signal<Producto[]>([]);
   protected readonly almacenes = signal<Almacen[]>([]);
   protected readonly tiposGasto = signal<TipoGastoCompra[]>([]);
@@ -1190,14 +1192,13 @@ export class FacturaCompraFormComponent implements OnInit {
     }
     this.buscandoDocMod.set(true);
     try {
-      const original = await this.facturasService.buscarDocumentoPorNumero({
+      const aut = await this.facturasService.buscarAutorizacionDocumentoModificado({
         idProv: v.idProv,
         establecimiento: v.docModEstablecimiento,
         puntoEmision: v.docModPuntoEmision,
         secuencial: v.docModSecuencial,
         tipoComprobante: v.docModTipo
       });
-      const aut = (original?.autorizacion || original?.claveAcceso || '').trim();
       if (aut) {
         this.form.patchValue({ docModAutorizacion: aut });
         this.docModVinculado.set(true);
@@ -1209,6 +1210,11 @@ export class FacturaCompraFormComponent implements OnInit {
         if (forzar) {
           this.toast('No se encontró una compra registrada con ese número de documento.', 'warning');
         }
+      }
+    } catch (error) {
+      this.docModVinculado.set(false);
+      if (forzar) {
+        this.toast(error instanceof Error ? error.message : 'No se pudo buscar la autorización.', 'warning');
       }
     } finally {
       this.buscandoDocMod.set(false);
@@ -1499,6 +1505,10 @@ export class FacturaCompraFormComponent implements OnInit {
       this.toast('Adjunta el documento escaneado (obligatorio en registro manual).', 'warning');
       return null;
     }
+    if (!esBorrador && this.esNotaCredito()
+      && !autorizacionDocumentoModificadoValida(this.form.getRawValue().docModAutorizacion)) {
+      await this.completarAutorizacionDocModificado();
+    }
     if (!esBorrador) {
       if (this.form.invalid) {
         this.form.markAllAsTouched();
@@ -1512,8 +1522,12 @@ export class FacturaCompraFormComponent implements OnInit {
       }
       if (this.esNotaCredito()) {
         const v = this.form.getRawValue();
-        if (!v.docModEstablecimiento || !v.docModPuntoEmision || !v.docModSecuencial) {
+        if (!v.docModTipo || !v.docModEstablecimiento.trim() || !v.docModPuntoEmision.trim() || !v.docModSecuencial.trim()) {
           this.toast('Completa el documento modificado por la nota de crédito.', 'warning');
+          return null;
+        }
+        if (!autorizacionDocumentoModificadoValida(v.docModAutorizacion)) {
+          this.toast('La autorización del documento modificado debe contener entre 3 y 49 dígitos.', 'warning');
           return null;
         }
       }
@@ -1636,7 +1650,7 @@ export class FacturaCompraFormComponent implements OnInit {
   }
 
   // ===== Edición limitada de una compra REGISTRADA =====
-  // Solo se permite editar proveedor, sustento tributario (codSustento) y forma de pago.
+  // Solo se permite editar proveedor, sustento tributario, forma de pago y autModificado.
   // Guardar NO re-registra, NO recontabiliza y NO recrea la cuenta por pagar.
 
   /** Valores originales de los campos editables, para revertir si se cancela. */
@@ -1650,7 +1664,8 @@ export class FacturaCompraFormComponent implements OnInit {
       razonSocialProv: v.razonSocialProv,
       parteRel: v.parteRel,
       codSustento: v.codSustento,
-      formasDePago: v.formasDePago
+      formasDePago: v.formasDePago,
+      docModAutorizacion: v.docModAutorizacion
     };
     this.edicionLimitada.set(true);
     for (const nombre of this.CONTROLES_EDICION_REGISTRADA) {
@@ -1683,18 +1698,35 @@ export class FacturaCompraFormComponent implements OnInit {
       return;
     }
 
+    const valores = this.form.getRawValue();
+    if (this.esNotaCredito() && !autorizacionDocumentoModificadoValida(valores.docModAutorizacion)) {
+      this.toast('La autorización del documento modificado debe contener entre 3 y 49 dígitos.', 'warning');
+      return;
+    }
+
     this.guardando.set(true);
     try {
-      const v = this.form.getRawValue();
+      const v = valores;
       // Persistencia pura del parcial: no toca asiento, inventario ni cuentas por pagar.
-      await this.facturasService.actualizarFacturaCompra(id, {
+      const cambios: Partial<FacturaCompra> = {
         tpIdProv: v.tpIdProv,
         idProv: v.idProv.trim(),
         razonSocialProv: v.razonSocialProv.trim(),
         parteRel: v.parteRel === 'SI' ? 'SI' : 'NO',
         codSustento: v.codSustento,
         formasDePago: v.formasDePago ?? []
-      });
+      };
+      if (this.esNotaCredito()) {
+        cambios.docModificado = {
+          tipoComprobante: v.docModTipo || '01',
+          establecimiento: (v.docModEstablecimiento ?? '').trim(),
+          puntoEmision: (v.docModPuntoEmision ?? '').trim(),
+          secuencial: (v.docModSecuencial ?? '').trim(),
+          fechaEmision: v.docModFecha ? this.toTs(v.docModFecha) : null,
+          autorizacion: (v.docModAutorizacion ?? '').trim()
+        };
+      }
+      await this.facturasService.actualizarFacturaCompra(id, cambios);
       this.toast('Cambios guardados.', 'save');
       this.edicionLimitada.set(false);
       for (const nombre of this.CONTROLES_EDICION_REGISTRADA) {
@@ -1868,6 +1900,7 @@ export class FacturaCompraFormComponent implements OnInit {
     this.parseado.set(factura.origen !== 'MANUAL');
 
     const dm = factura.docModificado;
+    this.docModVinculado.set(autorizacionDocumentoModificadoValida(dm?.autorizacion));
     this.form.patchValue({
       docModTipo: dm?.tipoComprobante ?? '01',
       docModEstablecimiento: dm?.establecimiento ?? '',

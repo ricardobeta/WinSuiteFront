@@ -6,6 +6,7 @@ import { AuditService } from '../../../core/services/audit.service';
 import { KardexService } from '../../inventario/services/kardex.service';
 import { AsientoContableLinea } from '../models/contabilidad.models';
 import {
+  autorizacionDocumentoModificadoValida,
   EstadoFacturaCompra,
   FacturaCompra,
   FacturaCompraItem,
@@ -227,6 +228,22 @@ export class FacturasCompraService {
     return candidatos.find((f) => f.estado === 'REGISTRADA') ?? candidatos[0];
   }
 
+  /**
+   * Resuelve el valor que exige `autModificado` a partir de la compra original.
+   * Se prioriza la autorizacion persistida y se admite la clave de acceso como respaldo.
+   */
+  async buscarAutorizacionDocumentoModificado(input: {
+    idProv?: string;
+    establecimiento: string;
+    puntoEmision: string;
+    secuencial: string;
+    tipoComprobante?: string;
+  }): Promise<string | null> {
+    const original = await this.buscarDocumentoPorNumero(input);
+    const autorizacion = (original?.autorizacion || original?.claveAcceso || '').trim();
+    return autorizacion || null;
+  }
+
   async getItems(facturaId: string): Promise<FacturaCompraItem[]> {
     const snapshot = await get(this.getItemsRef(facturaId));
     if (!snapshot.exists()) {
@@ -411,6 +428,20 @@ export class FacturasCompraService {
     }
     if (factura.estado === 'REGISTRADA') {
       throw new Error('La factura de compra ya está registrada.');
+    }
+
+    if (factura.tipoComprobante === TIPO_COMPROBANTE_NOTA_CREDITO) {
+      const documento = factura.docModificado;
+      const referenciaCompleta = !!documento?.tipoComprobante
+        && !!documento.establecimiento?.trim()
+        && !!documento.puntoEmision?.trim()
+        && !!documento.secuencial?.trim();
+      if (!referenciaCompleta) {
+        throw new Error('Completa el documento modificado por la nota de crédito.');
+      }
+      if (!autorizacionDocumentoModificadoValida(documento?.autorizacion)) {
+        throw new Error('La autorización del documento modificado debe contener entre 3 y 49 dígitos.');
+      }
     }
 
     const items = await this.getItems(facturaId);

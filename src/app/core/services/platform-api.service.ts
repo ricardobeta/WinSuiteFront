@@ -1,6 +1,6 @@
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { inject, Injectable } from '@angular/core';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
 import {
@@ -32,15 +32,21 @@ export class PlatformApiService {
 
   listarEmpresas(query?: string): Observable<EmpresaFila[]> {
     const params = query ? new HttpParams().set('query', query) : undefined;
-    return this.http.get<EmpresaFila[]>(`${this.base}/companies`, { params });
+    return this.http
+      .get<EmpresaFila[]>(`${this.base}/companies`, { params })
+      .pipe(map((filas) => filas ?? []));
   }
 
   obtenerEmpresa(tenantId: string): Observable<EmpresaDetalle> {
-    return this.http.get<EmpresaDetalle>(`${this.base}/companies/${tenantId}`);
+    return this.http
+      .get<EmpresaDetalle>(`${this.base}/companies/${tenantId}`)
+      .pipe(map((detalle) => this.conListas(detalle)));
   }
 
   actualizarSuscripcion(tenantId: string, payload: ActualizarSuscripcionEmpresa): Observable<EmpresaDetalle> {
-    return this.http.put<EmpresaDetalle>(`${this.base}/companies/${tenantId}/subscription`, payload);
+    return this.http
+      .put<EmpresaDetalle>(`${this.base}/companies/${tenantId}/subscription`, payload)
+      .pipe(map((detalle) => this.conListas(detalle)));
   }
 
   ajustarBolsa(tenantId: string, payload: AjusteBolsa): Observable<ConsumoEmpresa> {
@@ -55,11 +61,15 @@ export class PlatformApiService {
   // ---------------- Cuentas ----------------
 
   listarCuentas(): Observable<CuentaFila[]> {
-    return this.http.get<CuentaFila[]>(`${this.base}/accounts`);
+    return this.http
+      .get<CuentaFila[]>(`${this.base}/accounts`)
+      .pipe(map((filas) => (filas ?? []).map((fila) => this.conEmpresas(fila))));
   }
 
   actualizarSuscripcionCuenta(userId: string, payload: ActualizarSuscripcionCuenta): Observable<CuentaFila> {
-    return this.http.put<CuentaFila>(`${this.base}/accounts/${userId}/subscription`, payload);
+    return this.http
+      .put<CuentaFila>(`${this.base}/accounts/${userId}/subscription`, payload)
+      .pipe(map((fila) => this.conEmpresas(fila)));
   }
 
   // ---------------- Planes de empresa ----------------
@@ -133,5 +143,18 @@ export class PlatformApiService {
 
   guardarAjustesPago(ajustes: AjustesPago): Observable<AjustesPago> {
     return this.http.put<AjustesPago>(`${this.base}/settings/pagos`, ajustes);
+  }
+
+  /**
+   * Las listas se normalizan al entrar. Firebase omite los arrays vacios y una respuesta sin
+   * el campo dejaba la propiedad en undefined: los @for y los .length de las tablas reventaban
+   * y la pantalla entera se quedaba sin renderizar.
+   */
+  private conListas(detalle: EmpresaDetalle): EmpresaDetalle {
+    return { ...detalle, miembros: detalle?.miembros ?? [] };
+  }
+
+  private conEmpresas(fila: CuentaFila): CuentaFila {
+    return { ...fila, empresas: fila?.empresas ?? [] };
   }
 }

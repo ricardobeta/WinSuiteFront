@@ -19,7 +19,11 @@ import { ArchivosService } from '../../../../core/services/archivos.service';
 import { ArchivoItem } from '../../../../shared/models/archivos.models';
 import { ArchivoUploaderComponent } from '../../../../shared/components/archivo-uploader/archivo-uploader.component';
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
-import { FacturaCompraParsed } from '../../models/compras.models';
+import {
+  autorizacionDocumentoModificadoValida,
+  FacturaCompraParsed,
+  TIPO_COMPROBANTE_NOTA_CREDITO
+} from '../../models/compras.models';
 import { ComprasXmlService } from '../../services/compras-xml.service';
 import { FacturasCompraService } from '../../services/facturas-compra.service';
 
@@ -442,8 +446,30 @@ export class CargaMasivaComprasComponent {
         pdfArchivoId: pdf?.id ?? null,
         pdfDownloadUrl: pdf?.downloadUrl ?? null
       });
+      let autorizacionDocModCompleta = parsed.tipoComprobante !== TIPO_COMPROBANTE_NOTA_CREDITO;
+      if (parsed.tipoComprobante === TIPO_COMPROBANTE_NOTA_CREDITO && input.factura.docModificado) {
+        const docModificado = input.factura.docModificado;
+        try {
+          const autorizacion = await this.facturasService.buscarAutorizacionDocumentoModificado({
+            idProv: parsed.idProv,
+            establecimiento: docModificado.establecimiento,
+            puntoEmision: docModificado.puntoEmision,
+            secuencial: docModificado.secuencial,
+            tipoComprobante: docModificado.tipoComprobante
+          });
+          if (autorizacionDocumentoModificadoValida(autorizacion)) {
+            docModificado.autorizacion = autorizacion!;
+            autorizacionDocModCompleta = true;
+          }
+        } catch {
+          autorizacionDocModCompleta = false;
+        }
+      }
       await this.facturasService.crearFacturaCompra(input);
-      return { archivo: item.name, proveedor, documento, total, estado: 'creado', detalle: 'Borrador creado correctamente.' };
+      const detalle = autorizacionDocModCompleta
+        ? 'Borrador creado correctamente.'
+        : 'Borrador creado. Falta completar la autorización del documento modificado.';
+      return { archivo: item.name, proveedor, documento, total, estado: 'creado', detalle };
     } catch (error) {
       const detalle = (error as { error?: { message?: string }; message?: string })?.error?.message
         ?? (error as Error)?.message

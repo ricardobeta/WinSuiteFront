@@ -19,7 +19,6 @@ import {
   DateAdapter,
   MAT_DATE_FORMATS,
   MAT_DATE_LOCALE,
-  MatDateFormats,
 } from '@angular/material/core';
 import { MatPaginatorIntl } from '@angular/material/paginator';
 
@@ -27,22 +26,8 @@ import { routes } from './app.routes';
 import { environment } from '../environments/environment';
 import { AuthInterceptor } from './core/interceptors/auth.interceptor';
 import { QuotaInterceptor } from './core/interceptors/quota.interceptor';
-import { EcuadorDateAdapter } from './shared/adapters/ecuador-date.adapter';
+import { ECUADOR_DATE_FORMATS, EcuadorDateAdapter } from './shared/adapters/ecuador-date.adapter';
 import { SpanishPaginatorIntl } from './shared/services/spanish-paginator-intl';
-
-// Ecuador usa el formato de fecha día/mes/año. Con el adaptador nativo, estas opciones de Intl
-// (junto con MAT_DATE_LOCALE 'es-EC') hacen que los datepickers muestren y parseen dd/mm/aaaa.
-const ES_EC_DATE_FORMATS: MatDateFormats = {
-  parse: {
-    dateInput: 'DD/MM/YYYY',
-  },
-  display: {
-    dateInput: 'DD/MM/YYYY',
-    monthYearLabel: { year: 'numeric', month: 'short' },
-    dateA11yLabel: { year: 'numeric', month: 'long', day: 'numeric' },
-    monthYearA11yLabel: { year: 'numeric', month: 'long' },
-  },
-};
 
 registerLocaleData(localeEs, 'es-EC');
 
@@ -65,7 +50,7 @@ export const appConfig: ApplicationConfig = {
     { provide: DateAdapter, useClass: EcuadorDateAdapter },
     { provide: LOCALE_ID, useValue: 'es-EC' },
     { provide: MAT_DATE_LOCALE, useValue: 'es-EC' },
-    { provide: MAT_DATE_FORMATS, useValue: ES_EC_DATE_FORMATS },
+    { provide: MAT_DATE_FORMATS, useValue: ECUADOR_DATE_FORMATS },
     { provide: MatPaginatorIntl, useClass: SpanishPaginatorIntl },
     provideAnimationsAsync(),
     provideFirebaseApp(() => initializeApp(environment.firebase)),

@@ -7,6 +7,13 @@ export type TipoIdProveedor = '01' | '02' | '03';
 
 export type SiNo = 'SI' | 'NO';
 
+/** Formato exigido por el ATS para la autorizacion del comprobante modificado. */
+export const AUTORIZACION_DOCUMENTO_MODIFICADO_PATTERN = /^\d{3,49}$/;
+
+export function autorizacionDocumentoModificadoValida(value: unknown): boolean {
+  return AUTORIZACION_DOCUMENTO_MODIFICADO_PATTERN.test(String(value ?? '').trim());
+}
+
 /** Retención en la fuente de renta (nodo <air><detalleAir> del ATS). */
 export interface DetalleAirRetencion {
   codRetAir: string;

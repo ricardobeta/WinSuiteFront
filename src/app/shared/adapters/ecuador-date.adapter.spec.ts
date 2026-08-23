@@ -1,7 +1,13 @@
+import { Component } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
-import { MAT_DATE_LOCALE } from '@angular/material/core';
+import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { DateAdapter, MAT_DATE_FORMATS, MAT_DATE_LOCALE } from '@angular/material/core';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 
-import { EcuadorDateAdapter } from './ecuador-date.adapter';
+import { ECUADOR_DATE_FORMATS, EcuadorDateAdapter } from './ecuador-date.adapter';
 
 describe('EcuadorDateAdapter', () => {
   let adapter: EcuadorDateAdapter;
@@ -69,5 +75,60 @@ describe('EcuadorDateAdapter', () => {
     const fecha = new Date(2026, 11, 2);
     expect(adapter.parse(fecha)).toBe(fecha);
     expect(adapter.parse(new Date('invalida'))).toBeNull();
+  });
+});
+
+/**
+ * Campo igual al de cualquier formulario de la app: matDatepicker sobre un control reactivo.
+ * Lo que se prueba aqui no es el adaptador sino el cableado, porque el modo de romperlo es de
+ * inyeccion: un componente que importa MatNativeDateModule (o llama a provideNativeDateAdapter)
+ * reemplaza a este adaptador por el nativo solo dentro de si mismo, y ahi Date.parse deja de
+ * entender lo que la gente teclea. Fue exactamente lo que paso en el formulario de compras.
+ */
+@Component({
+  standalone: true,
+  imports: [ReactiveFormsModule, MatFormFieldModule, MatInputModule, MatDatepickerModule],
+  template: `
+    <mat-form-field>
+      <input matInput [matDatepicker]="picker" [formControl]="fecha" />
+      <mat-datepicker #picker></mat-datepicker>
+    </mat-form-field>
+  `
+})
+class CampoFechaHost {
+  readonly fecha = new FormControl<Date | null>(null);
+}
+
+describe('EcuadorDateAdapter · fecha tecleada en un matDatepicker', () => {
+  function teclear(texto: string): CampoFechaHost {
+    TestBed.configureTestingModule({
+      imports: [CampoFechaHost, NoopAnimationsModule],
+      providers: [
+        { provide: DateAdapter, useClass: EcuadorDateAdapter },
+        { provide: MAT_DATE_LOCALE, useValue: 'es-EC' },
+        { provide: MAT_DATE_FORMATS, useValue: ECUADOR_DATE_FORMATS }
+      ]
+    });
+    const fixture = TestBed.createComponent(CampoFechaHost);
+    fixture.detectChanges();
+
+    const input = fixture.nativeElement.querySelector('input') as HTMLInputElement;
+    input.value = texto;
+    input.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    return fixture.componentInstance;
+  }
+
+  it('registra en el control la fecha tecleada de corrido, sin abrir el calendario', () => {
+    expect(teclear('02122026').fecha.value).toEqual(new Date(2026, 11, 2));
+  });
+
+  it('registra la fecha con separadores como dia/mes/año, no como mes/dia', () => {
+    // Date.parse leeria "02/12/2026" como 12 de febrero: el dia y el mes al reves y sin avisar.
+    expect(teclear('02/12/2026').fecha.value).toEqual(new Date(2026, 11, 2));
+  });
+
+  it('deja el control vacio mientras la fecha esta a medio teclear', () => {
+    expect(teclear('0212').fecha.value).toBeNull();
   });
 });

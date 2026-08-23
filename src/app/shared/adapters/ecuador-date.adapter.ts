@@ -1,5 +1,21 @@
 import { Injectable } from '@angular/core';
-import { NativeDateAdapter } from '@angular/material/core';
+import { MatDateFormats, NativeDateAdapter } from '@angular/material/core';
+
+/**
+ * Formatos que acompañan al adaptador. Viven junto a el a proposito: separarlos permitiria proveer
+ * uno sin el otro, que es justamente como se rompen los datepickers.
+ */
+export const ECUADOR_DATE_FORMATS: MatDateFormats = {
+  parse: {
+    dateInput: 'DD/MM/YYYY',
+  },
+  display: {
+    dateInput: 'DD/MM/YYYY',
+    monthYearLabel: { year: 'numeric', month: 'short' },
+    dateA11yLabel: { year: 'numeric', month: 'long', day: 'numeric' },
+    monthYearA11yLabel: { year: 'numeric', month: 'long' },
+  },
+};
 
 /**
  * Adaptador de fechas de WinSuit (dd/MM/yyyy, Ecuador).

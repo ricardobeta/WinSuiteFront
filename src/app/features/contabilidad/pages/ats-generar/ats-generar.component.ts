@@ -11,7 +11,14 @@ import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 
 import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
-import { CODIGOS_SUSTENTO, FacturaCompra, MONTO_MINIMO_FORMA_PAGO, TIPOS_COMPROBANTE } from '../../models/compras.models';
+import {
+  autorizacionDocumentoModificadoValida,
+  CODIGOS_SUSTENTO,
+  FacturaCompra,
+  MONTO_MINIMO_FORMA_PAGO,
+  TIPOS_COMPROBANTE,
+  TIPO_COMPROBANTE_NOTA_CREDITO
+} from '../../models/compras.models';
 import { AtsResult, AtsService } from '../../services/ats.service';
 import { FacturasCompraService } from '../../services/facturas-compra.service';
 
@@ -46,6 +53,15 @@ interface ResumenSustentoRow {
   registros: number;
   base: number;
   iva: number;
+}
+
+/**
+ * El detalle XML conserva los importes positivos y usa el tipo 04 para identificar
+ * la nota de credito. Este signo se aplica exclusivamente a los totales visuales.
+ */
+function signoTotalAts(factura: FacturaCompra): number {
+  const tipo = String(factura.tipoComprobante ?? '').trim();
+  return tipo === '04' || tipo === '4' ? -1 : 1;
 }
 
 @Component({
@@ -146,13 +162,22 @@ interface ResumenSustentoRow {
               <div>
                 <span class="check-label">{{ item.label }}</span>
                 @if (item.detalle) { <span class="check-detail">{{ item.detalle }}</span> }
+                @if (item.facturaIds?.length) {
+                  <span class="check-links">
+                    @for (id of item.facturaIds; track id) {
+                      <a [routerLink]="['/workspace/contabilidad/compras', id, 'editar']">
+                        Corregir {{ etiquetaFactura(id) }}
+                      </a>
+                    }
+                  </span>
+                }
               </div>
             </li>
           }
         </ul>
 
         <div class="actions">
-          <button mat-flat-button color="primary" (click)="generar()" [disabled]="generando() || !periodoBuscado() || facturasPeriodo().length === 0">
+          <button mat-flat-button color="primary" (click)="generar()" [disabled]="generando() || !periodoBuscado() || facturasPeriodo().length === 0 || notasCreditoSinAutorizacion().length > 0">
             <mat-icon>build</mat-icon>
             {{ generando() ? 'Generando…' : 'Generar XML ATS' }}
           </button>
@@ -317,6 +342,8 @@ interface ResumenSustentoRow {
     .checklist li.warn mat-icon { color: #b7791f; }
     .check-label { display: block; font-weight: 500; }
     .check-detail { display: block; font-size: .82rem; color: var(--muted-foreground); }
+    .check-links { display: flex; flex-wrap: wrap; gap: .35rem .75rem; margin-top: .35rem; }
+    .check-links a { color: var(--primary); font-size: .82rem; font-weight: 650; text-decoration: underline; }
     .actions { display: flex; gap: .75rem; flex-wrap: wrap; }
     .result-ok { display: flex; align-items: center; gap: .5rem; color: var(--success, #1a7f52); margin: 0; }
 
@@ -428,16 +455,39 @@ export class AtsGenerarComponent {
     }
   }
 
-  protected readonly totalBase = computed(() => this.facturasPeriodo().reduce((t, f) => t + Number(f.baseImpGrav ?? 0) + Number(f.baseImponible ?? 0), 0));
-  protected readonly totalIva = computed(() => this.facturasPeriodo().reduce((t, f) => t + Number(f.montoIva ?? 0), 0));
-  protected readonly totalRet = computed(() => this.facturasPeriodo().reduce((t, f) => t + Number(f.totalRetencion ?? 0), 0));
+  protected readonly totalBase = computed(() => this.facturasPeriodo().reduce((t, f) => {
+    const signo = signoTotalAts(f);
+    return t + signo * (Number(f.baseImpGrav ?? 0) + Number(f.baseImponible ?? 0));
+  }, 0));
+  protected readonly totalIva = computed(() => this.facturasPeriodo().reduce(
+    (t, f) => t + signoTotalAts(f) * Number(f.montoIva ?? 0),
+    0
+  ));
+  protected readonly totalRet = computed(() => this.facturasPeriodo().reduce(
+    (t, f) => t + signoTotalAts(f) * Number(f.totalRetencion ?? 0),
+    0
+  ));
+
+  protected readonly notasCreditoSinAutorizacion = computed(() => this.facturasPeriodo().filter((factura) =>
+    String(factura.tipoComprobante ?? '').padStart(2, '0') === TIPO_COMPROBANTE_NOTA_CREDITO
+      && !autorizacionDocumentoModificadoValida(factura.docModificado?.autorizacion)
+  ));
 
   protected readonly checklist = computed<ChecklistItem[]>(() => {
     const facturas = this.facturasPeriodo();
     const sinFormaPago = facturas.filter((f) => Number(f.importeTotal ?? 0) >= MONTO_MINIMO_FORMA_PAGO && (f.formasDePago?.length ?? 0) === 0);
     const sinAutorizacion = facturas.filter((f) => !(f.autorizacion || f.claveAcceso));
     const borradores = facturas.filter((f) => f.estado === 'BORRADOR');
+    const notasCreditoSinAutorizacion = this.notasCreditoSinAutorizacion();
     return [
+      {
+        ok: notasCreditoSinAutorizacion.length === 0,
+        label: 'Autorización del documento modificado en notas de crédito',
+        detalle: notasCreditoSinAutorizacion.length
+          ? `${notasCreditoSinAutorizacion.length} nota(s) de crédito requieren corrección antes de generar`
+          : undefined,
+        facturaIds: notasCreditoSinAutorizacion.flatMap((factura) => factura.id ? [factura.id] : [])
+      },
       {
         ok: sinFormaPago.length === 0,
         label: 'Formas de pago en compras ≥ $500',
@@ -471,16 +521,17 @@ export class AtsGenerarComponent {
     const grupos = new Map<string, ResumenCompraRow>();
     for (const f of this.facturasPeriodo()) {
       const codigo = f.tipoComprobante || '01';
+      const signo = signoTotalAts(f);
       const row = grupos.get(codigo) ?? {
         codigo,
         etiqueta: this.etiquetaComprobante.get(codigo) ?? `Comprobante ${codigo}`,
         registros: 0, base0: 0, baseGravada: 0, noObjeto: 0, iva: 0
       };
       row.registros += 1;
-      row.base0 += Number(f.baseImponible ?? 0);
-      row.baseGravada += Number(f.baseImpGrav ?? 0);
-      row.noObjeto += Number(f.baseNoGraIva ?? 0) + Number(f.baseImpExe ?? 0);
-      row.iva += Number(f.montoIva ?? 0);
+      row.base0 += signo * Number(f.baseImponible ?? 0);
+      row.baseGravada += signo * Number(f.baseImpGrav ?? 0);
+      row.noObjeto += signo * (Number(f.baseNoGraIva ?? 0) + Number(f.baseImpExe ?? 0));
+      row.iva += signo * Number(f.montoIva ?? 0);
       grupos.set(codigo, row);
     }
     return [...grupos.values()].sort((a, b) => a.codigo.localeCompare(b.codigo));
@@ -501,12 +552,13 @@ export class AtsGenerarComponent {
   protected readonly resumenRetIva = computed<ResumenRetIvaRow[]>(() => {
     const buckets = new Map<number, number>([[10, 0], [20, 0], [30, 0], [50, 0], [70, 0], [100, 0]]);
     for (const f of this.facturasPeriodo()) {
+      const signo = signoTotalAts(f);
       for (const r of (f.retencionesIva ?? [])) {
         let p = Number(r.porcentajeIva ?? 0);
         if (p > 0 && p <= 1) { p *= 100; }
         p = Math.round(p);
         const key = buckets.has(p) ? p : 70;
-        buckets.set(key, (buckets.get(key) ?? 0) + Number(r.valRetIva ?? 0));
+        buckets.set(key, (buckets.get(key) ?? 0) + signo * Number(r.valRetIva ?? 0));
       }
     }
     return [...buckets.entries()].map(([porcentaje, valor]) => ({ etiqueta: `Retención IVA ${porcentaje}%`, valor }));
@@ -519,20 +571,31 @@ export class AtsGenerarComponent {
     const grupos = new Map<string, ResumenSustentoRow>();
     for (const f of this.facturasPeriodo()) {
       const codigo = f.codSustento || '01';
+      const signo = signoTotalAts(f);
       const row = grupos.get(codigo) ?? {
         codigo,
         etiqueta: this.etiquetaSustento.get(codigo) ?? `Sustento ${codigo}`,
         registros: 0, base: 0, iva: 0
       };
       row.registros += 1;
-      row.base += Number(f.baseImpGrav ?? 0) + Number(f.baseImponible ?? 0) + Number(f.baseNoGraIva ?? 0) + Number(f.baseImpExe ?? 0);
-      row.iva += Number(f.montoIva ?? 0);
+      row.base += signo * (Number(f.baseImpGrav ?? 0) + Number(f.baseImponible ?? 0) + Number(f.baseNoGraIva ?? 0) + Number(f.baseImpExe ?? 0));
+      row.iva += signo * Number(f.montoIva ?? 0);
       grupos.set(codigo, row);
     }
     return [...grupos.values()].sort((a, b) => a.codigo.localeCompare(b.codigo));
   });
 
   protected readonly nombreMes = computed(() => this.meses.find((m) => m.valor === this.mesSignal())?.etiqueta ?? '');
+
+  protected etiquetaFactura(id: string): string {
+    const factura = this.facturasPeriodo().find((item) => item.id === id);
+    if (!factura) {
+      return id;
+    }
+    return factura.numero
+      || [factura.establecimiento, factura.puntoEmision, factura.secuencial].filter(Boolean).join('-')
+      || id;
+  }
 
   constructor() {
     this.anio.valueChanges.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((v) => { this.anioSignal.set(v); this.invalidarBusqueda(); });
@@ -542,6 +605,10 @@ export class AtsGenerarComponent {
   protected generar(): void {
     if (this.periodoBuscado() !== this.clavePeriodo()) {
       this.toast('Busca las facturas del periodo antes de generar el ATS.', 'error');
+      return;
+    }
+    if (this.notasCreditoSinAutorizacion().length > 0) {
+      this.toast('Corrige la autorización del documento modificado en las notas de crédito señaladas.', 'error');
       return;
     }
     this.generando.set(true);

@@ -5,7 +5,10 @@ import { AuthService } from '../../../core/services/auth.service';
 import {
   AnticipoNominaDetalle,
   anticipoAfectaNomina,
-  anticipoEsOperativo
+  anticipoEsOperativo,
+  bloqueoConfirmacionAjeno,
+  BLOQUEO_CONFIRMACION_MS,
+  uidDelTokenConfirmacion
 } from '../models/anticipos-nomina.models';
 import { ConfiguracionNominaContable, RolPagoDetalle, RolPagoLinea } from '../models/nomina.models';
 import { AnticiposNominaService } from './anticipos-nomina.service';
@@ -283,5 +286,47 @@ describe('anticipos · ciclo de borrador', () => {
     expect(anticipoEsOperativo('REGISTRADO')).toBe(true);
     expect(anticipoEsOperativo('DESCONTADO')).toBe(true);
     expect(anticipoEsOperativo('ANULADO')).toBe(false);
+  });
+});
+
+describe('anticipos · bloqueo de confirmacion', () => {
+  const ahora = 1_700_000_000_000;
+  const tokenDe = (uid: string) => `${uid}_${ahora}_k3x9`;
+
+  it('un anticipo sin bloqueo no obliga a esperar a nadie', () => {
+    expect(bloqueoConfirmacionAjeno({ confirmacionToken: null, confirmacionEn: null }, 'uid-1', ahora)).toBeNull();
+  });
+
+  it('el bloqueo vigente de otro usuario si obliga a esperar', () => {
+    const bloqueo = bloqueoConfirmacionAjeno(
+      { confirmacionToken: tokenDe('uid-2'), confirmacionEn: ahora - 60_000 },
+      'uid-1',
+      ahora
+    );
+    expect(bloqueo).toEqual({ desdeEn: ahora - 60_000 });
+  });
+
+  it('el propio bloqueo colgado se retoma en lugar de esperar cinco minutos', () => {
+    const bloqueo = bloqueoConfirmacionAjeno(
+      { confirmacionToken: tokenDe('uid-1'), confirmacionEn: ahora - 60_000 },
+      'uid-1',
+      ahora
+    );
+    expect(bloqueo).toBeNull();
+  });
+
+  it('un bloqueo ajeno caducado deja de bloquear', () => {
+    const bloqueo = bloqueoConfirmacionAjeno(
+      { confirmacionToken: tokenDe('uid-2'), confirmacionEn: ahora - BLOQUEO_CONFIRMACION_MS },
+      'uid-1',
+      ahora
+    );
+    expect(bloqueo).toBeNull();
+  });
+
+  it('el uid se recupera del token aunque el propio uid tenga guiones bajos', () => {
+    expect(uidDelTokenConfirmacion('a_b_1700000000000_k3x9')).toBe('a_b');
+    expect(uidDelTokenConfirmacion(null)).toBe('');
+    expect(uidDelTokenConfirmacion('sinformato')).toBe('');
   });
 });
