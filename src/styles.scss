@@ -1,6 +1,7 @@
 @use '@angular/material' as mat;
 @use 'styles/_tokens';
 @use 'styles/_material-mapping';
+@use 'styles/_flow-builder-global';
 @use 'app/features/auth/styles/auth-page';
 @use 'driver.js/dist/driver.css';
 @use 'styles/_driver-theme';

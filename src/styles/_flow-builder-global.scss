@@ -1,0 +1,18 @@
+@use 'sass:meta';
+
+app-flujos-builder {
+  display: block;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+}
+
+.av-flow-editor {
+  display: block;
+  min-width: 0;
+  width: 100%;
+  max-width: 100%;
+  overflow: hidden;
+
+  @include meta.load-css('../app/features/asistente-ventas/pages/flujos-builder/flujos-builder.component');
+}

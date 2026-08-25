@@ -113,8 +113,10 @@ export class AsistenteVentasApiService {
     return this.http.post<ConnectionCheck>(`${this.baseUrl}/instances/${instanceId}/check`, {});
   }
 
-  listTemplates(): Observable<WhatsAppTemplate[]> {
-    return this.http.get<WhatsAppTemplate[]>(`${this.baseUrl}/templates`);
+  listTemplates(includeArchived = false): Observable<WhatsAppTemplate[]> {
+    return this.http.get<WhatsAppTemplate[]>(`${this.baseUrl}/templates`, {
+      params: { includeArchived }
+    });
   }
 
   saveTemplate(payload: Partial<WhatsAppTemplate>): Observable<WhatsAppTemplate> {
@@ -125,8 +127,14 @@ export class AsistenteVentasApiService {
     return this.http.post<WhatsAppTemplate>(`${this.baseUrl}/templates/${templateId}/submit`, {});
   }
 
-  listFlows(): Observable<FlowDefinition[]> {
-    return this.http.get<FlowDefinition[]>(`${this.baseUrl}/flows`);
+  setTemplateArchived(templateId: string, archived: boolean): Observable<WhatsAppTemplate> {
+    return this.http.put<WhatsAppTemplate>(`${this.baseUrl}/templates/${templateId}/archive`, { archived });
+  }
+
+  listFlows(includeArchived = false): Observable<FlowDefinition[]> {
+    return this.http.get<FlowDefinition[]>(`${this.baseUrl}/flows`, {
+      params: { includeArchived }
+    });
   }
 
   saveFlow(payload: Partial<FlowDefinition>): Observable<FlowDefinition> {
@@ -137,16 +145,28 @@ export class AsistenteVentasApiService {
     return this.http.post<FlowDefinition>(`${this.baseUrl}/flows/${flowId}/publish`, {});
   }
 
-  listFunnels(): Observable<FunnelDefinition[]> {
-    return this.http.get<FunnelDefinition[]>(`${this.baseUrl}/funnels`);
+  setFlowArchived(flowId: string, archived: boolean): Observable<FlowDefinition> {
+    return this.http.put<FlowDefinition>(`${this.baseUrl}/flows/${flowId}/archive`, { archived });
+  }
+
+  listFunnels(includeArchived = false): Observable<FunnelDefinition[]> {
+    return this.http.get<FunnelDefinition[]>(`${this.baseUrl}/funnels`, {
+      params: { includeArchived }
+    });
   }
 
   saveFunnel(payload: Partial<FunnelDefinition>): Observable<FunnelDefinition> {
     return this.http.post<FunnelDefinition>(`${this.baseUrl}/funnels`, payload);
   }
 
-  getFunnelMetrics(flowId: string): Observable<FunnelMetrics> {
-    return this.http.get<FunnelMetrics>(`${this.baseUrl}/funnels/${flowId}/metrics`);
+  setFunnelArchived(funnelId: string, archived: boolean): Observable<FunnelDefinition> {
+    return this.http.put<FunnelDefinition>(`${this.baseUrl}/funnels/${funnelId}/archive`, { archived });
+  }
+
+  getFunnelMetrics(flowId: string, funnelId?: string): Observable<FunnelMetrics> {
+    return this.http.get<FunnelMetrics>(`${this.baseUrl}/funnels/${flowId}/metrics`, {
+      params: funnelId ? { funnelId } : {}
+    });
   }
 
   listMessages(conversationId: string): Observable<ConversationMessage[]> {
@@ -169,8 +189,10 @@ export class AsistenteVentasApiService {
     return this.http.put<AiConfigView>(`${this.aiUrl}/config`, payload);
   }
 
-  listKnowledge(): Observable<KnowledgeItem[]> {
-    return this.http.get<KnowledgeItem[]>(`${this.aiUrl}/knowledge`);
+  listKnowledge(includeArchived = false): Observable<KnowledgeItem[]> {
+    return this.http.get<KnowledgeItem[]>(`${this.aiUrl}/knowledge`, {
+      params: { includeArchived }
+    });
   }
 
   indexKnowledge(payload: { source: string; content: string }): Observable<{ chunks: number }> {
@@ -183,6 +205,13 @@ export class AsistenteVentasApiService {
 
   clearKnowledge(): Observable<void> {
     return this.http.delete<void>(`${this.aiUrl}/knowledge`);
+  }
+
+  setKnowledgeSourceArchived(source: string, archived: boolean): Observable<{ chunks: number; archived: boolean }> {
+    return this.http.put<{ chunks: number; archived: boolean }>(`${this.aiUrl}/knowledge/sources/archive`, {
+      source,
+      archived
+    });
   }
 
   getSourceTypes(): Observable<SourceTypeDto[]> {

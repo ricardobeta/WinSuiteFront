@@ -1,57 +1,43 @@
 <section class="funnels">
-  <aside class="panel surface-card config">
-    <div><p class="eyebrow">Embudo</p><h2>Etapas del flujo</h2></div>
-
-    <mat-form-field appearance="outline">
-      <mat-label>Flujo</mat-label>
-      <mat-select [(ngModel)]="flowId" (ngModelChange)="onFlowChange()">
-        @for (flow of flows(); track flow.id) { <mat-option [value]="flow.id">{{ flow.name }} · {{ flow.status }}</mat-option> }
-      </mat-select>
-    </mat-form-field>
-
-    @if (!flows().length) { <p class="muted">Crea y publica un flujo primero.</p> }
-
-    @if (flowId) {
-      <mat-form-field appearance="outline">
-        <mat-label>Nombre del embudo</mat-label>
-        <input matInput [(ngModel)]="funnelName" />
-      </mat-form-field>
-
-      <div class="stages">
-        @for (stage of stages(); track stage.id; let i = $index) {
-          <div class="stage">
-            <div class="stage-head">
-              <mat-form-field appearance="outline"><mat-label>Etapa {{ i + 1 }}</mat-label><input matInput [(ngModel)]="stage.name" /></mat-form-field>
-              <button mat-icon-button type="button" (click)="removeStage(i)"><mat-icon>delete</mat-icon></button>
-            </div>
-            <mat-form-field appearance="outline">
-              <mat-label>Nodos de esta etapa</mat-label>
-              <mat-select [(ngModel)]="stage.nodeIds" multiple>
-                @for (node of flowNodes(); track node.id) { <mat-option [value]="node.id">{{ node.label }}</mat-option> }
-              </mat-select>
-            </mat-form-field>
-          </div>
-        }
-        <button mat-stroked-button type="button" (click)="addStage()"><mat-icon>add</mat-icon> Agregar etapa</button>
-      </div>
-
-      <div class="actions">
-        <button mat-raised-button color="primary" type="button" [disabled]="saving()" (click)="saveFunnel()"><mat-icon>save</mat-icon> Guardar embudo</button>
-      </div>
-      @if (message()) { <p class="msg">{{ message() }}</p> }
-    }
-  </aside>
+  <header class="funnel-toolbar surface-card">
+    <div><h2>Rendimiento del funnel</h2><p>Visualiza dónde avanzan y abandonan tus conversaciones.</p></div>
+    <div class="toolbar-actions">
+      <mat-form-field appearance="outline"><mat-label>Flujo</mat-label><mat-select [(ngModel)]="flowId" (ngModelChange)="onFlowChange()">@for (flow of flows(); track flow.id) { <mat-option [value]="flow.id">{{ flow.name }} · {{ flow.status }}</mat-option> }</mat-select></mat-form-field>
+      <button mat-stroked-button type="button" (click)="showArchived.set(!showArchived()); onFlowChange()"><mat-icon>{{ showArchived() ? 'inventory_2' : 'archive' }}</mat-icon>{{ showArchived() ? 'Ver activos' : 'Archivados' }}</button>
+      <button mat-raised-button color="primary" type="button" [disabled]="!flowId" (click)="configOpen.set(true)"><mat-icon>tune</mat-icon>Configurar</button>
+    </div>
+  </header>
 
   <main class="panel surface-card dashboard">
-    <div><p class="eyebrow">Conversión</p><h2>Rendimiento del embudo</h2></div>
-    <div echarts [options]="chartOptions()" class="chart"></div>
-
-    <div class="metrics-table">
-      <div class="row head"><span>Etapa</span><span>Alcanzaron</span><span>Conversión</span></div>
-      @for (m of metrics(); track m.stageId) {
-        <div class="row"><span>{{ m.name }}</span><span>{{ m.reached }}</span><span>{{ m.conversion }}%</span></div>
-      }
-      @if (!metrics().length) { <p class="muted pad">Aún no hay datos. Se llenarán cuando lleguen conversaciones al flujo publicado.</p> }
-    </div>
+    @if (!flows().length) {
+      <div class="empty-state"><mat-icon>schema</mat-icon><h3>Primero publica un flujo</h3><p>Los funnels se construyen a partir de los nodos de un flujo activo.</p></div>
+    } @else {
+      <div class="dashboard-heading"><div><h2>{{ funnelName || 'Funnel sin configurar' }}</h2><p>{{ metrics().length ? 'Conversaciones únicas por etapa' : 'Aún no hay conversaciones registradas' }}</p></div>@if (funnelId) { <span class="status-pill">{{ showArchived() ? 'Archivado' : 'Activo' }}</span> }</div>
+      <div echarts [options]="chartOptions()" class="chart"></div>
+      <div class="metrics-table" role="table">
+        <div class="row head" role="row"><span>Etapa</span><span>Alcanzaron</span><span>Conversión</span></div>
+        @for (m of metrics(); track m.stageId) { <div class="row" role="row"><span>{{ m.name }}</span><strong>{{ m.reached }}</strong><span>{{ m.conversion }}%</span></div> }
+        @if (!metrics().length) { <div class="table-empty"><mat-icon>insights</mat-icon><span>Las métricas aparecerán cuando las conversaciones recorran este flujo.</span></div> }
+      </div>
+    }
   </main>
+
+  @if (configOpen()) {
+    <div class="drawer-backdrop" (click)="configOpen.set(false)"></div>
+    <aside class="config-drawer">
+      <div class="drawer-head"><div><h2>Configurar funnel</h2><p>Ordena las etapas y vincula los nodos que representan cada avance.</p></div><button mat-icon-button type="button" (click)="configOpen.set(false)"><mat-icon>close</mat-icon></button></div>
+      <mat-form-field appearance="outline"><mat-label>Nombre del funnel</mat-label><input matInput [(ngModel)]="funnelName" /></mat-form-field>
+      <div class="stages" cdkDropList (cdkDropListDropped)="reorderStages($event)">
+        @for (stage of stages(); track stage.id; let i = $index) {
+          <article class="stage" cdkDrag>
+            <div class="stage-head"><button mat-icon-button type="button" cdkDragHandle matTooltip="Reordenar"><mat-icon>drag_indicator</mat-icon></button><span>{{ i + 1 }}</span><mat-form-field appearance="outline"><mat-label>Etapa</mat-label><input matInput [(ngModel)]="stage.name" /></mat-form-field><button mat-icon-button type="button" (click)="removeStage(i)" aria-label="Eliminar etapa"><mat-icon>delete</mat-icon></button></div>
+            <mat-form-field appearance="outline"><mat-label>Nodos de esta etapa</mat-label><mat-select [(ngModel)]="stage.nodeIds" multiple>@for (node of flowNodes(); track node.id) { <mat-option [value]="node.id">{{ node.label }}</mat-option> }</mat-select></mat-form-field>
+          </article>
+        }
+      </div>
+      <button mat-stroked-button type="button" (click)="addStage()"><mat-icon>add</mat-icon>Agregar etapa</button>
+      <div class="drawer-actions"><button mat-stroked-button type="button" [disabled]="!funnelId" (click)="duplicateFunnel()"><mat-icon>content_copy</mat-icon>Duplicar</button>@if (showArchived() && funnelId) { <button mat-stroked-button type="button" (click)="setArchived(false)"><mat-icon>unarchive</mat-icon>Restaurar</button> } @else if (funnelId) { <button mat-button color="warn" type="button" (click)="setArchived(true)"><mat-icon>archive</mat-icon>Archivar</button> }<button mat-raised-button color="primary" type="button" [disabled]="saving()" (click)="saveFunnel()"><mat-icon>save</mat-icon>Guardar</button></div>
+      @if (message()) { <p class="msg">{{ message() }}</p> }
+    </aside>
+  }
 </section>

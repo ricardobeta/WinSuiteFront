@@ -58,6 +58,7 @@ export interface WhatsAppTemplate {
   example?: string;
   createdAt: number;
   updatedAt: number;
+  archivedAt?: number | null;
 }
 
 export interface FlowDefinition {
@@ -70,6 +71,7 @@ export interface FlowDefinition {
   graphJson: string;
   createdAt: number;
   updatedAt: number;
+  archivedAt?: number | null;
 }
 
 export interface FunnelDefinition {
@@ -81,6 +83,7 @@ export interface FunnelDefinition {
   stagesJson: string;
   createdAt: number;
   updatedAt: number;
+  archivedAt?: number | null;
 }
 
 export interface FunnelStage {
@@ -139,6 +142,7 @@ export interface KnowledgeItem {
   id: string;
   source: string;
   text: string;
+  archivedAt?: number | null;
 }
 
 /** Tipo de fuente personalizado de la base de conocimiento (persistido por tenant en Firebase). */

@@ -1,6 +1,8 @@
-import { Component, computed, inject } from '@angular/core';
+import { Component, DestroyRef, computed, inject, signal } from '@angular/core';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { MatIconModule } from '@angular/material/icon';
-import { RouterOutlet } from '@angular/router';
+import { NavigationEnd, Router, RouterOutlet } from '@angular/router';
+import { filter } from 'rxjs';
 
 import { ModuleNavItem, ModuleShellComponent } from '../../../../shared/components/module-shell/module-shell.component';
 import { AsistenteVentasApiService } from '../../services/asistente-ventas-api.service';
@@ -17,8 +19,11 @@ import { AsistenteVentasApiService } from '../../services/asistente-ventas-api.s
       icon="forum"
       navigationLabel="Navegación del asistente de ventas"
       [items]="navigationItems"
+      [compact]="true"
+      [compactOnMobile]="true"
+      [immersive]="isFlowRoute()"
     >
-      @if (enEspera()) {
+      @if (enEspera() && !isFlowRoute()) {
         <section class="aviso-meta" role="status">
           <mat-icon>schedule</mat-icon>
           <div>
@@ -52,6 +57,9 @@ import { AsistenteVentasApiService } from '../../services/asistente-ventas-api.s
 })
 export class AsistenteVentasShellComponent {
   private readonly api = inject(AsistenteVentasApiService);
+  private readonly router = inject(Router);
+  private readonly destroyRef = inject(DestroyRef);
+  protected readonly isFlowRoute = signal(this.router.url.includes('/asistente-ventas/flujos'));
 
   /** Sin Embedded Signup aprobado y sin permiso de carga manual, el modulo no puede conectar nada. */
   protected readonly enEspera = computed(() => {
@@ -61,6 +69,9 @@ export class AsistenteVentasShellComponent {
 
   constructor() {
     void this.api.ensureCapabilities();
+    this.router.events
+      .pipe(filter((event) => event instanceof NavigationEnd), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => this.isFlowRoute.set(this.router.url.includes('/asistente-ventas/flujos')));
   }
 
   protected readonly navigationItems: readonly ModuleNavItem[] = [

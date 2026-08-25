@@ -24,6 +24,7 @@ interface TemplateDraft {
   buttons: TemplateButton[];
   examples: string[];
   status?: string;
+  archivedAt?: number | null;
 }
 
 @Component({
@@ -41,8 +42,20 @@ export class PlantillasComponent {
   protected readonly saving = signal(false);
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly successMessage = signal<string | null>(null);
+  protected readonly showArchived = signal(false);
+  protected readonly search = signal('');
+  protected readonly statusFilter = signal('ALL');
 
   protected readonly connectedInstances = computed(() => this.instances().filter((i) => i.status === 'CONNECTED'));
+  protected readonly filteredTemplates = computed(() => {
+    const query = this.search().trim().toLowerCase();
+    return this.templates().filter((template) => {
+      const archived = template.archivedAt != null;
+      return archived === this.showArchived()
+        && (this.statusFilter() === 'ALL' || template.status === this.statusFilter())
+        && (!query || `${template.name} ${template.category} ${template.language}`.toLowerCase().includes(query));
+    });
+  });
 
   protected draft = signal<TemplateDraft>(this.emptyDraft());
 
@@ -87,6 +100,7 @@ export class PlantillasComponent {
   }
 
   protected newTemplate(): void {
+    this.showArchived.set(false);
     const draft = this.emptyDraft();
     draft.instanceId = this.connectedInstances()[0]?.id ?? '';
     this.draft.set(draft);
@@ -112,7 +126,8 @@ export class PlantillasComponent {
       footerText: template.footerText || '',
       buttons,
       examples: (template.example || '').split('|').filter((_, i, arr) => arr.length > 0),
-      status: template.status
+      status: template.status,
+      archivedAt: template.archivedAt
     });
     this.clearMessages();
   }
@@ -139,6 +154,10 @@ export class PlantillasComponent {
 
   protected async save(): Promise<TemplateDraft | null> {
     const d = this.draft();
+    if (d.archivedAt) {
+      this.errorMessage.set('Restaura la plantilla antes de editarla.');
+      return null;
+    }
     if (!d.instanceId) {
       this.errorMessage.set('Selecciona una instancia conectada.');
       return null;
@@ -165,7 +184,7 @@ export class PlantillasComponent {
           example: d.examples.join('|')
         })
       );
-      this.draft.update((cur) => ({ ...cur, id: saved.id, status: saved.status }));
+      this.draft.update((cur) => ({ ...cur, id: saved.id, status: saved.status, archivedAt: saved.archivedAt }));
       await this.reload();
       this.successMessage.set('Plantilla guardada.');
       return this.draft();
@@ -179,6 +198,10 @@ export class PlantillasComponent {
   }
 
   protected async submit(): Promise<void> {
+    if (this.draft().archivedAt) {
+      this.errorMessage.set('Restaura la plantilla antes de enviarla a aprobación.');
+      return;
+    }
     const saved = this.draft().id ? this.draft() : await this.save();
     if (!saved?.id) return;
     this.saving.set(true);
@@ -196,7 +219,41 @@ export class PlantillasComponent {
     }
   }
 
+  protected async duplicate(): Promise<void> {
+    const d = this.draft();
+    if (!d.id) return;
+    const base = `${d.name}_copia`.replace(/_+/g, '_').slice(0, 60);
+    let name = base;
+    let suffix = 2;
+    while (this.templates().some((template) => template.name === name)) name = `${base}_${suffix++}`.slice(0, 60);
+    this.draft.set({ ...d, id: undefined, name, status: 'DRAFT', archivedAt: null });
+    await this.save();
+  }
+
+  protected async setArchived(archived: boolean): Promise<void> {
+    const id = this.draft().id;
+    if (!id) return;
+    if (archived && !window.confirm('¿Archivar esta plantilla? Seguirá existiendo en Meta y podrás restaurarla.')) return;
+    this.saving.set(true);
+    try {
+      const updated = await firstValueFrom(this.api.setTemplateArchived(id, archived));
+      await this.reload();
+      if (archived) this.newTemplate();
+      else this.edit(updated);
+      this.successMessage.set(archived ? 'Plantilla archivada.' : 'Plantilla restaurada.');
+    } catch (error) {
+      console.error(error);
+      this.errorMessage.set('No se pudo cambiar el estado de la plantilla.');
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
   protected openSend(): void {
+    if (this.draft().archivedAt) {
+      this.errorMessage.set('Restaura la plantilla antes de enviarla.');
+      return;
+    }
     this.sendPhone = '';
     this.sendVariables = new Array(this.variableCount()).fill('');
     this.sendOpen.set(true);
@@ -204,6 +261,10 @@ export class PlantillasComponent {
 
   protected async sendAsMessage(): Promise<void> {
     const d = this.draft();
+    if (d.archivedAt) {
+      this.errorMessage.set('Restaura la plantilla antes de enviarla.');
+      return;
+    }
     if (!this.sendPhone.trim() || !d.id) return;
     this.saving.set(true);
     try {
@@ -233,9 +294,24 @@ export class PlantillasComponent {
     return 'draft';
   }
 
+  protected setArchivedView(archived: boolean): void {
+    this.showArchived.set(archived);
+    const current = this.draft();
+    if (current.id && (current.archivedAt != null) === archived) return;
+    const first = this.templates().find((template) => (template.archivedAt != null) === archived);
+    if (first) {
+      this.edit(first);
+      return;
+    }
+    const draft = this.emptyDraft();
+    draft.instanceId = this.connectedInstances()[0]?.id ?? '';
+    draft.archivedAt = archived ? -1 : null;
+    this.draft.set(draft);
+  }
+
   private async load(): Promise<void> {
     const [templates, instances] = await Promise.all([
-      firstValueFrom(this.api.listTemplates()),
+      firstValueFrom(this.api.listTemplates(true)),
       firstValueFrom(this.api.listInstances())
     ]);
     this.templates.set(templates ?? []);
@@ -246,7 +322,7 @@ export class PlantillasComponent {
   }
 
   private async reload(): Promise<void> {
-    this.templates.set((await firstValueFrom(this.api.listTemplates())) ?? []);
+    this.templates.set((await firstValueFrom(this.api.listTemplates(true))) ?? []);
   }
 
   private clearMessages(): void {

@@ -65,7 +65,11 @@ export function calculateVisibleNavIndices(
   selector: 'app-module-shell',
   imports: [RouterLink, MatButtonModule, MatIconModule, MatMenuModule, TourTriggerButtonComponent],
   template: `
-    <section class="module-shell" [class.module-shell--compact-mobile]="compactOnMobile()">
+    <section
+      class="module-shell"
+      [class.module-shell--compact]="compact()"
+      [class.module-shell--compact-mobile]="compactOnMobile()"
+    >
       @if (!immersive()) {
       <header class="module-hero surface-card" [id]="tourId('header')">
         <div class="module-hero__copy">
@@ -208,6 +212,37 @@ export function calculateVisibleNavIndices(
       transform: rotate(3deg);
     }
     .module-hero__icon mat-icon { width: 34px; height: 34px; font-size: 34px; transform: rotate(-3deg); }
+    .module-shell--compact { gap: .7rem; }
+    .module-shell--compact .module-hero {
+      min-height: 78px;
+      padding: .85rem 1rem;
+      border-radius: var(--tc-radius-lg);
+    }
+    .module-shell--compact .module-hero h1 { font-size: clamp(1.35rem, 2vw, 1.65rem); }
+    .module-shell--compact .module-hero__eyebrow { display: none; }
+    .module-shell--compact .module-hero__description {
+      margin-top: .22rem;
+      max-width: 68ch;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: .84rem;
+    }
+    .module-shell--compact .module-hero__icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 15px;
+      transform: none;
+    }
+    .module-shell--compact .module-hero__icon mat-icon {
+      width: 25px;
+      height: 25px;
+      font-size: 25px;
+      transform: none;
+    }
+    .module-shell--compact .module-nav { padding: .3rem; }
+    .module-shell--compact .module-nav__link,
+    .module-shell--compact .module-nav__more { min-height: 44px; padding-block: .45rem; }
     .module-nav {
       position: relative;
       min-width: 0;
@@ -291,6 +326,8 @@ export class ModuleShellComponent implements AfterViewInit {
   readonly navigationLabel = input('Navegación del módulo');
   readonly tourEnabled = input(true);
   readonly compactOnMobile = input(false);
+  /** Variante operativa de baja altura; opt-in para no cambiar otros modulos. */
+  readonly compact = input(false);
   /** Oculta el hero y la navegación del módulo (modo inmersivo/pantalla completa). */
   readonly immersive = input(false);
 

@@ -1,403 +1,141 @@
-<section class="builder">
-  <!-- ============================ SIDEBAR ============================ -->
-  <aside class="panel sidebar surface-card">
-    <div class="field">
-      <mat-form-field appearance="outline">
-        <mat-label>Nombre del flujo</mat-label>
-        <input matInput class="title-input" [(ngModel)]="flowName" />
-      </mat-form-field>
-      <mat-form-field appearance="outline">
-        <mat-label>Número WhatsApp</mat-label>
-        <mat-select [(ngModel)]="instanceId">
-          <mat-option value="">Selecciona una instancia</mat-option>
-          @for (instance of connectedInstances(); track instance.id) {
-            <mat-option [value]="instance.id">{{ instance.displayName }} · {{ instance.displayPhoneNumber || instance.status }}</mat-option>
-          }
-        </mat-select>
-      </mat-form-field>
-    </div>
-
-    <div class="block">
-      <p class="eyebrow">Arrastra al lienzo</p>
-      <div class="palette">
-        @for (type of paletteTypes; track type) {
-          <div
-            class="palette-item"
-            fExternalItem
-            [fData]="type"
-            [style.--node-color]="catalog[type].color"
-            [matTooltip]="catalog[type].description"
-            matTooltipPosition="right"
-            (dblclick)="addNode(type)"
-          >
-            <mat-icon>{{ catalog[type].icon }}</mat-icon>
-            <span>{{ catalog[type].label }}</span>
-          </div>
-        }
-      </div>
-    </div>
-
-    <div class="block">
-      <p class="eyebrow">Plantillas</p>
-      <button mat-stroked-button type="button" [matMenuTriggerFor]="tplMenu" class="full">
-        <mat-icon>dashboard_customize</mat-icon> Empezar desde plantilla
-      </button>
-      <mat-menu #tplMenu="matMenu">
-        @for (tpl of templates; track tpl.id) {
-          <button mat-menu-item type="button" (click)="applyTemplate(tpl)">
-            <mat-icon>{{ tpl.icon }}</mat-icon>
-            <span>{{ tpl.name }}</span>
-          </button>
-        }
+<div class="av-flow-editor"><section #builderRoot class="builder" [class.is-fullscreen]="fullscreen()">
+  <header class="editor-toolbar">
+    <div class="editor-toolbar__identity">
+      <button mat-icon-button type="button" [matMenuTriggerFor]="moduleMenu" matTooltip="Ir a otra sección"><mat-icon>apps</mat-icon></button>
+      <mat-menu #moduleMenu="matMenu">
+        <a mat-menu-item routerLink="/workspace/asistente-ventas/instancias"><mat-icon>hub</mat-icon>Instancias</a>
+        <a mat-menu-item routerLink="/workspace/asistente-ventas/plantillas"><mat-icon>edit_note</mat-icon>Plantillas</a>
+        <a mat-menu-item routerLink="/workspace/asistente-ventas/conversaciones"><mat-icon>chat</mat-icon>Conversaciones</a>
+        <a mat-menu-item routerLink="/workspace/asistente-ventas/funnels"><mat-icon>filter_alt</mat-icon>Funnels</a>
+        <a mat-menu-item routerLink="/workspace/asistente-ventas/conocimiento"><mat-icon>auto_awesome</mat-icon>Conocimiento</a>
       </mat-menu>
+      <button class="flow-trigger" type="button" (click)="flowMenuOpen.set(!flowMenuOpen())" aria-label="Cambiar de flujo">
+        <span class="flow-trigger__mark"><mat-icon>schema</mat-icon></span>
+        <span class="flow-trigger__copy"><small>Constructor de flujos</small><strong>{{ selectedFlow()?.name || 'Selecciona un flujo' }}</strong></span>
+        <mat-icon>unfold_more</mat-icon>
+      </button>
+      @if (selectedFlow()) {
+        <input class="flow-name" [(ngModel)]="flowName" (ngModelChange)="onFlowMetaChanged()" aria-label="Nombre del flujo" [disabled]="!!selectedFlow()?.archivedAt" />
+      }
     </div>
+    <div class="editor-toolbar__actions">
+      @if (selectedFlow()) {
+        <div class="save-state" [class.error]="saveStatus() === 'error'" aria-live="polite"><span class="save-dot"></span>@switch (saveStatus()) { @case ('pending') { Cambios pendientes } @case ('saving') { Guardando… } @case ('saved') { Guardado } @case ('error') { Error al guardar } @default { Sin cambios } }</div>
+      }
+      <button mat-stroked-button type="button" class="add-node-button" [disabled]="!selectedFlow() || !!selectedFlow()?.archivedAt" (click)="paletteOpen.set(!paletteOpen())"><mat-icon>add</mat-icon><span>Agregar nodo</span></button>
+      <button mat-icon-button type="button" matTooltip="Probar flujo" (click)="openSimulator()" [disabled]="!selectedFlow()"><mat-icon>play_circle</mat-icon></button>
+      <button mat-icon-button type="button" [matTooltip]="fullscreen() ? 'Salir de pantalla completa' : 'Pantalla completa'" (click)="toggleFullscreen()"><mat-icon>{{ fullscreen() ? 'fullscreen_exit' : 'fullscreen' }}</mat-icon></button>
+      @if (selectedFlow()?.archivedAt) {
+        <button mat-raised-button color="primary" type="button" (click)="setCurrentFlowArchived(false)"><mat-icon>unarchive</mat-icon>Restaurar</button>
+      } @else {
+        <button mat-raised-button color="primary" type="button" (click)="publish()" [disabled]="saving() || !selectedFlow()"><mat-icon>publish</mat-icon><span>Publicar</span></button>
+      }
+    </div>
+  </header>
 
-    @if (flows().length) {
-      <div class="block flows">
-        <p class="eyebrow">Mis flujos</p>
-        <div class="flows-list">
-          @for (flow of flows(); track flow.id) {
-            <button
-              mat-button
-              type="button"
-              class="flow-row"
-              [class.active]="selectedFlowId() === flow.id"
-              (click)="loadFlow(flow)"
-            >
-              <strong>{{ flow.name }}</strong>
-              <span>{{ flow.status }} · {{ flow.version }}</span>
-            </button>
-          }
+  <div class="canvas-shell">
+    @if (flowMenuOpen()) {
+      <aside class="floating-panel flow-switcher" aria-label="Flujos disponibles">
+        <div class="floating-panel__head"><div><strong>Flujos</strong><small>{{ flows().length }} en total</small></div><button mat-icon-button type="button" (click)="flowMenuOpen.set(false)" aria-label="Cerrar"><mat-icon>close</mat-icon></button></div>
+        <button mat-raised-button color="primary" type="button" class="panel-primary" (click)="openNewFlow(); flowMenuOpen.set(false)"><mat-icon>add</mat-icon>Nuevo flujo</button>
+        <label class="panel-search"><mat-icon>search</mat-icon><input [(ngModel)]="flowSearch" placeholder="Buscar por nombre o estado" /></label>
+        <div class="segmented" role="group" aria-label="Estado del listado"><button type="button" [class.active]="!showArchived()" (click)="showArchived.set(false)">Activos</button><button type="button" [class.active]="showArchived()" (click)="showArchived.set(true)">Archivados</button></div>
+        <div class="flow-list">
+          @for (flow of visibleFlows(); track flow.id) {
+            <button type="button" class="flow-row" [class.active]="selectedFlowId() === flow.id" (click)="loadFlow(flow); flowMenuOpen.set(false)"><span><strong>{{ flow.name }}</strong><small>{{ flow.status }} · {{ flow.version }}</small></span><mat-icon>{{ flow.archivedAt ? 'archive' : 'chevron_right' }}</mat-icon></button>
+          } @empty { <div class="panel-empty"><mat-icon>search_off</mat-icon><span>No encontramos flujos en esta vista.</span></div> }
         </div>
-      </div>
+        @if (selectedFlow()) {
+          <div class="flow-actions"><button mat-button type="button" (click)="duplicateCurrentFlow()"><mat-icon>content_copy</mat-icon>Duplicar</button>@if (!selectedFlow()?.archivedAt) { <button mat-button color="warn" type="button" (click)="setCurrentFlowArchived(true)"><mat-icon>archive</mat-icon>Archivar</button> }</div>
+        }
+      </aside>
     }
-  </aside>
 
-  <!-- ============================ STAGE ============================ -->
-  <main class="stage surface-card">
-    <div class="toolbar">
-      <div class="tools">
-        <button mat-icon-button type="button" matTooltip="Deshacer (Ctrl+Z)" [disabled]="!canUndo()" (click)="undo()"><mat-icon>undo</mat-icon></button>
-        <button mat-icon-button type="button" matTooltip="Rehacer (Ctrl+Y)" [disabled]="!canRedo()" (click)="redo()"><mat-icon>redo</mat-icon></button>
-        <span class="sep"></span>
-        <button mat-icon-button type="button" matTooltip="Acercar" (click)="zoomIn()"><mat-icon>zoom_in</mat-icon></button>
-        <button mat-icon-button type="button" matTooltip="Alejar" (click)="zoomOut()"><mat-icon>zoom_out</mat-icon></button>
-        <button mat-icon-button type="button" matTooltip="Ajustar a pantalla" (click)="fit()"><mat-icon>fit_screen</mat-icon></button>
-        <button mat-icon-button type="button" matTooltip="Auto-organizar" (click)="autoLayout()"><mat-icon>account_tree</mat-icon></button>
-        <span class="sep"></span>
-        <button mat-icon-button type="button" matTooltip="Probar flujo" (click)="openSimulator()"><mat-icon>play_circle</mat-icon></button>
-      </div>
-
-      <div class="status">
-        @if (errorCount() > 0) {
-          <button mat-button type="button" class="chip error" (click)="showProblems.set(!showProblems())">
-            <mat-icon>error</mat-icon> {{ errorCount() }}
-          </button>
-        }
-        @if (warningCount() > 0) {
-          <button mat-button type="button" class="chip warn" (click)="showProblems.set(!showProblems())">
-            <mat-icon>warning</mat-icon> {{ warningCount() }}
-          </button>
-        }
-        @if (errorCount() === 0 && warningCount() === 0) {
-          <span class="chip ok"><mat-icon>check_circle</mat-icon> Válido</span>
-        }
-        <button mat-stroked-button type="button" (click)="saveDraft()" [disabled]="saving()"><mat-icon>save</mat-icon> Guardar</button>
-        <button mat-raised-button color="primary" type="button" (click)="publish()" [disabled]="saving()"><mat-icon>publish</mat-icon> Publicar</button>
-      </div>
-    </div>
-
-    <div class="canvas-wrap">
-      <f-flow
-        fDraggable
-        (fCreateNode)="onCreateNode($event)"
-        (fCreateConnection)="onCreateConnection($event)"
-        (fReassignConnection)="onReassignConnection($event)"
-      >
-        <f-canvas fZoom>
-          <f-background>
-            <f-circle-pattern />
-          </f-background>
-
-          @for (node of graph().nodes; track node.id) {
-            <div
-              fNode
-              fDragHandle
-              [fNodeId]="node.id"
-              [fNodePosition]="nodePos(node)"
-              (fNodePositionChange)="onNodeMoved(node, $event)"
-              class="fnode"
-              [class.selected]="selectedNodeId() === node.id"
-              [class.has-error]="nodeHasError(node.id)"
-              [class.has-warning]="!nodeHasError(node.id) && nodeHasWarning(node.id)"
-              [style.--node-color]="meta(node).color"
-              (click)="select(node.id)"
-            >
-              @if (node.type !== 'trigger') {
-                <div class="conn in" fNodeInput [fInputId]="inConnId(node.id)" [fInputConnectableSide]="connectorSide.LEFT"></div>
-              }
-
-              <div class="fnode-head">
-                <mat-icon>{{ meta(node).icon }}</mat-icon>
-                <div class="fnode-titles">
-                  <span class="type">{{ meta(node).label }}</span>
-                  <strong>{{ node.label }}</strong>
-                </div>
-                @if (nodeHasError(node.id)) {
-                  <mat-icon class="badge err" matTooltip="Tiene errores">error</mat-icon>
-                } @else if (nodeHasWarning(node.id)) {
-                  <mat-icon class="badge wrn" matTooltip="Revisar">warning</mat-icon>
-                }
-              </div>
-
-              @switch (node.type) {
-                @case ('trigger') {
-                  <div class="fnode-body">
-                    @for (kw of node.data.keywords ?? []; track kw) { <span class="tag">{{ kw }}</span> }
-                    @if (!(node.data.keywords ?? []).length) { <span class="muted">Sin palabras de inicio</span> }
-                  </div>
-                }
-                @case ('condition') {
-                  <div class="fnode-body handles">
-                    @for (h of outputHandlesOf(node); track h.id) {
-                      <div class="handle-row">
-                        <span class="handle-label">{{ h.label }}</span>
-                        <div class="conn out" fNodeOutput [fOutputId]="outConnId(node.id, h.id)" [fOutputConnectableSide]="connectorSide.RIGHT"></div>
-                      </div>
-                    }
-                  </div>
-                }
-                @case ('action') {
-                  <div class="fnode-body"><span class="muted">{{ node.data.actionType || 'Sin acción' }}</span></div>
-                }
-                @case ('delay') {
-                  <div class="fnode-body"><span class="muted">Espera {{ node.data.delaySeconds || 0 }}s</span></div>
-                }
-                @default {
-                  <div class="fnode-body">
-                    @if (node.data.text) { <p class="preview">{{ node.data.text }}</p> }
-                    @else if (node.type === 'ai') { <p class="preview muted">{{ node.data.aiPrompt || 'Configura la IA' }}</p> }
-                    @else if (node.type !== 'end') { <span class="muted">Sin mensaje</span> }
-                  </div>
-                }
-              }
-
-              @if (meta(node).hasBranches && node.type !== 'condition') {
-                <div class="fnode-body handles">
-                  @for (h of outputHandlesOf(node); track h.id) {
-                    <div class="handle-row">
-                      <span class="handle-label">{{ h.label }}</span>
-                      <div class="conn out" fNodeOutput [fOutputId]="outConnId(node.id, h.id)" [fOutputConnectableSide]="connectorSide.RIGHT"></div>
-                    </div>
-                  }
-                </div>
-              } @else if (node.type !== 'end' && node.type !== 'condition') {
-                <div class="conn out single" fNodeOutput [fOutputId]="outConnId(node.id)" [fOutputConnectableSide]="connectorSide.RIGHT"></div>
-              }
-            </div>
+    @if (paletteOpen()) {
+      <aside class="floating-panel node-palette" aria-label="Catálogo de nodos">
+        <div class="floating-panel__head"><div><strong>Agregar al flujo</strong><small>Arrastra o haz doble clic</small></div><button mat-icon-button type="button" (click)="paletteOpen.set(false)" aria-label="Cerrar paleta"><mat-icon>close</mat-icon></button></div>
+        <label class="panel-search"><mat-icon>search</mat-icon><input [(ngModel)]="paletteSearch" placeholder="Buscar nodos" autofocus /></label>
+        <div class="palette-grid">
+          @for (type of filteredPaletteTypes(); track type) {
+            <button type="button" class="palette-item" fExternalItem [fData]="type" [style.--node-color]="catalog[type].color" (dblclick)="addNode(type); paletteOpen.set(false)"><span class="palette-icon"><mat-icon>{{ catalog[type].icon }}</mat-icon></span><span><strong>{{ catalog[type].label }}</strong><small>{{ catalog[type].description }}</small></span></button>
           }
+        </div>
+        <div class="template-strip"><strong>Plantillas</strong>@for (tpl of templates; track tpl.id) { <button type="button" (click)="applyTemplate(tpl); paletteOpen.set(false)"><mat-icon>{{ tpl.icon }}</mat-icon><span>{{ tpl.name }}</span></button> }</div>
+      </aside>
+    }
 
-          @for (edge of graph().edges; track edge.id) {
-            <f-connection
-              [fConnectionId]="edge.id"
-              [fOutputId]="outConnId(edge.source, edge.sourceHandle)"
-              [fInputId]="inConnId(edge.target)"
-              [fReassignableStart]="true"
-              [fType]="connectionType"
-            />
-          }
-
-          <f-connection-for-create [fType]="connectionType" />
-        </f-canvas>
-
-        <f-minimap [fMinSize]="200" />
-      </f-flow>
-
-      <!-- Panel de problemas -->
-      @if (showProblems() && issues().length) {
-        <div class="problems surface-card">
-          <div class="problems-head">
-            <strong>Problemas ({{ issues().length }})</strong>
-            <button mat-icon-button type="button" (click)="showProblems.set(false)"><mat-icon>close</mat-icon></button>
+    <f-flow fDraggable (fCreateNode)="onCreateNode($event)" (fCreateConnection)="onCreateConnection($event)" (fReassignConnection)="onReassignConnection($event)">
+      <f-canvas fZoom>
+        <f-background><f-circle-pattern /></f-background>
+        @for (node of graph().nodes; track node.id) {
+          <div fNode fDragHandle [fNodeId]="node.id" [fNodePosition]="nodePos(node)" (fNodePositionChange)="onNodeMoved(node, $event)" class="fnode" [class.selected]="selectedNodeId() === node.id" [class.has-error]="nodeHasError(node.id)" [class.has-warning]="!nodeHasError(node.id) && nodeHasWarning(node.id)" [style.--node-color]="meta(node).color" role="button" tabindex="0" [attr.aria-label]="'Editar nodo ' + node.label" (click)="select(node.id)" (keydown)="onNodeKeydown($event, node.id)">
+            @if (node.type !== 'trigger') { <div class="conn in" fNodeInput [fInputId]="inConnId(node.id)" [fInputConnectableSide]="connectorSide.LEFT"></div> }
+            <div class="fnode-head"><span class="node-icon"><mat-icon>{{ meta(node).icon }}</mat-icon></span><div class="fnode-titles"><span>{{ meta(node).label }}</span><strong>{{ node.label }}</strong></div>@if (nodeHasError(node.id)) { <mat-icon class="badge err" matTooltip="Tiene errores">error</mat-icon> } @else if (nodeHasWarning(node.id)) { <mat-icon class="badge wrn" matTooltip="Revisar">warning</mat-icon> }</div>
+            @switch (node.type) {
+              @case ('trigger') { <div class="fnode-body">@for (kw of node.data.keywords ?? []; track kw) { <span class="tag">{{ kw }}</span> } @if (!(node.data.keywords ?? []).length) { <span class="muted">Sin palabras de inicio</span> }</div> }
+              @case ('condition') { <div class="fnode-body handles">@for (h of outputHandlesOf(node); track h.id) { <div class="handle-row"><span>{{ h.label }}</span><div class="conn out" fNodeOutput [fOutputId]="outConnId(node.id, h.id)" [fOutputConnectableSide]="connectorSide.RIGHT"></div></div> }</div> }
+              @case ('action') { <div class="fnode-body"><span class="muted">{{ node.data.actionType || 'Sin acción' }}</span></div> }
+              @case ('delay') { <div class="fnode-body"><span class="muted">Espera {{ node.data.delaySeconds || 0 }}s</span></div> }
+              @default { <div class="fnode-body">@if (node.data.text) { <p class="preview">{{ node.data.text }}</p> } @else if (node.type === 'ai') { <p class="preview muted">{{ node.data.aiPrompt || 'Configura la IA' }}</p> } @else if (node.type !== 'end') { <span class="muted">Sin mensaje</span> }</div> }
+            }
+            @if (meta(node).hasBranches && node.type !== 'condition') {
+              <div class="fnode-body handles">@for (h of outputHandlesOf(node); track h.id) { <div class="handle-row"><span>{{ h.label }}</span><div class="conn out" fNodeOutput [fOutputId]="outConnId(node.id, h.id)" [fOutputConnectableSide]="connectorSide.RIGHT"></div></div> }</div>
+            } @else if (node.type !== 'end' && node.type !== 'condition') { <div class="conn out single" fNodeOutput [fOutputId]="outConnId(node.id)" [fOutputConnectableSide]="connectorSide.RIGHT"></div> }
           </div>
-          <div class="problems-list">
-            @for (issue of issues(); track $index) {
-              <button
-                mat-button
-                type="button"
-                class="problem"
-                [class.error]="issue.severity === 'error'"
-                (click)="issue.nodeId && select(issue.nodeId)"
-              >
-                <mat-icon>{{ issue.severity === 'error' ? 'error' : 'warning' }}</mat-icon>
-                <span>{{ issue.message }}</span>
-              </button>
+        }
+        @for (edge of graph().edges; track edge.id) { <f-connection [fConnectionId]="edge.id" [fOutputId]="outConnId(edge.source, edge.sourceHandle)" [fInputId]="inConnId(edge.target)" [fReassignableStart]="true" [fType]="connectionType" /> }
+        <f-connection-for-create [fType]="connectionType" />
+      </f-canvas>
+      <f-minimap class="editor-minimap" [fMinSize]="180" />
+    </f-flow>
+
+    <div class="canvas-tools" aria-label="Herramientas del lienzo"><button mat-icon-button type="button" matTooltip="Deshacer" [disabled]="!canUndo()" (click)="undo()"><mat-icon>undo</mat-icon></button><button mat-icon-button type="button" matTooltip="Rehacer" [disabled]="!canRedo()" (click)="redo()"><mat-icon>redo</mat-icon></button><span></span><button mat-icon-button type="button" matTooltip="Ajustar a pantalla" (click)="fit()"><mat-icon>fit_screen</mat-icon></button><button mat-icon-button type="button" matTooltip="Auto-organizar" (click)="autoLayout()"><mat-icon>account_tree</mat-icon></button></div>
+    <div class="zoom-tools"><button mat-icon-button type="button" matTooltip="Acercar" (click)="zoomIn()"><mat-icon>add</mat-icon></button><button mat-icon-button type="button" matTooltip="Alejar" (click)="zoomOut()"><mat-icon>remove</mat-icon></button></div>
+
+    @if (!selectedFlow() && graph().nodes.length === 0) { <div class="canvas-empty"><span><mat-icon>schema</mat-icon></span><h2>Diseña tu primera conversación</h2><p>Crea un flujo desde cero o usa una plantilla y conecta mensajes, decisiones y acciones.</p><button mat-raised-button color="primary" type="button" (click)="openNewFlow()"><mat-icon>add</mat-icon>Crear flujo</button></div> }
+    @if (selectedFlow()?.archivedAt) { <div class="archived-lock"><mat-icon>inventory_2</mat-icon><strong>Este flujo está archivado</strong><span>Restáuralo para volver a editarlo o publicarlo.</span><button mat-raised-button color="primary" type="button" (click)="setCurrentFlowArchived(false)">Restaurar flujo</button></div> }
+
+    @if (selectedFlow() && showProblems() && issues().length) {
+      <div class="problems floating-panel"><div class="floating-panel__head"><div><strong>Problemas</strong><small>{{ issues().length }} por revisar</small></div><button mat-icon-button type="button" (click)="showProblems.set(false)" aria-label="Cerrar problemas"><mat-icon>close</mat-icon></button></div><div class="problems-list">@for (issue of issues(); track $index) { <button type="button" class="problem" [class.error]="issue.severity === 'error'" (click)="issue.nodeId && select(issue.nodeId)"><mat-icon>{{ issue.severity === 'error' ? 'error' : 'warning' }}</mat-icon><span>{{ issue.message }}</span></button> }</div></div>
+    } @else if (selectedFlow() && issues().length) { <button class="problem-trigger" type="button" (click)="showProblems.set(true)"><mat-icon>{{ errorCount() ? 'error' : 'warning' }}</mat-icon>{{ issues().length }} problemas</button> }
+
+    @if (selectedNode(); as node) {
+      <aside class="floating-panel inspector">
+        <div class="floating-panel__head inspector-head"><div class="inspector-title"><span class="node-icon" [style.--node-color]="meta(node).color"><mat-icon>{{ meta(node).icon }}</mat-icon></span><span><small>{{ meta(node).label }}</small><strong>{{ node.label }}</strong></span></div><button mat-icon-button type="button" (click)="selectedNodeId.set(null)" aria-label="Cerrar inspector"><mat-icon>close</mat-icon></button></div>
+        <div class="inspector-actions"><button mat-stroked-button type="button" (click)="duplicateNode(node)"><mat-icon>content_copy</mat-icon>Duplicar</button><button mat-button color="warn" type="button" [disabled]="node.type === 'trigger'" (click)="removeNode(node.id)"><mat-icon>delete</mat-icon>Eliminar</button></div>
+        @if (node.type !== 'end') {
+          <div class="connections-editor"><strong>Conexiones</strong>@for (handle of outputHandlesOf(node); track handle.id ?? 'default') { <mat-form-field appearance="outline"><mat-label>{{ handle.label || 'Siguiente nodo' }}</mat-label><mat-select [ngModel]="connectedTarget(node.id, handle.id)" (ngModelChange)="setConnectionTarget(node.id, handle.id, $event)"><mat-option value="">Sin conectar</mat-option>@for (target of graph().nodes; track target.id) { @if (target.id !== node.id) { <mat-option [value]="target.id">{{ target.label }}</mat-option> } }</mat-select></mat-form-field> }</div>
+        }
+        <mat-form-field appearance="outline"><mat-label>Etiqueta</mat-label><input matInput [(ngModel)]="node.label" (ngModelChange)="touchGraph()" /></mat-form-field>
+        @if (node.type === 'trigger') { <mat-form-field appearance="outline"><mat-label>Palabras de inicio</mat-label><input matInput [ngModel]="keywordsText(node)" (ngModelChange)="setKeywords(node, $event)" placeholder="hola, inicio, comprar" /><mat-hint>Separadas por comas</mat-hint></mat-form-field> }
+        @if (node.type === 'text' || node.type === 'buttons' || node.type === 'list' || node.type === 'question') { <mat-form-field appearance="outline"><mat-label>Mensaje</mat-label><textarea matInput rows="4" [(ngModel)]="node.data.text" (ngModelChange)="touchGraph()"></textarea></mat-form-field> }
+        @if (node.type === 'question') { <mat-form-field appearance="outline"><mat-label>Variable de respuesta</mat-label><input matInput [(ngModel)]="node.data.captureVariable" (ngModelChange)="touchGraph()" placeholder="nombre" /></mat-form-field> }
+        @if (node.type === 'list') { <mat-form-field appearance="outline"><mat-label>Texto del botón</mat-label><input matInput [(ngModel)]="node.data.buttonText" (ngModelChange)="touchGraph()" /></mat-form-field> }
+        @if (node.type === 'ai') { <mat-form-field appearance="outline"><mat-label>Instrucciones para la IA</mat-label><textarea matInput rows="4" [(ngModel)]="node.data.aiPrompt" (ngModelChange)="touchGraph()"></textarea></mat-form-field><label class="switch-row"><input type="checkbox" [(ngModel)]="node.data.aiUseRag" (ngModelChange)="touchGraph()" />Usar base de conocimiento</label><mat-form-field appearance="outline"><mat-label>Variable de respuesta</mat-label><input matInput [(ngModel)]="node.data.captureVariable" (ngModelChange)="touchGraph()" /></mat-form-field> }
+        @if (node.type === 'action') { <mat-form-field appearance="outline"><mat-label>Tipo de acción</mat-label><mat-select [(ngModel)]="node.data.actionType" (ngModelChange)="touchGraph()"><mat-option value="create_lead">Crear lead</mat-option><mat-option value="add_tag">Agregar etiqueta</mat-option><mat-option value="handoff">Pasar a agente humano</mat-option><mat-option value="http">Llamar a una API</mat-option></mat-select></mat-form-field> }
+        @if (node.type === 'delay') { <mat-form-field appearance="outline"><mat-label>Segundos de espera</mat-label><input matInput type="number" min="0" [(ngModel)]="node.data.delaySeconds" (ngModelChange)="touchGraph()" /></mat-form-field> }
+        @if (node.type === 'buttons' || node.type === 'list' || node.type === 'condition') {
+          <div class="options"><div class="options-head"><strong>{{ node.type === 'condition' ? 'Ramas' : 'Opciones' }}</strong><button mat-stroked-button type="button" (click)="addOption(node)"><mat-icon>add</mat-icon>Agregar</button></div>
+            @for (option of node.data.options ?? []; track option.id; let i = $index) {
+              <div class="option-card"><div class="option-row"><mat-form-field appearance="outline"><mat-label>{{ node.type === 'condition' ? 'Rama' : 'Opción' }}</mat-label><input matInput [(ngModel)]="option.label" (ngModelChange)="touchGraph()" /></mat-form-field><button mat-icon-button type="button" (click)="removeOption(node, i)" aria-label="Eliminar opción"><mat-icon>close</mat-icon></button></div>@if (node.type === 'condition') { <div class="cond-row"><mat-form-field appearance="outline"><mat-label>Variable</mat-label><input matInput [(ngModel)]="option.variable" (ngModelChange)="touchGraph()" /></mat-form-field><mat-form-field appearance="outline"><mat-label>Operador</mat-label><mat-select [(ngModel)]="option.operator" (ngModelChange)="touchGraph()"><mat-option value="equals">Igual a</mat-option><mat-option value="contains">Contiene</mat-option><mat-option value="gt">Mayor que</mat-option><mat-option value="lt">Menor que</mat-option><mat-option value="exists">Existe</mat-option></mat-select></mat-form-field><mat-form-field appearance="outline"><mat-label>Valor</mat-label><input matInput [(ngModel)]="option.value" (ngModelChange)="touchGraph()" /></mat-form-field></div> }</div>
             }
           </div>
-        </div>
-      }
-    </div>
+        }
+        @if (nodeIssues(node.id).length) { <div class="node-issues">@for (issue of nodeIssues(node.id); track $index) { <p [class.error]="issue.severity === 'error'"><mat-icon>{{ issue.severity === 'error' ? 'error' : 'warning' }}</mat-icon>{{ issue.message }}</p> }</div> }
+      </aside>
+    }
+  </div>
 
-    @if (errorMessage()) { <p class="floating-msg error">{{ errorMessage() }}</p> }
-    @if (successMessage()) { <p class="floating-msg success">{{ successMessage() }}</p> }
-  </main>
+  @if (errorMessage()) { <div class="toast error" role="alert"><mat-icon>error</mat-icon><span>{{ errorMessage() }}</span>@if (saveStatus() === 'error') { <button type="button" (click)="saveDraft()">Reintentar</button> }</div> }
+  @if (successMessage()) { <div class="toast success" role="status"><mat-icon>check_circle</mat-icon><span>{{ successMessage() }}</span></div> }
 
-  <!-- ============================ INSPECTOR ============================ -->
-  @if (selectedNode(); as node) {
-    <aside class="panel inspector surface-card">
-      <div class="header-row">
-        <div>
-          <p class="eyebrow">Configurar</p>
-          <h2>{{ meta(node).label }}</h2>
-        </div>
-        <div class="header-actions">
-          <button mat-icon-button type="button" matTooltip="Duplicar" (click)="duplicateNode(node)"><mat-icon>content_copy</mat-icon></button>
-          <button mat-icon-button color="warn" type="button" matTooltip="Eliminar" [disabled]="node.type === 'trigger'" (click)="removeNode(node.id)"><mat-icon>delete</mat-icon></button>
-        </div>
-      </div>
-
-      <mat-form-field appearance="outline">
-        <mat-label>Etiqueta</mat-label>
-        <input matInput [(ngModel)]="node.label" (ngModelChange)="touchGraph()" />
-      </mat-form-field>
-
-      @if (node.type === 'trigger') {
-        <mat-form-field appearance="outline">
-          <mat-label>Palabras de inicio</mat-label>
-          <input matInput [ngModel]="keywordsText(node)" (ngModelChange)="setKeywords(node, $event)" placeholder="hola, inicio, comprar" />
-          <mat-hint>Separadas por comas</mat-hint>
-        </mat-form-field>
-      }
-
-      @if (node.type === 'text' || node.type === 'buttons' || node.type === 'list' || node.type === 'question') {
-        <mat-form-field appearance="outline">
-          <mat-label>Mensaje</mat-label>
-          <textarea matInput rows="4" [(ngModel)]="node.data.text" (ngModelChange)="touchGraph()"></textarea>
-        </mat-form-field>
-      }
-
-      @if (node.type === 'question') {
-        <mat-form-field appearance="outline">
-          <mat-label>Guardar respuesta en variable</mat-label>
-          <input matInput [(ngModel)]="node.data.captureVariable" (ngModelChange)="touchGraph()" placeholder="nombre" />
-        </mat-form-field>
-      }
-
-      @if (node.type === 'list') {
-        <mat-form-field appearance="outline">
-          <mat-label>Texto del botón</mat-label>
-          <input matInput [(ngModel)]="node.data.buttonText" (ngModelChange)="touchGraph()" />
-        </mat-form-field>
-      }
-
-      @if (node.type === 'ai') {
-        <mat-form-field appearance="outline">
-          <mat-label>Instrucciones para la IA</mat-label>
-          <textarea matInput rows="4" [(ngModel)]="node.data.aiPrompt" (ngModelChange)="touchGraph()" placeholder="Responde como asesor de ventas..."></textarea>
-        </mat-form-field>
-        <label class="switch-row">
-          <input type="checkbox" [(ngModel)]="node.data.aiUseRag" (ngModelChange)="touchGraph()" />
-          Usar base de conocimiento (RAG)
-        </label>
-        <mat-form-field appearance="outline">
-          <mat-label>Guardar respuesta en variable (opcional)</mat-label>
-          <input matInput [(ngModel)]="node.data.captureVariable" (ngModelChange)="touchGraph()" />
-        </mat-form-field>
-      }
-
-      @if (node.type === 'action') {
-        <mat-form-field appearance="outline">
-          <mat-label>Tipo de acción</mat-label>
-          <mat-select [(ngModel)]="node.data.actionType" (ngModelChange)="touchGraph()">
-            <mat-option value="create_lead">Crear lead</mat-option>
-            <mat-option value="add_tag">Agregar etiqueta</mat-option>
-            <mat-option value="handoff">Pasar a agente humano</mat-option>
-            <mat-option value="http">Llamar a una API</mat-option>
-          </mat-select>
-        </mat-form-field>
-      }
-
-      @if (node.type === 'delay') {
-        <mat-form-field appearance="outline">
-          <mat-label>Segundos de espera</mat-label>
-          <input matInput type="number" min="0" [(ngModel)]="node.data.delaySeconds" (ngModelChange)="touchGraph()" />
-        </mat-form-field>
-      }
-
-      @if (node.type === 'buttons' || node.type === 'list' || node.type === 'condition') {
-        <div class="options">
-          <p class="eyebrow">{{ node.type === 'condition' ? 'Ramas' : 'Opciones' }}</p>
-          @for (option of node.data.options ?? []; track option.id; let i = $index) {
-            <div class="option-row">
-              <mat-form-field appearance="outline">
-                <mat-label>{{ node.type === 'condition' ? 'Rama' : 'Opción' }}</mat-label>
-                <input matInput [(ngModel)]="option.label" (ngModelChange)="touchGraph()" />
-              </mat-form-field>
-              <button mat-icon-button type="button" (click)="removeOption(node, i)" aria-label="Eliminar"><mat-icon>close</mat-icon></button>
-            </div>
-            @if (node.type === 'condition') {
-              <div class="cond-row">
-                <mat-form-field appearance="outline"><mat-label>Variable</mat-label><input matInput [(ngModel)]="option.variable" (ngModelChange)="touchGraph()" /></mat-form-field>
-                <mat-form-field appearance="outline">
-                  <mat-label>Operador</mat-label>
-                  <mat-select [(ngModel)]="option.operator" (ngModelChange)="touchGraph()">
-                    <mat-option value="equals">=</mat-option>
-                    <mat-option value="contains">contiene</mat-option>
-                    <mat-option value="gt">&gt;</mat-option>
-                    <mat-option value="lt">&lt;</mat-option>
-                    <mat-option value="exists">existe</mat-option>
-                  </mat-select>
-                </mat-form-field>
-                <mat-form-field appearance="outline"><mat-label>Valor</mat-label><input matInput [(ngModel)]="option.value" (ngModelChange)="touchGraph()" /></mat-form-field>
-              </div>
-            }
-          }
-          <button mat-stroked-button type="button" (click)="addOption(node)"><mat-icon>add</mat-icon> Agregar {{ node.type === 'condition' ? 'rama' : 'opción' }}</button>
-        </div>
-      }
-
-      @if (nodeIssues(node.id).length) {
-        <div class="node-issues">
-          @for (issue of nodeIssues(node.id); track $index) {
-            <p [class.error]="issue.severity === 'error'"><mat-icon>{{ issue.severity === 'error' ? 'error' : 'warning' }}</mat-icon>{{ issue.message }}</p>
-          }
-        </div>
-      }
-    </aside>
+  @if (newFlowOpen()) {
+    <div class="dialog-backdrop" aria-hidden="true" (click)="closeNewFlow()"></div>
+    <section class="create-dialog" role="dialog" aria-modal="true" aria-labelledby="new-flow-title" cdkTrapFocus [cdkTrapFocusAutoCapture]="true"><div class="create-dialog__head"><div><h2 id="new-flow-title">Crear un flujo</h2><p>Define lo esencial; después todo se guardará automáticamente.</p></div><button mat-icon-button type="button" (click)="closeNewFlow()" aria-label="Cerrar creación de flujo"><mat-icon>close</mat-icon></button></div><mat-form-field appearance="outline"><mat-label>Nombre del flujo</mat-label><input matInput [(ngModel)]="newFlowName" /></mat-form-field><mat-form-field appearance="outline"><mat-label>Número WhatsApp</mat-label><mat-select [(ngModel)]="newFlowInstanceId">@for (instance of connectedInstances(); track instance.id) { <mat-option [value]="instance.id">{{ instance.displayName }} · {{ instance.displayPhoneNumber || instance.status }}</mat-option> }</mat-select></mat-form-field><div class="template-picker"><strong>Plantilla inicial</strong>@for (tpl of templates; track tpl.id) { <button type="button" [class.active]="newFlowTemplateId === tpl.id" (click)="newFlowTemplateId = tpl.id"><mat-icon>{{ tpl.icon }}</mat-icon><span><strong>{{ tpl.name }}</strong><small>{{ tpl.description }}</small></span></button> }</div><div class="dialog-actions"><button mat-button type="button" (click)="closeNewFlow()">Cancelar</button><button mat-raised-button color="primary" type="button" [disabled]="saving() || !newFlowName.trim() || !newFlowInstanceId" (click)="createFlow()">Crear y editar</button></div></section>
   }
 
-  <!-- ============================ SIMULADOR ============================ -->
   @if (simOpen()) {
     <div class="sim-backdrop" (click)="closeSimulator()"></div>
-    <div class="sim-drawer surface-card">
-      <div class="sim-head">
-        <div><mat-icon>smartphone</mat-icon> <strong>Probar flujo</strong></div>
-        <div>
-          <button mat-icon-button type="button" matTooltip="Reiniciar" (click)="restartSimulator()"><mat-icon>refresh</mat-icon></button>
-          <button mat-icon-button type="button" (click)="closeSimulator()"><mat-icon>close</mat-icon></button>
-        </div>
-      </div>
-      <div class="sim-chat">
-        @if (!simMessages().length) {
-          <p class="sim-hint">Escribe un mensaje (ej. una palabra de inicio) para probar el flujo.</p>
-        }
-        @for (msg of simMessages(); track $index) {
-          <div class="sim-msg" [class.bot]="msg.from === 'bot'" [class.user]="msg.from === 'user'">
-            <span>{{ msg.text }}</span>
-            @if (msg.options?.length) {
-              <div class="sim-options">
-                @for (opt of msg.options; track opt) {
-                  <button mat-stroked-button type="button" (click)="quickReply(opt)">{{ opt }}</button>
-                }
-              </div>
-            }
-          </div>
-        }
-      </div>
-      <form class="sim-input" (ngSubmit)="sendSim()">
-        <input [(ngModel)]="simInput" name="simInput" placeholder="Escribe un mensaje..." autocomplete="off" />
-        <button mat-icon-button color="primary" type="submit"><mat-icon>send</mat-icon></button>
-      </form>
-    </div>
+    <div class="sim-drawer"><div class="sim-head"><div><span class="sim-icon"><mat-icon>smartphone</mat-icon></span><span><small>Vista del cliente</small><strong>Probar flujo</strong></span></div><div><button mat-icon-button type="button" matTooltip="Reiniciar" (click)="restartSimulator()"><mat-icon>refresh</mat-icon></button><button mat-icon-button type="button" (click)="closeSimulator()" aria-label="Cerrar simulador"><mat-icon>close</mat-icon></button></div></div><div class="sim-chat">@if (!simMessages().length) { <div class="sim-hint"><mat-icon>chat_bubble_outline</mat-icon><span>Escribe una palabra de inicio para recorrer el flujo.</span></div> } @for (msg of simMessages(); track $index) { <div class="sim-msg" [class.bot]="msg.from === 'bot'" [class.user]="msg.from === 'user'"><span>{{ msg.text }}</span>@if (msg.options?.length) { <div class="sim-options">@for (opt of msg.options; track opt) { <button mat-stroked-button type="button" (click)="quickReply(opt)">{{ opt }}</button> }</div> }</div> }</div><form class="sim-input" (ngSubmit)="sendSim()"><input [(ngModel)]="simInput" name="simInput" placeholder="Escribe un mensaje…" autocomplete="off" aria-label="Mensaje de prueba" /><button mat-icon-button color="primary" type="submit" aria-label="Enviar mensaje de prueba"><mat-icon>send</mat-icon></button></form></div>
   }
-</section>
+</section></div>

@@ -6,6 +6,7 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 
 import { WhatsAppInstance } from '../../models/asistente-ventas.models';
@@ -42,10 +43,12 @@ declare global {
 @Component({
   selector: 'app-instancias',
   standalone: true,
-  imports: [CommonModule, FormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule],
+  imports: [CommonModule, FormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatTooltipModule],
   template: `
     <section class="page-grid">
-      <div class="columna">
+      <div class="drawer-backdrop" *ngIf="connectionDrawerOpen()" (click)="connectionDrawerOpen.set(false)"></div>
+      <div class="columna connection-drawer" *ngIf="connectionDrawerOpen()">
+        <div class="drawer-title"><div><h2>{{ editandoId() ? 'Editar conexión' : 'Agregar conexión' }}</h2><p>Configura el número que atenderá las conversaciones.</p></div><button mat-icon-button type="button" (click)="connectionDrawerOpen.set(false)" aria-label="Cerrar"><mat-icon>close</mat-icon></button></div>
         <article class="panel surface-card" *ngIf="enEspera()">
           <div class="header-row">
             <div>
@@ -172,17 +175,16 @@ declare global {
       <article class="panel surface-card">
         <div class="header-row">
           <div>
-            <p class="eyebrow">{{ instances().length }} instancia(s)</p>
-            <h2>Conexiones de la empresa</h2>
+            <h2>Conexiones de WhatsApp</h2>
+            <p class="ayuda">{{ filteredInstances().length }} de {{ instances().length }} conexiones</p>
           </div>
-          <button mat-stroked-button type="button" (click)="cargarInstancias()">
-            <mat-icon>refresh</mat-icon>
-            Actualizar
-          </button>
+          <div class="header-actions"><button mat-icon-button type="button" (click)="cargarInstancias()" matTooltip="Actualizar"><mat-icon>refresh</mat-icon></button><button mat-raised-button color="primary" type="button" (click)="connectionDrawerOpen.set(true)"><mat-icon>add</mat-icon>Agregar conexión</button></div>
         </div>
 
+        <div class="connection-filters"><label class="search-box"><mat-icon>search</mat-icon><input [ngModel]="search()" (ngModelChange)="search.set($event)" placeholder="Buscar por nombre, número o WABA" /></label><div class="filter-pills"><button type="button" [class.active]="statusFilter() === 'ALL'" (click)="statusFilter.set('ALL')">Todas</button><button type="button" [class.active]="statusFilter() === 'CONNECTED'" (click)="statusFilter.set('CONNECTED')">Conectadas</button><button type="button" [class.active]="statusFilter() === 'PENDING'" (click)="statusFilter.set('PENDING')">Pendientes</button></div></div>
+
         <ul class="items" *ngIf="hasInstances(); else emptyState">
-          <li *ngFor="let instance of instances()">
+          <li *ngFor="let instance of filteredInstances()">
             <div class="instance-main">
               <div class="badges">
                 <span class="status" [class.connected]="instance.status === 'CONNECTED'">{{ instance.status }}</span>
@@ -273,11 +275,20 @@ declare global {
   `,
   styles: [`
     :host { display: block; }
-    .page-grid { display: grid; gap: var(--space-4); grid-template-columns: minmax(280px, 420px) minmax(0, 1fr); align-items: start; }
+    .page-grid { display: grid; gap: var(--space-4); grid-template-columns: minmax(0, 1fr); align-items: start; }
     .columna { display: grid; gap: var(--space-4); align-content: start; min-width: 0; }
     .ayuda { color: var(--muted-foreground); font-size: .84rem; }
     .manual-acciones { display: flex; gap: var(--space-2); align-items: center; flex-wrap: wrap; }
     .panel { padding: var(--space-4); display: grid; gap: var(--space-4); border-radius: var(--radius-md); }
+    .drawer-backdrop { position: fixed; inset: 0; z-index: 50; background: rgb(14 24 26 / 32%); backdrop-filter: blur(2px); }
+    .connection-drawer { position: fixed; z-index: 51; top: 0; right: 0; width: min(440px, 94vw); height: 100dvh; padding: 1rem; overflow: auto; background: var(--tc-surface); box-shadow: -20px 0 60px rgb(14 24 26 / 18%); }
+    .drawer-title, .header-actions, .connection-filters, .filter-pills { display: flex; align-items: center; gap: .5rem; }
+    .drawer-title { justify-content: space-between; } .drawer-title p { margin-top: .2rem; color: var(--muted-foreground); font-size: .82rem; }
+    .connection-filters { justify-content: space-between; flex-wrap: wrap; }
+    .search-box { min-width: min(360px, 100%); min-height: 44px; padding: 0 .7rem; display: flex; align-items: center; gap: .45rem; border-radius: 12px; background: var(--tc-surface-container-low); }
+    .search-box input { min-width: 0; width: 100%; border: 0; outline: 0; color: inherit; background: transparent; }
+    .filter-pills button { min-height: 36px; padding: 0 .7rem; border: 0; border-radius: 999px; color: var(--muted-foreground); background: transparent; cursor: pointer; }
+    .filter-pills button.active { color: var(--primary); background: color-mix(in srgb, var(--primary) 12%, transparent); font-weight: 700; }
     .header-row { display: flex; justify-content: space-between; gap: var(--space-4); align-items: start; }
     h2, p { margin: 0; }
     .eyebrow { text-transform: uppercase; letter-spacing: .08em; color: var(--primary); font-size: .74rem; }
@@ -285,7 +296,7 @@ declare global {
     .create-form button { justify-self: start; }
     button mat-icon { margin-right: var(--space-2); }
     .items { margin: 0; padding: 0; list-style: none; display: grid; gap: var(--space-3); }
-    .items li { display: flex; justify-content: space-between; gap: var(--space-4); align-items: center; border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-3); background: var(--mat-sys-surface-container-low); }
+    .items li { display: flex; justify-content: space-between; gap: var(--space-4); align-items: center; border: 0; border-radius: var(--radius-md); padding: var(--space-3); background: var(--mat-sys-surface-container-low); }
     .instance-main { min-width: 0; display: grid; gap: .25rem; }
     .badges { display: flex; gap: .35rem; flex-wrap: wrap; }
     .instance-acciones { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
@@ -316,6 +327,14 @@ export class InstanciasComponent {
   protected readonly successMessage = signal<string | null>(null);
   protected readonly instances = signal<WhatsAppInstance[]>([]);
   protected readonly hasInstances = computed(() => this.instances().length > 0);
+  protected readonly connectionDrawerOpen = signal(false);
+  protected readonly search = signal('');
+  protected readonly statusFilter = signal('ALL');
+  protected readonly filteredInstances = computed(() => {
+    const query = this.search().trim().toLowerCase();
+    return this.instances().filter((instance) => (this.statusFilter() === 'ALL' || instance.status === this.statusFilter())
+      && (!query || `${instance.displayName} ${instance.displayPhoneNumber ?? ''} ${instance.wabaId ?? ''}`.toLowerCase().includes(query)));
+  });
   protected readonly canCreate = computed(() => this.displayName().trim().length > 0 && !this.loading());
 
   /** El super administrador autoriza empresa por empresa quien puede cargar credenciales a mano. */
@@ -439,6 +458,7 @@ export class InstanciasComponent {
   }
 
   protected editarManual(instance: WhatsAppInstance): void {
+    this.connectionDrawerOpen.set(true);
     this.manualError.set(null);
     this.manualSuccess.set(null);
     this.editandoId.set(instance.id);

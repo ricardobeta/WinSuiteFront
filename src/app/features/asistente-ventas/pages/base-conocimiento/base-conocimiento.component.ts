@@ -55,11 +55,23 @@ export class BaseConocimientoComponent {
   protected readonly knowledge = signal<KnowledgeItem[]>([]);
   protected readonly saving = signal(false);
   protected readonly notice = signal<{ type: NoticeType; text: string } | null>(null);
+  protected readonly showArchived = signal(false);
+  protected readonly search = signal('');
+  protected readonly typeFilter = signal('ALL');
 
   /** Tipos personalizados del tenant (persistidos en Firebase); los por defecto son fijos. */
   protected readonly customTypes = signal<SourceType[]>([]);
   /** Todos los tipos disponibles = por defecto (fijos) + personalizados del tenant. */
   protected readonly sourceTypes = computed<SourceType[]>(() => [...DEFAULT_SOURCE_TYPES, ...this.customTypes()]);
+  protected readonly filteredKnowledge = computed(() => {
+    const query = this.search().trim().toLowerCase();
+    return this.knowledge().filter((item) => {
+      const type = this.classifySource(item.source);
+      return (item.archivedAt != null) === this.showArchived()
+        && (this.typeFilter() === 'ALL' || type.value === this.typeFilter())
+        && (!query || `${item.source} ${item.text}`.toLowerCase().includes(query));
+    });
+  });
 
   /** Iconos disponibles para nuevos tipos de fuente. */
   protected readonly iconOptions: string[] = [
@@ -68,19 +80,19 @@ export class BaseConocimientoComponent {
   ];
 
   protected readonly sourceGroups = computed(() => {
-    const groups = new Map<string, { type: SourceType; sources: Set<string>; items: KnowledgeItem[] }>();
+    const groups = new Map<string, { type: SourceType; sources: Map<string, string>; items: KnowledgeItem[] }>();
 
-    for (const item of this.knowledge()) {
+    for (const item of this.filteredKnowledge()) {
       const type = this.classifySource(item.source);
-      const group = groups.get(type.value) ?? { type, sources: new Set<string>(), items: [] };
-      group.sources.add(this.cleanSourceName(item.source));
+      const group = groups.get(type.value) ?? { type, sources: new Map<string, string>(), items: [] };
+      group.sources.set(item.source, this.cleanSourceName(item.source));
       group.items.push(item);
       groups.set(type.value, group);
     }
 
     return Array.from(groups.values()).map((group) => ({
       ...group,
-      sourceNames: Array.from(group.sources)
+      sourceNames: Array.from(group.sources, ([raw, name]) => ({ raw, name }))
     }));
   });
 
@@ -121,7 +133,7 @@ export class BaseConocimientoComponent {
     try {
       const [config, knowledge, sourceTypes] = await Promise.all([
         firstValueFrom(this.api.getAiConfig()),
-        firstValueFrom(this.api.listKnowledge()),
+        firstValueFrom(this.api.listKnowledge(true)),
         firstValueFrom(this.api.getSourceTypes())
       ]);
       this.config.set(config);
@@ -238,6 +250,21 @@ export class BaseConocimientoComponent {
     this.showSuccess('Fragmento eliminado.');
   }
 
+  protected async setSourceArchived(source: string, archived: boolean): Promise<void> {
+    if (archived && !window.confirm('¿Archivar esta fuente? La IA dejará de utilizarla inmediatamente.')) return;
+    this.saving.set(true);
+    try {
+      await firstValueFrom(this.api.setKnowledgeSourceArchived(source, archived));
+      await this.reloadKnowledge();
+      this.showSuccess(archived ? 'Fuente archivada.' : 'Fuente restaurada y disponible para la IA.');
+    } catch (error) {
+      console.error(error);
+      this.showError('No se pudo cambiar el estado de la fuente.');
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
   protected async clearAll(): Promise<void> {
     await firstValueFrom(this.api.clearKnowledge());
     await this.reloadKnowledge();
@@ -305,8 +332,8 @@ export class BaseConocimientoComponent {
   }
 
   private async reloadKnowledge(): Promise<void> {
-    this.knowledge.set((await firstValueFrom(this.api.listKnowledge())) ?? []);
-    this.config.update((c) => (c ? { ...c, chunkCount: this.knowledge().length } : c));
+    this.knowledge.set((await firstValueFrom(this.api.listKnowledge(true))) ?? []);
+    this.config.update((c) => (c ? { ...c, chunkCount: this.knowledge().filter((item) => item.archivedAt == null).length } : c));
   }
 
   private buildSourceName(): string {

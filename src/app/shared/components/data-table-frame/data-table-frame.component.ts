@@ -457,6 +457,10 @@ export class DataTableFrameComponent implements AfterViewInit, OnChanges, OnDest
   }
 
   private applyColumnVisibility(): void {
+    // Sin preferencias activas no hay ninguna vista resuelta y `visibleColumnIds` esta vacio:
+    // seguir adelante ocultaria TODAS las columnas menos las bloqueadas. Una tabla que no
+    // participa del sistema de preferencias se muestra tal como la declaro la pantalla.
+    if (!this.preferencesEnabled()) return;
     const catalog = this.catalog();
     if (catalog.length === 0) return;
     const visibleIds = new Set(this.view().visibleColumnIds);

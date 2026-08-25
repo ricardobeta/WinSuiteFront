@@ -1,4 +1,5 @@
-import { Component, HostListener, computed, inject, signal, viewChild } from '@angular/core';
+import { A11yModule } from '@angular/cdk/a11y';
+import { Component, ElementRef, HostListener, computed, inject, signal, viewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -7,6 +8,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { RouterLink } from '@angular/router';
 import {
   EFConnectableSide,
   EFConnectionType,
@@ -31,6 +33,7 @@ import { FlowSimulator, SimMessage } from './flow-simulator';
   standalone: true,
   imports: [
     FormsModule,
+    A11yModule,
     FFlowModule,
     MatButtonModule,
     MatFormFieldModule,
@@ -38,10 +41,10 @@ import { FlowSimulator, SimMessage } from './flow-simulator';
     MatInputModule,
     MatMenuModule,
     MatSelectModule,
-    MatTooltipModule
+    MatTooltipModule,
+    RouterLink
   ],
-  templateUrl: './flujos-builder.component.html',
-  styleUrl: './flujos-builder.component.scss'
+  templateUrl: './flujos-builder.component.html'
 })
 export class FlujosBuilderComponent {
   private readonly api = inject(AsistenteVentasApiService);
@@ -54,18 +57,35 @@ export class FlujosBuilderComponent {
 
   private readonly canvas = viewChild(FCanvasComponent);
   private readonly zoom = viewChild(FZoomDirective);
+  private readonly builderRoot = viewChild<ElementRef<HTMLElement>>('builderRoot');
 
   // ---- estado principal ----
-  protected readonly graph = signal<FlowGraph>(FLOW_TEMPLATES[1].build());
+  protected readonly graph = signal<FlowGraph>({ nodes: [], edges: [] });
   protected readonly selectedNodeId = signal<string | null>(null);
   protected readonly flows = signal<FlowDefinition[]>([]);
   protected readonly instances = signal<WhatsAppInstance[]>([]);
   protected readonly selectedFlowId = signal<string | null>(null);
   protected readonly saving = signal(false);
+  protected readonly saveStatus = signal<'idle' | 'pending' | 'saving' | 'saved' | 'error'>('idle');
   protected readonly errorMessage = signal<string | null>(null);
   protected readonly successMessage = signal<string | null>(null);
   protected flowName = 'Flujo de bienvenida';
   protected instanceId = '';
+  protected readonly paletteOpen = signal(false);
+  protected readonly flowMenuOpen = signal(false);
+  protected readonly showArchived = signal(false);
+  protected readonly fullscreen = signal(false);
+  protected readonly newFlowOpen = signal(false);
+  protected paletteSearch = '';
+  protected flowSearch = '';
+  protected newFlowName = 'Nuevo flujo';
+  protected newFlowInstanceId = '';
+  protected newFlowTemplateId = 'blank';
+  private autosaveTimer?: ReturnType<typeof setTimeout>;
+  private saveChain: Promise<void> = Promise.resolve();
+  private dirtyRevision = 0;
+  private savedRevision = 0;
+  private newFlowReturnFocus: HTMLElement | null = null;
 
   // ---- historial (undo/redo) ----
   private readonly past = signal<string[]>([]);
@@ -79,6 +99,22 @@ export class FlujosBuilderComponent {
   // ---- derivados ----
   protected readonly connectedInstances = computed(() => this.instances().filter((i) => i.status === 'CONNECTED'));
   protected readonly selectedNode = computed(() => this.graph().nodes.find((n) => n.id === this.selectedNodeId()) ?? null);
+  protected readonly selectedFlow = computed(() => this.flows().find((flow) => flow.id === this.selectedFlowId()) ?? null);
+  protected visibleFlows(): FlowDefinition[] {
+    const query = this.flowSearch.trim().toLowerCase();
+    return this.flows().filter((flow) => {
+      const archived = flow.archivedAt != null;
+      return archived === this.showArchived()
+        && (!query || `${flow.name} ${flow.status}`.toLowerCase().includes(query));
+    });
+  }
+  protected filteredPaletteTypes(): FlowNodeType[] {
+    const query = this.paletteSearch.trim().toLowerCase();
+    return this.paletteTypes.filter((type) => {
+      const item = this.catalog[type];
+      return !query || `${item.label} ${item.description}`.toLowerCase().includes(query);
+    });
+  }
   protected readonly issues = computed(() => validateGraph(this.graph()));
   protected readonly errorCount = computed(() => this.issues().filter((i) => i.severity === 'error').length);
   protected readonly warningCount = computed(() => this.issues().filter((i) => i.severity === 'warning').length);
@@ -157,6 +193,7 @@ export class FlujosBuilderComponent {
     this.future.update((f) => [this.snapshot(), ...f]);
     this.past.set(past.slice(0, -1));
     this.applyGraph(JSON.parse(previous));
+    this.markDirty();
   }
 
   protected redo(): void {
@@ -165,6 +202,7 @@ export class FlujosBuilderComponent {
     this.past.update((p) => [...p, this.snapshot()]);
     this.future.set(future.slice(1));
     this.applyGraph(JSON.parse(future[0]));
+    this.markDirty();
   }
 
   private applyGraph(graph: FlowGraph): void {
@@ -172,12 +210,58 @@ export class FlujosBuilderComponent {
     this.graph.set(graph);
   }
 
+  private clearCanvas(): void {
+    if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
+    this.selectedFlowId.set(null);
+    this.applyGraph({ nodes: [], edges: [] });
+    this.selectedNodeId.set(null);
+    this.paletteOpen.set(false);
+    this.showProblems.set(false);
+    this.past.set([]);
+    this.future.set([]);
+    this.dirtyRevision = 0;
+    this.savedRevision = 0;
+    this.saveStatus.set('idle');
+  }
+
   protected touchGraph(): void {
     this.graph.set({ nodes: [...this.graph().nodes], edges: [...this.graph().edges] });
+    this.markDirty();
   }
 
   protected select(nodeId: string): void {
     this.selectedNodeId.set(nodeId);
+  }
+
+  protected onNodeKeydown(event: KeyboardEvent, nodeId: string): void {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    event.preventDefault();
+    this.select(nodeId);
+  }
+
+  protected connectedTarget(sourceId: string, sourceHandle?: string): string {
+    return this.graph().edges.find((edge) => edge.source === sourceId
+      && (edge.sourceHandle ?? '') === (sourceHandle ?? ''))?.target ?? '';
+  }
+
+  protected setConnectionTarget(sourceId: string, sourceHandle: string | undefined, targetId: string): void {
+    this.pushHistory();
+    const edges = this.graph().edges.filter((edge) => !(edge.source === sourceId
+      && (edge.sourceHandle ?? '') === (sourceHandle ?? '')));
+    if (targetId) {
+      edges.push({
+        id: `edge-${sourceId}-${sourceHandle ?? 'default'}-${targetId}-${Date.now()}`,
+        source: sourceId,
+        target: targetId,
+        sourceHandle
+      });
+    }
+    this.setGraph({ ...this.graph(), edges });
+    this.markDirty();
+  }
+
+  protected onFlowMetaChanged(): void {
+    this.markDirty();
   }
 
   // =========================================================================
@@ -190,11 +274,21 @@ export class FlujosBuilderComponent {
     this.positions.set(id, { x, y });
     this.setGraph({ ...this.graph(), nodes: [...this.graph().nodes, node] });
     this.selectedNodeId.set(id);
+    this.markDirty();
   }
 
   protected addNode(type: FlowNodeType): void {
-    const count = this.graph().nodes.length;
-    this.addNodeAt(type, 320 + (count % 3) * 60, 160 + (count % 5) * 40);
+    const canvas = this.canvas();
+    const host = canvas?.hostElement?.nativeElement as HTMLElement | undefined;
+    if (canvas && host) {
+      const rect = host.getBoundingClientRect();
+      const position = canvas.getPosition();
+      const scale = canvas.getScale() || 1;
+      this.addNodeAt(type, Math.round((rect.width / 2 - position.x) / scale), Math.round((rect.height / 2 - position.y) / scale));
+    } else {
+      const count = this.graph().nodes.length;
+      this.addNodeAt(type, 320 + (count % 3) * 60, 160 + (count % 5) * 40);
+    }
   }
 
   protected onCreateNode(event: FCreateNodeEvent): void {
@@ -209,6 +303,7 @@ export class FlujosBuilderComponent {
     const clone: FlowNode = { ...structuredClone(node), id, label: `${node.label} (copia)`, x: node.x + 40, y: node.y + 40 };
     this.setGraph({ ...this.graph(), nodes: [...this.graph().nodes, clone] });
     this.selectedNodeId.set(id);
+    this.markDirty();
   }
 
   protected removeNode(nodeId: string): void {
@@ -221,6 +316,7 @@ export class FlujosBuilderComponent {
       edges: this.graph().edges.filter((e) => e.source !== nodeId && e.target !== nodeId)
     });
     this.selectedNodeId.set(null);
+    this.markDirty();
   }
 
   protected onNodeMoved(node: FlowNode, position: { x: number; y: number }): void {
@@ -231,6 +327,7 @@ export class FlujosBuilderComponent {
     }
     node.x = Math.round(position.x);
     node.y = Math.round(position.y);
+    this.markDirty();
   }
 
   // =========================================================================
@@ -253,6 +350,7 @@ export class FlujosBuilderComponent {
       order: edges.length
     });
     this.setGraph({ ...this.graph(), edges });
+    this.markDirty();
   }
 
   protected onReassignConnection(event: FReassignConnectionEvent): void {
@@ -263,6 +361,7 @@ export class FlujosBuilderComponent {
     if (event.endpoint === 'source') {
       if (!event.nextSourceId) {
         this.setGraph({ ...this.graph(), edges: edges.filter((e) => e.id !== edge.id) });
+        this.markDirty();
         return;
       }
       const parsed = parseConnectorId(event.nextSourceId);
@@ -271,11 +370,13 @@ export class FlujosBuilderComponent {
     } else {
       if (!event.nextTargetId) {
         this.setGraph({ ...this.graph(), edges: edges.filter((e) => e.id !== edge.id) });
+        this.markDirty();
         return;
       }
       edge.target = parseConnectorId(event.nextTargetId).nodeId;
     }
     this.setGraph({ ...this.graph(), edges: [...edges] });
+    this.markDirty();
   }
 
   // =========================================================================
@@ -301,6 +402,7 @@ export class FlujosBuilderComponent {
     const option = node.data.options?.[index];
     node.data.options = (node.data.options ?? []).filter((_, i) => i !== index);
     this.setGraph({ ...this.graph(), edges: this.graph().edges.filter((e) => e.sourceHandle !== option?.id) });
+    this.markDirty();
   }
 
   // =========================================================================
@@ -406,25 +508,192 @@ export class FlujosBuilderComponent {
   // =========================================================================
   protected applyTemplate(template: FlowTemplate): void {
     this.pushHistory();
-    this.selectedFlowId.set(null);
-    this.flowName = template.name === 'En blanco' ? 'Nuevo flujo' : `Flujo · ${template.name}`;
+    if (!this.selectedFlowId()) {
+      this.flowName = template.name === 'En blanco' ? 'Nuevo flujo' : `Flujo · ${template.name}`;
+    }
     this.applyGraph(template.build());
     this.selectedNodeId.set(null);
     this.clearMessages();
+    this.markDirty();
   }
 
-  protected loadFlow(flow: FlowDefinition): void {
+  protected async loadFlow(flow: FlowDefinition, force = false): Promise<void> {
+    if (!force && flow.id === this.selectedFlowId()) {
+      this.flowMenuOpen.set(false);
+      return;
+    }
+    if (this.selectedFlowId() && this.dirtyRevision > this.savedRevision) {
+      await this.flushAutosave(true);
+      if (this.saveStatus() === 'error') return;
+    } else {
+      await this.saveChain.catch(() => undefined);
+    }
+    if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
     this.selectedFlowId.set(flow.id);
     this.flowName = flow.name;
     this.instanceId = flow.instanceId;
     try {
       this.applyGraph(JSON.parse(flow.graphJson || '{"nodes":[],"edges":[]}') as FlowGraph);
     } catch {
+      this.applyGraph({ nodes: [], edges: [] });
       this.errorMessage.set('El flujo tiene un formato inválido.');
     }
     this.selectedNodeId.set(null);
+    this.paletteOpen.set(false);
+    this.dirtyRevision = 0;
+    this.savedRevision = 0;
+    this.saveStatus.set(flow.archivedAt ? 'idle' : 'saved');
     this.clearMessages();
     setTimeout(() => this.fit(), 100);
+  }
+
+  protected async openNewFlow(): Promise<void> {
+    this.newFlowReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    if (this.selectedFlowId() && this.dirtyRevision > this.savedRevision) {
+      await this.flushAutosave(true);
+      if (this.saveStatus() === 'error') return;
+    }
+    this.newFlowName = 'Nuevo flujo';
+    this.newFlowInstanceId = this.connectedInstances()[0]?.id ?? '';
+    this.newFlowTemplateId = 'blank';
+    this.newFlowOpen.set(true);
+  }
+
+  protected closeNewFlow(): void {
+    this.newFlowOpen.set(false);
+    const returnFocus = this.newFlowReturnFocus;
+    this.newFlowReturnFocus = null;
+    setTimeout(() => returnFocus?.focus(), 0);
+  }
+
+  protected async createFlow(): Promise<void> {
+    if (!this.newFlowName.trim() || !this.newFlowInstanceId) return;
+    const template = this.templates.find((item) => item.id === this.newFlowTemplateId) ?? this.templates[0];
+    this.saving.set(true);
+    this.clearMessages();
+    try {
+      const flow = await firstValueFrom(this.api.saveFlow({
+        instanceId: this.newFlowInstanceId,
+        name: this.newFlowName.trim(),
+        graphJson: JSON.stringify(template.build())
+      }));
+      await this.reloadFlows();
+      await this.loadFlow(flow);
+      this.closeNewFlow();
+      this.successMessage.set('Flujo creado. Los siguientes cambios se guardarán automáticamente.');
+    } catch (error) {
+      console.error(error);
+      this.errorMessage.set('No se pudo crear el flujo. Revisa la conexión e intenta de nuevo.');
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  protected async duplicateCurrentFlow(): Promise<void> {
+    const current = this.selectedFlow();
+    if (!current) return;
+    await this.flushAutosave(true);
+    if (this.saveStatus() === 'error') return;
+    this.saving.set(true);
+    try {
+      const copy = await firstValueFrom(this.api.saveFlow({
+        instanceId: this.instanceId,
+        name: `${this.flowName} copia`,
+        graphJson: JSON.stringify(this.graph())
+      }));
+      await this.reloadFlows();
+      await this.loadFlow(copy);
+      this.successMessage.set('Copia creada como borrador.');
+    } catch (error) {
+      console.error(error);
+      this.errorMessage.set('No se pudo duplicar el flujo.');
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  protected async setCurrentFlowArchived(archived: boolean): Promise<void> {
+    const current = this.selectedFlow();
+    if (!current) return;
+    if (archived && !window.confirm(
+      current.status === 'PUBLISHED'
+        ? 'Archivar este flujo pausará la automatización inmediatamente. ¿Continuar?'
+        : '¿Archivar este flujo? Podrás restaurarlo después.'
+    )) return;
+    if (archived) {
+      await this.flushAutosave(true);
+      if (this.saveStatus() === 'error') return;
+    }
+    this.saving.set(true);
+    try {
+      const updated = await firstValueFrom(this.api.setFlowArchived(current.id, archived));
+      await this.reloadFlows();
+      if (archived) {
+        const next = this.flows().find((flow) => flow.archivedAt == null);
+        if (next) await this.loadFlow(next);
+        else {
+          this.clearCanvas();
+        }
+      } else {
+        await this.loadFlow(updated, true);
+      }
+      this.successMessage.set(archived ? 'Flujo archivado.' : 'Flujo restaurado.');
+    } catch (error) {
+      console.error(error);
+      this.errorMessage.set('No se pudo cambiar el estado del flujo.');
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
+  private markDirty(): void {
+    if (this.selectedFlow()?.archivedAt) return;
+    this.dirtyRevision += 1;
+    this.saveStatus.set('pending');
+    if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
+    if (this.selectedFlowId()) this.autosaveTimer = setTimeout(() => void this.flushAutosave(), 1200);
+  }
+
+  private async flushAutosave(force = false): Promise<void> {
+    if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
+    const flowId = this.selectedFlowId();
+    if (!flowId || !this.instanceId || this.selectedFlow()?.archivedAt) return;
+    const revision = this.dirtyRevision;
+    if (!force && revision <= this.savedRevision) return;
+    const payload = {
+      id: flowId,
+      instanceId: this.instanceId,
+      name: this.flowName.trim() || 'Flujo sin nombre',
+      graphJson: JSON.stringify(this.graph())
+    };
+    this.saveChain = this.saveChain.catch(() => undefined).then(async () => {
+      const isCurrentFlow = () => this.selectedFlowId() === flowId;
+      if (isCurrentFlow()) {
+        this.saveStatus.set('saving');
+        this.saving.set(true);
+      }
+      try {
+        const saved = await firstValueFrom(this.api.saveFlow(payload));
+        this.flows.update((items) => items.map((item) => item.id === saved.id ? saved : item));
+        if (isCurrentFlow()) {
+          this.savedRevision = Math.max(this.savedRevision, revision);
+          this.saveStatus.set(this.dirtyRevision > this.savedRevision ? 'pending' : 'saved');
+        }
+        if (isCurrentFlow() && this.dirtyRevision > this.savedRevision) {
+          this.autosaveTimer = setTimeout(() => void this.flushAutosave(), 250);
+        }
+      } catch (error) {
+        console.error(error);
+        if (isCurrentFlow()) {
+          this.saveStatus.set('error');
+          this.errorMessage.set('No se guardaron los últimos cambios. Usa Reintentar.');
+        }
+        throw error;
+      } finally {
+        if (isCurrentFlow()) this.saving.set(false);
+      }
+    });
+    await this.saveChain.catch(() => undefined);
   }
 
   protected async saveDraft(): Promise<void> {
@@ -432,26 +701,14 @@ export class FlujosBuilderComponent {
       this.errorMessage.set('Selecciona una instancia conectada.');
       return;
     }
-    this.saving.set(true);
     this.clearMessages();
-    try {
-      const flow = await firstValueFrom(
-        this.api.saveFlow({
-          id: this.selectedFlowId() ?? undefined,
-          instanceId: this.instanceId,
-          name: this.flowName,
-          graphJson: JSON.stringify(this.graph())
-        })
-      );
-      this.selectedFlowId.set(flow.id);
-      await this.reloadFlows();
-      this.successMessage.set('Flujo guardado como borrador.');
-    } catch (error) {
-      console.error(error);
-      this.errorMessage.set('No se pudo guardar el flujo.');
-    } finally {
-      this.saving.set(false);
+    if (!this.selectedFlowId()) {
+      await this.openNewFlow();
+      return;
     }
+    this.dirtyRevision += 1;
+    await this.flushAutosave(true);
+    if (this.saveStatus() === 'saved') this.successMessage.set('Borrador actualizado.');
   }
 
   protected async publish(): Promise<void> {
@@ -464,6 +721,8 @@ export class FlujosBuilderComponent {
       await this.saveDraft();
     }
     if (!this.selectedFlowId()) return;
+    await this.flushAutosave(true);
+    if (this.saveStatus() === 'error') return;
     this.saving.set(true);
     this.clearMessages();
     try {
@@ -481,15 +740,40 @@ export class FlujosBuilderComponent {
   private async loadInitialData(): Promise<void> {
     const [instances, flows] = await Promise.all([
       firstValueFrom(this.api.listInstances()),
-      firstValueFrom(this.api.listFlows())
+      firstValueFrom(this.api.listFlows(true))
     ]);
     this.instances.set(instances ?? []);
     this.flows.set(flows ?? []);
     this.instanceId = this.connectedInstances()[0]?.id ?? '';
+    const firstActive = this.flows().find((flow) => flow.archivedAt == null);
+    if (firstActive) await this.loadFlow(firstActive);
+    else this.clearCanvas();
   }
 
   private async reloadFlows(): Promise<void> {
-    this.flows.set((await firstValueFrom(this.api.listFlows())) ?? []);
+    this.flows.set((await firstValueFrom(this.api.listFlows(true))) ?? []);
+  }
+
+  protected async toggleFullscreen(): Promise<void> {
+    const root = this.builderRoot()?.nativeElement;
+    if (!root) return;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await root.requestFullscreen();
+    } catch {
+      this.errorMessage.set('El navegador no permitió activar pantalla completa.');
+    }
+  }
+
+  @HostListener('document:fullscreenchange')
+  protected onFullscreenChange(): void {
+    this.fullscreen.set(document.fullscreenElement === this.builderRoot()?.nativeElement);
+    setTimeout(() => this.fit(), 80);
+  }
+
+  @HostListener('window:beforeunload', ['$event'])
+  protected onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.dirtyRevision > this.savedRevision) event.preventDefault();
   }
 
   private clearMessages(): void {
@@ -503,6 +787,15 @@ export class FlujosBuilderComponent {
   @HostListener('window:keydown', ['$event'])
   protected onKeydown(event: KeyboardEvent): void {
     const target = event.target as HTMLElement;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      if (this.newFlowOpen()) this.closeNewFlow();
+      else if (this.simOpen()) this.closeSimulator();
+      else if (this.paletteOpen()) this.paletteOpen.set(false);
+      else if (this.showProblems()) this.showProblems.set(false);
+      else this.selectedNodeId.set(null);
+      return;
+    }
     if (['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName) || target.isContentEditable) return;
     if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'z' && !event.shiftKey) {
       event.preventDefault();
@@ -513,6 +806,10 @@ export class FlujosBuilderComponent {
     } else if ((event.key === 'Delete' || event.key === 'Backspace') && this.selectedNodeId()) {
       event.preventDefault();
       this.removeNode(this.selectedNodeId()!);
+    } else if (event.key.toLowerCase() === 'n') {
+      if (!this.selectedFlow() || this.selectedFlow()?.archivedAt) return;
+      event.preventDefault();
+      this.paletteOpen.set(true);
     }
   }
 }

@@ -2,12 +2,14 @@
   <!-- Lista -->
   <aside class="panel surface-card list">
     <div class="header-row">
-      <div><p class="eyebrow">Plantillas</p><h2>Mensajes</h2></div>
+      <div><h2>Plantillas</h2><p class="muted">Mensajes y borradores</p></div>
       <button mat-raised-button color="primary" type="button" (click)="newTemplate()"><mat-icon>add</mat-icon> Nueva</button>
     </div>
-    @if (!templates().length) { <p class="muted">Aún no hay plantillas. Crea la primera.</p> }
+    <label class="search-box"><mat-icon>search</mat-icon><input [ngModel]="search()" (ngModelChange)="search.set($event)" placeholder="Buscar plantillas" /></label>
+    <div class="list-filters"><div class="segmented"><button type="button" [class.active]="!showArchived()" (click)="setArchivedView(false)">Activas</button><button type="button" [class.active]="showArchived()" (click)="setArchivedView(true)">Archivadas</button></div><mat-form-field appearance="outline"><mat-label>Estado</mat-label><mat-select [ngModel]="statusFilter()" (ngModelChange)="statusFilter.set($event)"><mat-option value="ALL">Todos</mat-option><mat-option value="DRAFT">Borrador</mat-option><mat-option value="APPROVED">Aprobada</mat-option><mat-option value="PENDING_META_APPROVAL">Pendiente</mat-option><mat-option value="REJECTED">Rechazada</mat-option></mat-select></mat-form-field></div>
+    @if (!filteredTemplates().length) { <div class="empty-list"><mat-icon>drafts</mat-icon><span>No hay plantillas en esta vista.</span></div> }
     <div class="tpl-list">
-      @for (tpl of templates(); track tpl.id) {
+      @for (tpl of filteredTemplates(); track tpl.id) {
         <button mat-button type="button" class="tpl-row" [class.active]="draft().id === tpl.id" (click)="edit(tpl)">
           <strong>{{ tpl.name }}</strong>
           <span class="badge" [class]="statusClass(tpl.status)">{{ tpl.status }}</span>
@@ -18,6 +20,7 @@
 
   <!-- Editor -->
   <main class="panel surface-card editor">
+    <div class="editor-heading"><div><h2>{{ draft().id ? draft().name : 'Nueva plantilla' }}</h2><span class="badge" [class]="statusClass(draft().status)">{{ draft().status || 'DRAFT' }}</span></div><p class="muted">Configura el contenido y revisa el resultado antes de enviarlo a Meta.</p></div>
     <div class="grid2">
       <mat-form-field appearance="outline">
         <mat-label>Instancia</mat-label>
@@ -102,9 +105,15 @@
     </div>
 
     <div class="actions">
-      <button mat-stroked-button type="button" [disabled]="saving()" (click)="save()"><mat-icon>save</mat-icon> Guardar</button>
-      <button mat-stroked-button type="button" [disabled]="saving()" (click)="submit()"><mat-icon>send</mat-icon> Enviar a aprobación</button>
-      <button mat-raised-button color="primary" type="button" [disabled]="saving() || !draft().id" (click)="openSend()"><mat-icon>forward_to_inbox</mat-icon> Enviar como mensaje</button>
+      @if (draft().archivedAt) {
+        @if (draft().id) { <button mat-stroked-button type="button" (click)="setArchived(false)"><mat-icon>unarchive</mat-icon>Restaurar</button> }
+      } @else {
+        <button mat-stroked-button type="button" [disabled]="saving()" (click)="save()"><mat-icon>save</mat-icon> Guardar</button>
+        <button mat-stroked-button type="button" [disabled]="saving() || !draft().id" (click)="duplicate()"><mat-icon>content_copy</mat-icon> Duplicar</button>
+        <button mat-stroked-button type="button" [disabled]="saving()" (click)="submit()"><mat-icon>send</mat-icon> Enviar a aprobación</button>
+        <button mat-raised-button color="primary" type="button" [disabled]="saving() || !draft().id" (click)="openSend()"><mat-icon>forward_to_inbox</mat-icon> Enviar mensaje</button>
+        @if (draft().id) { <button mat-button color="warn" type="button" (click)="setArchived(true)"><mat-icon>archive</mat-icon>Archivar</button> }
+      }
     </div>
 
     @if (errorMessage()) { <p class="msg error">{{ errorMessage() }}</p> }

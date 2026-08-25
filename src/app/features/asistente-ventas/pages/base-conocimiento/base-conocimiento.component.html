@@ -84,8 +84,8 @@
         <section class="panel source-panel">
           <div class="section-heading">
             <div>
-              <p class="eyebrow">Fuentes clasificadas</p>
               <h2>Biblioteca</h2>
+              <p class="muted">Fuentes disponibles para las respuestas de IA.</p>
             </div>
             @if (knowledge().length) {
               <button mat-stroked-button color="warn" type="button" (click)="clearAll()">
@@ -94,6 +94,7 @@
               </button>
             }
           </div>
+          <div class="library-filters"><label class="kb-search"><mat-icon>search</mat-icon><input [ngModel]="search()" (ngModelChange)="search.set($event)" placeholder="Buscar en fuentes y contenido" /></label><mat-form-field appearance="outline"><mat-label>Tipo</mat-label><mat-select [ngModel]="typeFilter()" (ngModelChange)="typeFilter.set($event)"><mat-option value="ALL">Todos</mat-option>@for (type of sourceTypes(); track type.value) { <mat-option [value]="type.value">{{ type.label }}</mat-option> }</mat-select></mat-form-field><div class="archive-toggle"><button type="button" [class.active]="!showArchived()" (click)="showArchived.set(false)">Activas</button><button type="button" [class.active]="showArchived()" (click)="showArchived.set(true)">Archivadas</button></div></div>
 
           @if (sourceGroups().length) {
             <div class="source-groups">
@@ -104,8 +105,8 @@
                     <h3>{{ group.type.label }}</h3>
                     <p>{{ group.items.length }} fragmento(s) de {{ group.sourceNames.length }} fuente(s)</p>
                     <div class="source-tags">
-                      @for (name of group.sourceNames; track name) {
-                        <span>{{ name }}</span>
+                      @for (source of group.sourceNames; track source.raw) {
+                        <span>{{ source.name }}<button mat-icon-button type="button" [matTooltip]="showArchived() ? 'Restaurar fuente' : 'Archivar fuente'" (click)="setSourceArchived(source.raw, !showArchived())"><mat-icon>{{ showArchived() ? 'unarchive' : 'archive' }}</mat-icon></button></span>
                       }
                     </div>
                   </div>
@@ -130,7 +131,7 @@
           </div>
 
           <div class="chunks">
-            @for (item of knowledge(); track item.id) {
+            @for (item of filteredKnowledge(); track item.id) {
               <article class="chunk">
                 <div class="chunk-type"><mat-icon>{{ classifySource(item.source).icon }}</mat-icon></div>
                 <div class="chunk-body">
@@ -145,7 +146,7 @@
                 </button>
               </article>
             }
-            @if (!knowledge().length) {
+            @if (!filteredKnowledge().length) {
               <p class="muted pad">Cuando cargues contenido, aqui veras cada fragmento que la IA puede consultar.</p>
             }
           </div>

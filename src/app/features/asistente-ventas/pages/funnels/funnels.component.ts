@@ -5,6 +5,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { CdkDragDrop, DragDropModule, moveItemInArray } from '@angular/cdk/drag-drop';
 import type { EChartsOption } from 'echarts';
 import { NgxEchartsDirective, provideEchartsCore } from 'ngx-echarts';
 import { firstValueFrom } from 'rxjs';
@@ -20,7 +22,7 @@ interface FlowNodeRef {
 @Component({
   selector: 'app-funnels',
   standalone: true,
-  imports: [FormsModule, NgxEchartsDirective, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule],
+  imports: [FormsModule, NgxEchartsDirective, MatButtonModule, MatFormFieldModule, MatIconModule, MatInputModule, MatSelectModule, MatTooltipModule, DragDropModule],
   providers: [provideEchartsCore({ echarts: () => import('echarts') })],
   templateUrl: './funnels.component.html',
   styleUrl: './funnels.component.scss'
@@ -32,10 +34,12 @@ export class FunnelsComponent {
   protected readonly funnels = signal<FunnelDefinition[]>([]);
   protected readonly saving = signal(false);
   protected readonly message = signal<string | null>(null);
+  protected readonly configOpen = signal(false);
+  protected readonly showArchived = signal(false);
 
   protected flowId = '';
   protected funnelName = '';
-  private funnelId: string | null = null;
+  protected funnelId: string | null = null;
   protected readonly stages = signal<FunnelStage[]>([]);
   protected readonly flowNodes = signal<FlowNodeRef[]>([]);
   protected readonly metrics = signal<StageMetric[]>([]);
@@ -68,7 +72,7 @@ export class FunnelsComponent {
   protected onFlowChange(): void {
     const flow = this.flows().find((f) => f.id === this.flowId);
     this.flowNodes.set(this.parseNodes(flow?.graphJson));
-    const funnel = this.funnels().find((f) => f.flowId === this.flowId);
+    const funnel = this.funnels().find((f) => f.flowId === this.flowId && (f.archivedAt != null) === this.showArchived());
     if (funnel) {
       this.funnelId = funnel.id;
       this.funnelName = funnel.name;
@@ -89,6 +93,35 @@ export class FunnelsComponent {
     this.stages.update((s) => s.filter((_, i) => i !== index));
   }
 
+  protected reorderStages(event: CdkDragDrop<FunnelStage[]>): void {
+    this.stages.update((items) => {
+      const next = [...items];
+      moveItemInArray(next, event.previousIndex, event.currentIndex);
+      return next;
+    });
+  }
+
+  protected async duplicateFunnel(): Promise<void> {
+    if (!this.flowId) return;
+    this.funnelId = null;
+    this.funnelName = `${this.funnelName} copia`;
+    await this.saveFunnel();
+  }
+
+  protected async setArchived(archived: boolean): Promise<void> {
+    if (!this.funnelId) return;
+    if (archived && !window.confirm('¿Archivar este funnel? Sus métricas históricas se conservarán.')) return;
+    this.saving.set(true);
+    try {
+      await firstValueFrom(this.api.setFunnelArchived(this.funnelId, archived));
+      this.funnels.set((await firstValueFrom(this.api.listFunnels(true))) ?? []);
+      this.message.set(archived ? 'Funnel archivado.' : 'Funnel restaurado.');
+      this.onFlowChange();
+    } finally {
+      this.saving.set(false);
+    }
+  }
+
   protected async saveFunnel(): Promise<void> {
     if (!this.flowId) {
       this.message.set('Selecciona un flujo.');
@@ -106,7 +139,7 @@ export class FunnelsComponent {
         })
       );
       this.funnelId = saved.id;
-      this.funnels.set((await firstValueFrom(this.api.listFunnels())) ?? []);
+      this.funnels.set((await firstValueFrom(this.api.listFunnels(true))) ?? []);
       this.message.set('Embudo guardado.');
     } catch (error) {
       console.error(error);
@@ -122,7 +155,7 @@ export class FunnelsComponent {
       return;
     }
     try {
-      const result = await firstValueFrom(this.api.getFunnelMetrics(this.flowId));
+      const result = await firstValueFrom(this.api.getFunnelMetrics(this.flowId, this.funnelId || undefined));
       this.metrics.set(result?.stages ?? []);
     } catch {
       this.metrics.set([]);
@@ -132,7 +165,7 @@ export class FunnelsComponent {
   private async load(): Promise<void> {
     const [flows, funnels] = await Promise.all([
       firstValueFrom(this.api.listFlows()),
-      firstValueFrom(this.api.listFunnels())
+      firstValueFrom(this.api.listFunnels(true))
     ]);
     this.flows.set(flows ?? []);
     this.funnels.set(funnels ?? []);
