@@ -36,7 +36,10 @@ interface ProveedorConSaldo extends ProveedorCxpOpcion {
   template: `
     <section class="pago-form-page">
       <header class="surface-card page-header"><div><p class="eyebrow">Cuentas por pagar</p><h2>Nuevo pago a proveedor</h2><p>Aplica el pago a uno o varios documentos pendientes. Genera el asiento DEBE CxP / HABER banco.</p></div><a mat-button routerLink="/workspace/contabilidad/cuentas-por-pagar/pagos">Volver</a></header>
-      @if (error()) { <section class="error-box">{{ error() }}</section> }
+      @if (cargando()) {
+        <section class="surface-card loading-box" aria-live="polite"><mat-icon class="spin">progress_activity</mat-icon><div><strong>Cargando documentos seleccionados</strong><span>Verificamos saldos vigentes y datos del proveedor.</span></div></section>
+      } @else {
+      @if (error()) { <section class="error-box" role="alert"><span>{{ error() }}</span>@if (errorCarga()) { <button mat-button type="button" (click)="reintentarCarga()">Reintentar</button> }</section> }
       <section class="surface-card form-card">
         <div class="grid">
           <app-proveedor-cxp-autocomplete [proveedores]="proveedoresConSaldo()" [proveedorClave]="proveedorClave()" label="Proveedor" (proveedorSeleccionado)="seleccionarProveedor($event)" />
@@ -59,10 +62,11 @@ interface ProveedorConSaldo extends ProveedorCxpOpcion {
         <footer class="total-row"><span>Total a pagar</span><strong>{{ montoTotal() | currency:'USD':'symbol-narrow':'1.2-2' }}</strong></footer>
         <div class="actions-row"><span class="spacer"></span><button mat-button type="button" routerLink="/workspace/contabilidad/cuentas-por-pagar/pagos" [disabled]="guardando()">Cancelar</button><button mat-raised-button color="primary" type="button" (click)="registrar()" [disabled]="guardando() || !puedeGuardar()">Registrar pago</button></div>
       </section>
+      }
     </section>
   `,
   styles: [`
-    .pago-form-page { display: grid; gap: 1rem; }.page-header { padding: 1.25rem; display: flex; justify-content: space-between; align-items: end; gap: 1rem; flex-wrap: wrap; background: var(--tc-surface-container-lowest); }.page-header h2 { margin: 0; font-size: 1.45rem; }.page-header p { margin: .35rem 0 0; color: var(--muted-foreground); }.eyebrow { margin: 0 0 .35rem; text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; color: var(--primary); }.form-card { padding: 1.25rem; display: grid; gap: 1rem; background: var(--tc-surface-container-lowest); }.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }.full { width: 100%; }.contrapartida { display: grid; gap: .5rem; }.field-label { font-size: .82rem; color: var(--muted-foreground); }.docs-block { display: grid; gap: .5rem; padding-top: 1rem; border-top: 1px solid color-mix(in srgb, var(--outline) 45%, transparent); }.docs-block h3, .hint { margin: 0; }.hint { color: var(--muted-foreground); font-size: .85rem; }.table-scroll { overflow-x: auto; }table { width: 100%; border-collapse: collapse; min-width: 660px; }th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); font-size: .9rem; }th { font-size: .74rem; text-transform: uppercase; color: var(--muted-foreground); }.num { text-align: right; font-variant-numeric: tabular-nums; }.sub { display: block; margin-top: .12rem; font-size: .76rem; color: var(--muted-foreground); }.abono-field { width: 126px; margin: -.65rem 0; }.abono-field input { text-align: right; }.total-row { display: flex; justify-content: flex-end; gap: 1rem; align-items: baseline; padding-top: .5rem; }.total-row strong { font-size: 1.3rem; }.actions-row { display: flex; align-items: center; gap: .5rem; padding-top: 1rem; border-top: 1px solid color-mix(in srgb, var(--outline) 45%, transparent); }.spacer { flex: 1; }.error-box { padding: .8rem 1rem; border-radius: .5rem; background: color-mix(in srgb, #b3261e 12%, transparent); color: #b3261e; }
+    .pago-form-page { display: grid; gap: 1rem; }.page-header { padding: 1.25rem; display: flex; justify-content: space-between; align-items: end; gap: 1rem; flex-wrap: wrap; background: var(--tc-surface-container-lowest); }.page-header h2 { margin: 0; font-size: 1.45rem; }.page-header p { margin: .35rem 0 0; color: var(--muted-foreground); }.eyebrow { margin: 0 0 .35rem; text-transform: uppercase; letter-spacing: .12em; font-size: .75rem; color: var(--primary); }.form-card { padding: 1.25rem; display: grid; gap: 1rem; background: var(--tc-surface-container-lowest); }.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }.full { width: 100%; }.contrapartida { display: grid; gap: .5rem; }.field-label { font-size: .82rem; color: var(--muted-foreground); }.docs-block { display: grid; gap: .5rem; padding-top: 1rem; border-top: 1px solid color-mix(in srgb, var(--outline) 45%, transparent); }.docs-block h3, .hint { margin: 0; }.hint { color: var(--muted-foreground); font-size: .85rem; }.table-scroll { overflow-x: auto; }table { width: 100%; border-collapse: collapse; min-width: 660px; }th, td { text-align: left; padding: .5rem .6rem; border-bottom: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); font-size: .9rem; }th { font-size: .74rem; text-transform: uppercase; color: var(--muted-foreground); }.num { text-align: right; font-variant-numeric: tabular-nums; }.sub { display: block; margin-top: .12rem; font-size: .76rem; color: var(--muted-foreground); }.abono-field { width: 126px; margin: -.65rem 0; }.abono-field input { text-align: right; }.total-row { display: flex; justify-content: flex-end; gap: 1rem; align-items: baseline; padding-top: .5rem; }.total-row strong { font-size: 1.3rem; }.actions-row { display: flex; align-items: center; gap: .5rem; padding-top: 1rem; border-top: 1px solid color-mix(in srgb, var(--outline) 45%, transparent); }.spacer { flex: 1; }.error-box, .loading-box { padding: .8rem 1rem; display: flex; align-items: center; gap: .75rem; }.error-box { justify-content: space-between; border-radius: .5rem; background: color-mix(in srgb, #b3261e 12%, transparent); color: #b3261e; }.loading-box div { display: grid; gap: .2rem; }.loading-box span { color: var(--muted-foreground); font-size: .85rem; }.spin { animation: spin .9s linear infinite; }@keyframes spin { to { transform: rotate(360deg); } }
   `]
 })
 export class PagoProveedorFormComponent implements OnInit {
@@ -85,7 +89,9 @@ export class PagoProveedorFormComponent implements OnInit {
   protected readonly glosa = signal('');
   protected readonly abonos = signal<Record<string, number>>({});
   protected readonly guardando = signal(false);
+  protected readonly cargando = signal(true);
   protected readonly error = signal<string | null>(null);
+  protected readonly errorCarga = signal(false);
   private glosaEditada = false;
 
   protected readonly proveedoresConSaldo = computed<ProveedorConSaldo[]>(() => {
@@ -101,11 +107,52 @@ export class PagoProveedorFormComponent implements OnInit {
   protected readonly puedeGuardar = computed(() => this.montoTotal() > 0 && !!this.fecha() && !!this.cuentaOrigenId() && !!this.proveedorClave());
 
   async ngOnInit(): Promise<void> {
-    const [cuentas, documentos, config] = await Promise.all([this.planCuentasService.getCuentasOnce(), this.service.getDocumentosOnce(), this.service.getConfiguracionOnce()]);
-    this.cuentas.set(cuentas); this.documentos.set(documentos); this.cuentaOrigenId.set(config.cuentaCajaBancoEgresoDefaultId);
+    await this.cargarDatos();
+  }
+
+  protected async reintentarCarga(): Promise<void> {
+    await this.cargarDatos();
+  }
+
+  private async cargarDatos(): Promise<void> {
+    this.cargando.set(true);
+    this.error.set(null);
+    this.errorCarga.set(false);
+    try {
+      const [cuentas, documentos, config] = await Promise.all([
+        this.planCuentasService.getCuentasOnce(),
+        this.service.getDocumentosOnce(),
+        this.service.getConfiguracionOnce()
+      ]);
+      this.cuentas.set(cuentas);
+      this.documentos.set(documentos);
+      this.cuentaOrigenId.set(config.cuentaCajaBancoEgresoDefaultId);
+      this.restaurarSeleccionInicial();
+    } catch (error: unknown) {
+      this.errorCarga.set(true);
+      this.error.set(error instanceof Error
+        ? `No se pudo cargar el pago: ${error.message}`
+        : 'No se pudo cargar la información del pago. Reintenta la consulta.');
+    } finally {
+      this.cargando.set(false);
+    }
+  }
+
+  private restaurarSeleccionInicial(): void {
     const proveedor = this.route.snapshot.queryParamMap.get('proveedor');
     const ids = (this.route.snapshot.queryParamMap.get('documentos') ?? '').split(',').map((id) => id.trim()).filter(Boolean);
-    if (proveedor && this.proveedoresConSaldo().some((item) => item.clave === proveedor)) { this.proveedorClave.set(proveedor); this.precargarDocumentos(ids); } else if (ids.length) { this.error.set('Los documentos seleccionados ya no están disponibles para pago.'); }
+    const documentosSeleccionados = this.pendientes().filter((documento) => !!documento.id && ids.includes(documento.id));
+    const clavesSeleccionadas = new Set(documentosSeleccionados.map((documento) => this.claveProveedor(documento)));
+    const proveedorDisponible = proveedor && this.proveedoresConSaldo().some((item) => item.clave === proveedor)
+      ? proveedor
+      : clavesSeleccionadas.size === 1 ? Array.from(clavesSeleccionadas)[0] : null;
+
+    if (proveedorDisponible) {
+      this.proveedorClave.set(proveedorDisponible);
+      this.precargarDocumentos(ids);
+    } else if (ids.length) {
+      this.error.set('Los documentos seleccionados ya no están disponibles para pago. Vuelve a la cartera y actualiza la selección.');
+    }
   }
 
   protected seleccionarProveedor(proveedor: ProveedorCxpOpcion | null): void { this.proveedorClave.set(proveedor?.clave ?? null); this.abonos.set({}); this.actualizarGlosaSugerida(); }
@@ -140,7 +187,7 @@ export class PagoProveedorFormComponent implements OnInit {
     this.error.set(null); this.guardando.set(true);
     try {
       const proveedor = this.proveedoresConSaldo().find((item) => item.clave === this.proveedorClave());
-      const aplicaciones = this.documentosProveedor().map((documento) => ({ documentoId: documento.id!, documentoNumero: documento.numero ?? '', monto: this.round2(this.abonos()[documento.id!] ?? 0) })).filter((aplicacion) => aplicacion.monto > 0);
+      const aplicaciones = this.documentosProveedor().map((documento) => ({ documentoId: documento.id!, documentoNumero: referenciaDocumentoPago(documento), monto: this.round2(this.abonos()[documento.id!] ?? 0) })).filter((aplicacion) => aplicacion.monto > 0);
       const glosa = this.glosa().trim() || `Pago a ${proveedor?.nombre ?? 'proveedor'}`;
       const config = await this.service.getConfiguracionOnce();
       let lineas: AsientoContableLinea[] | undefined;
@@ -161,7 +208,9 @@ export class PagoProveedorFormComponent implements OnInit {
   private pendientes(): DocumentoPorPagar[] { return this.documentos().filter((documento) => documento.estadoPago !== 'ANULADA' && documento.estadoPago !== 'PAGADA' && Number(documento.saldoPendiente ?? 0) > 0); }
   private precargarDocumentos(ids: string[]): void { if (!ids.length) return; const abonos = precargarAbonosPago(this.documentosProveedor(), ids); if (Object.keys(abonos).length !== ids.length) this.error.set('Algunos documentos ya no están disponibles para pago.'); this.abonos.set(abonos); this.actualizarGlosaSugerida(); }
   private actualizarGlosaSugerida(): void { if (!this.glosaEditada) this.glosa.set(construirGlosaPago(this.documentosProveedor(), this.abonos(), this.referencia())); }
-  private claveProveedor(documento: DocumentoPorPagar): string { return documento.proveedorId ?? `sin:${documento.proveedorNombre}`; }
+  private claveProveedor(documento: DocumentoPorPagar): string {
+    return documento.proveedorClave ?? documento.proveedorId ?? `sin:${documento.proveedorNombre}`;
+  }
   private hoyIso(): string { const date = new Date(); return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`; }
   private round2(value: number): number { return Math.round((Number(value || 0) + Number.EPSILON) * 100) / 100; }
 }

@@ -12,7 +12,6 @@ import { CuentasPorPagarListComponent } from './pages/cuentas-por-pagar-list/cue
 import { CuentaPorPagarFormComponent } from './pages/cuenta-por-pagar-form/cuenta-por-pagar-form.component';
 import { PagosProveedorListComponent } from './pages/pagos-proveedor-list/pagos-proveedor-list.component';
 import { PagoProveedorFormComponent } from './pages/pago-proveedor-form/pago-proveedor-form.component';
-import { CxpAgingComponent } from './pages/cxp-aging/cxp-aging.component';
 import { ReportesContablesComponent } from './pages/reportes-contables/reportes-contables.component';
 import { FacturasCompraListComponent } from './pages/facturas-compra-list/facturas-compra-list.component';
 import { FacturaCompraFormComponent } from './pages/factura-compra-form/factura-compra-form.component';
@@ -177,11 +176,8 @@ export const CONTABILIDAD_ROUTES: Routes = [
       },
       {
         path: 'cuentas-por-pagar/antiguedad',
-        component: CxpAgingComponent,
-        data: {
-          module: 'Contabilidad',
-          page: 'Antiguedad de saldos'
-        }
+        pathMatch: 'full',
+        redirectTo: 'cuentas-por-pagar'
       },
       {
         path: 'cuentas-por-pagar',
@@ -385,7 +381,7 @@ export const CONTABILIDAD_ROUTES: Routes = [
             component: NominaAnticipoFormComponent,
             data: {
               module: 'Contabilidad',
-              page: 'Editar borrador de anticipo'
+              page: 'Detalle de anticipo de nomina'
             }
           },
           {

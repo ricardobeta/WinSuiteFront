@@ -1,7 +1,8 @@
 import { CommonModule } from '@angular/common';
-import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { A11yModule } from '@angular/cdk/a11y';
+import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router, RouterLink } from '@angular/router';
+import { ActivatedRoute, ParamMap, Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -10,19 +11,39 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { PageEvent } from '@angular/material/paginator';
+import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { skip } from 'rxjs';
 
 import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
-import { SuccessSnackbarComponent } from '../../../../shared/components/success-snackbar/success-snackbar.component';
-import { ProveedorCxpAutocompleteComponent, ProveedorCxpOpcion } from '../../components/proveedor-cxp-autocomplete/proveedor-cxp-autocomplete.component';
-import { DocumentoPorPagar, EstadoDocumentoPorPagar } from '../../models/cuentas-por-pagar.models';
-import { CuentasPorPagarService, DocumentosPorPagarPageCursor } from '../../services/cuentas-por-pagar.service';
-import { PeriodoContableService } from '../../services/periodo-contable.service';
+import {
+  DocumentoCarteraCxp,
+  DocumentoHistorialCxp,
+  ProveedorCarteraCxp,
+  ResumenCarteraCxp,
+  TrazabilidadDocumentoCxp,
+  TramoCartera
+} from '../../models/cuentas-por-pagar-consulta.models';
+import { EstadoDocumentoPorPagar, OrigenDocumentoPorPagar } from '../../models/cuentas-por-pagar.models';
+import { CuentasPorPagarConsultaApiService } from '../../services/cuentas-por-pagar-consulta-api.service';
+
+type VistaConsulta = 'cartera' | 'historial';
+
+const RESUMEN_VACIO: ResumenCarteraCxp = {
+  deudaBruta: 0,
+  creditos: 0,
+  saldoNeto: 0,
+  vencido: 0,
+  porVencer: 0,
+  proveedores: 0,
+  documentos: 0
+};
 
 @Component({
   selector: 'app-cuentas-por-pagar-list',
   standalone: true,
   imports: [
     CommonModule,
+    A11yModule,
     FormsModule,
     RouterLink,
     MatButtonModule,
@@ -32,217 +53,369 @@ import { PeriodoContableService } from '../../services/periodo-contable.service'
     MatInputModule,
     MatSelectModule,
     MatSnackBarModule,
-    DataTableFrameComponent,
-    ProveedorCxpAutocompleteComponent
+    DataTableFrameComponent
   ],
-  template: `
-    <section class="cxp-page">
-      <header class="surface-card page-header">
-        <div class="header-copy">
-          <p class="eyebrow">Contabilidad · Cuentas por pagar</p>
-          <h2>Documentos por pagar</h2>
-          <p>Consulta obligaciones por período, revisa sus saldos y prepara pagos por proveedor.</p>
-        </div>
-        <div class="header-actions">
-          <a mat-stroked-button routerLink="antiguedad"><mat-icon>schedule</mat-icon> Antigüedad</a>
-          <a mat-stroked-button routerLink="pagos"><mat-icon>payments</mat-icon> Pagos</a>
-          <a mat-raised-button color="primary" routerLink="nueva"><mat-icon>add</mat-icon> Nueva CxP manual</a>
-        </div>
-      </header>
-
-      <section class="kpi-row">
-        <article class="kpi-card metric-hero">
-          <p class="kpi-label">Saldo total por pagar</p>
-          <p class="kpi-value">{{ totalPendiente() | currency:'USD':'symbol-narrow':'1.2-2' }}</p>
-        </article>
-        <article class="kpi-card surface-card">
-          <p class="kpi-label">Documentos con saldo</p>
-          <p class="kpi-value">{{ conSaldo() }}</p>
-        </article>
-      </section>
-
-      <section class="surface-card filters-card">
-        <mat-form-field appearance="outline">
-          <mat-label>Período obligatorio</mat-label>
-          <input matInput type="month" [ngModel]="periodo()" (ngModelChange)="cambiarPeriodo($event)" />
-          <mat-hint>Selecciona el mes a consultar</mat-hint>
-        </mat-form-field>
-
-        <app-proveedor-cxp-autocomplete
-          [proveedores]="proveedores()"
-          [proveedorClave]="filtroProveedor()"
-          label="Proveedor"
-          (proveedorSeleccionado)="cambiarProveedor($event)"
-        />
-
-        <mat-form-field appearance="outline">
-          <mat-label>Estado</mat-label>
-          <mat-select [ngModel]="filtroEstado()" (ngModelChange)="cambiarEstado($event)">
-            <mat-option value="TODOS">Todos</mat-option>
-            <mat-option value="PENDIENTE">Pendiente</mat-option>
-            <mat-option value="PARCIAL">Parcial</mat-option>
-            <mat-option value="PAGADA">Pagada</mat-option>
-            <mat-option value="ANULADA">Anulada</mat-option>
-          </mat-select>
-        </mat-form-field>
-
-        <button mat-raised-button color="primary" type="button" class="search-button" (click)="buscar()" [disabled]="!periodo() || cargando()">
-          <mat-icon>search</mat-icon>
-          Buscar
-        </button>
-      </section>
-
-      <section class="surface-card table-card">
-        @if (!periodo()) {
-          <div class="empty-state"><mat-icon>date_range</mat-icon><h3>Selecciona un período</h3><p>La consulta se ejecutará cuando elijas un mes y presiones Buscar.</p></div>
-        } @else if (!consultaRealizada()) {
-          <div class="empty-state"><mat-icon>manage_search</mat-icon><h3>Consulta pendiente</h3><p>Presiona Buscar para cargar hasta 50 documentos del período.</p></div>
-        } @else if (cargando()) {
-          <div class="empty-state"><mat-icon>hourglass_empty</mat-icon><h3>Cargando documentos</h3></div>
-        } @else if (documentosFiltrados().length === 0) {
-          <div class="empty-state"><mat-icon>receipt_long</mat-icon><h3>Sin documentos por pagar</h3><p>No existen documentos con los filtros seleccionados.</p></div>
-        } @else {
-          <app-data-table-frame
-            tableModule="contabilidad"
-            tableId="cuentas-por-pagar"
-            [showSearch]="false"
-            [total]="totalPaginador()"
-            [pageIndex]="pageIndex()"
-            [pageSize]="pageSize()"
-            [pageSizeOptions]="[50, 100]"
-            (pageChange)="actualizarPagina($event)"
-          >
-            <table>
-              <thead>
-                <tr>
-                  <th>Número</th><th>Proveedor</th><th>Origen</th><th>Emisión</th><th>Vence</th>
-                  <th class="num">Monto</th><th class="num">Saldo</th><th>Estado</th><th></th>
-                </tr>
-              </thead>
-              <tbody>
-                @for (documento of documentosFiltrados(); track documento.id) {
-                  <tr [class.vencido]="estaVencido(documento)">
-                    <td>{{ documento.numero }}</td>
-                    <td>
-                      <button class="provider-link" type="button" (click)="alternarProveedor(documento)" [attr.aria-expanded]="proveedorExpandido() === claveProveedor(documento)">
-                        <mat-icon>{{ proveedorExpandido() === claveProveedor(documento) ? 'expand_less' : 'expand_more' }}</mat-icon>
-                        <span><strong>{{ documento.proveedorNombre }}</strong>@if (documento.proveedorIdentificacion) { <small>{{ documento.proveedorIdentificacion }}</small> }</span>
-                      </button>
-                    </td>
-                    <td><span class="chip">{{ etiquetaOrigen(documento.origenTipo) }}</span></td>
-                    <td>{{ documento.fechaEmision | date:'dd/MM/yyyy' }}</td>
-                    <td>{{ documento.fechaVencimiento | date:'dd/MM/yyyy' }}</td>
-                    <td class="num">{{ documento.montoOriginal | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
-                    <td class="num">{{ documento.saldoPendiente | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
-                    <td><span class="estado" [attr.data-estado]="documento.estadoPago">{{ documento.estadoPago }}</span></td>
-                    <td class="acciones">
-                      @if (documento.origenTipo === 'MANUAL' && documento.estadoPago !== 'ANULADA' && documento.saldoPendiente === documento.montoOriginal) {
-                        <button mat-icon-button color="warn" type="button" aria-label="Anular" (click)="anular(documento)"><mat-icon>block</mat-icon></button>
-                      }
-                    </td>
-                  </tr>
-                  @if (documentoExpandidoId() === documento.id) {
-                    <tr class="expanded-row"><td colspan="9">
-                      @if (cargandoPendientes()) {
-                        <p class="expanded-hint">Cargando cuentas pendientes del proveedor…</p>
-                      } @else if (documentosPendientesProveedor().length === 0) {
-                        <p class="expanded-hint">Este proveedor no tiene cuentas pendientes.</p>
-                      } @else {
-                        <section class="pending-detail">
-                          <div><h3>Cuentas pendientes de {{ documento.proveedorNombre }}</h3><p>Selecciona los documentos que deseas pagar.</p></div>
-                          <div class="pending-table-wrap"><table class="pending-table"><thead><tr><th></th><th>Factura / referencia</th><th>Emisión</th><th>Vence</th><th class="num">Saldo</th></tr></thead><tbody>
-                            @for (pendiente of documentosPendientesProveedor(); track pendiente.id) {
-                              <tr><td><mat-checkbox [checked]="documentosSeleccionados().has(pendiente.id!)" (change)="seleccionarDocumento(pendiente.id!, $event.checked)" [aria-label]="'Seleccionar ' + pendiente.numero"></mat-checkbox></td><td><strong>{{ referenciaDocumento(pendiente) }}</strong><span class="sub">{{ pendiente.numero }} · {{ pendiente.glosa }}</span></td><td>{{ pendiente.fechaEmision | date:'dd/MM/yyyy' }}</td><td>{{ pendiente.fechaVencimiento | date:'dd/MM/yyyy' }}</td><td class="num">{{ pendiente.saldoPendiente | currency:'USD':'symbol-narrow':'1.2-2' }}</td></tr>
-                            }
-                          </tbody></table></div>
-                          <div class="pending-actions"><span>{{ documentosSeleccionados().size }} seleccionados</span><button mat-raised-button color="primary" type="button" (click)="procesarPago()" [disabled]="documentosSeleccionados().size === 0"><mat-icon>payments</mat-icon> Procesar pago</button></div>
-                        </section>
-                      }
-                    </td></tr>
-                  }
-                }
-              </tbody>
-            </table>
-          </app-data-table-frame>
-        }
-      </section>
-    </section>
-  `,
-  styles: [`
-    .cxp-page { display: grid; gap: 1rem; }.page-header { padding: 1.25rem 1.5rem; display: flex; justify-content: space-between; gap: 1rem; align-items: end; flex-wrap: wrap; background: var(--tc-surface-container-lowest); }.eyebrow { margin: 0 0 .35rem; text-transform: uppercase; letter-spacing: .12em; font-size: .72rem; color: var(--primary); }.page-header h2 { margin: 0; font-size: 1.6rem; }.header-copy > p:not(.eyebrow) { margin: .4rem 0 0; color: var(--muted-foreground); }.header-actions { display: flex; gap: .6rem; flex-wrap: wrap; }.kpi-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }.kpi-card { padding: 1.1rem 1.25rem; border-radius: 1rem; display: grid; gap: .35rem; }.kpi-label { margin: 0; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted-foreground); }.kpi-value { margin: 0; font-size: 1.5rem; font-weight: 700; }.metric-hero { color: var(--tc-on-primary, #fff); background: linear-gradient(135deg, var(--primary), color-mix(in srgb, var(--primary) 72%, #0a1f1b)); box-shadow: 0 12px 30px color-mix(in srgb, var(--primary) 30%, transparent); }.metric-hero .kpi-label { color: color-mix(in srgb, #fff 82%, transparent); }.filters-card { padding: 1rem 1.25rem; display: grid; grid-template-columns: minmax(180px, 220px) minmax(240px, 1fr) minmax(160px, 200px) auto; gap: .75rem; align-items: start; }.search-button { min-height: 56px; }.table-card { padding: .5rem; overflow: auto; }table { width: 100%; border-collapse: collapse; min-width: 900px; }th, td { text-align: left; padding: .6rem .75rem; border-bottom: 1px solid color-mix(in srgb, var(--outline) 35%, transparent); font-size: .9rem; }th { font-size: .75rem; text-transform: uppercase; color: var(--muted-foreground); }.num { text-align: right; font-variant-numeric: tabular-nums; }.provider-link { display: flex; gap: .3rem; align-items: start; padding: 0; border: 0; background: transparent; color: inherit; text-align: left; cursor: pointer; }.provider-link:hover strong { color: var(--primary); text-decoration: underline; }.provider-link mat-icon { font-size: 1.1rem; width: 1.1rem; height: 1.1rem; color: var(--primary); }.provider-link span, .provider-link small, .sub { display: block; }.provider-link small, .sub { margin-top: .12rem; font-size: .78rem; color: var(--muted-foreground); }.chip, .estado { font-size: .72rem; padding: .15rem .5rem; border-radius: 999px; }.chip { background: color-mix(in srgb, var(--primary) 15%, transparent); }.estado[data-estado='PENDIENTE'] { background: var(--tc-warning-container); color: var(--tc-on-warning-container); }.estado[data-estado='PARCIAL'] { background: var(--tc-info-container); color: var(--tc-on-info-container); }.estado[data-estado='PAGADA'] { background: var(--tc-success-container); color: var(--tc-on-success-container); }.estado[data-estado='ANULADA'] { background: color-mix(in srgb, var(--outline) 35%, transparent); text-decoration: line-through; }tr.vencido td:nth-child(5) { color: var(--tc-error); font-weight: 600; }.acciones { text-align: right; }.expanded-row td { padding: 0; background: color-mix(in srgb, var(--primary) 4%, var(--tc-surface-container-lowest)); }.pending-detail { display: grid; gap: .75rem; padding: 1rem 1.25rem; }.pending-detail h3, .pending-detail p { margin: 0; }.pending-detail p, .expanded-hint { color: var(--muted-foreground); }.pending-table-wrap { overflow: auto; }.pending-table { min-width: 700px; }.pending-table th, .pending-table td { padding: .45rem .55rem; }.pending-actions { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }.expanded-hint { margin: 0; padding: 1rem 1.25rem; }.empty-state { display: grid; justify-items: center; gap: .5rem; padding: 3rem 1rem; text-align: center; }.empty-state mat-icon { font-size: 3rem; width: 3rem; height: 3rem; color: color-mix(in srgb, var(--primary) 55%, transparent); }.empty-state h3, .empty-state p { margin: 0; }.empty-state p { color: var(--muted-foreground); }@media (max-width: 900px) { .filters-card { grid-template-columns: 1fr; }.kpi-row { grid-template-columns: 1fr; } }
-  `]
+  templateUrl: './cuentas-por-pagar-list.component.html',
+  styleUrls: ['./cuentas-por-pagar-list.component.scss', './cuentas-por-pagar-list.trace.scss']
 })
 export class CuentasPorPagarListComponent implements OnInit {
-  private readonly service = inject(CuentasPorPagarService);
-  private readonly periodoService = inject(PeriodoContableService);
-  private readonly snackBar = inject(MatSnackBar);
+  private readonly api = inject(CuentasPorPagarConsultaApiService);
   private readonly router = inject(Router);
+  private readonly route = inject(ActivatedRoute);
+  private readonly snackBar = inject(MatSnackBar);
+  private readonly destroyRef = inject(DestroyRef);
+  private ignorarSiguienteUrl = false;
+  private carteraRequest = 0;
+  private detalleRequest = 0;
+  private historialRequest = 0;
+  private trazabilidadRequest = 0;
 
-  protected readonly documentos = signal<DocumentoPorPagar[]>([]);
-  protected readonly periodo = signal(this.periodoService.getPeriodoInicial('cuentas-por-pagar'));
-  protected readonly filtroProveedor = signal<string | null>(null);
-  private readonly opcionProveedorSeleccionada = signal<ProveedorCxpOpcion | null>(null);
-  protected readonly filtroEstado = signal<'TODOS' | EstadoDocumentoPorPagar>('TODOS');
-  protected readonly pageIndex = signal(0);
-  protected readonly pageSize = signal(50);
+  protected readonly hoy = this.fechaIsoGuayaquil(new Date());
+  protected readonly vista = signal<VistaConsulta>('cartera');
   protected readonly cargando = signal(false);
-  protected readonly consultaRealizada = signal(false);
-  protected readonly hasMore = signal(false);
+  protected readonly error = signal<string | null>(null);
+
+  protected readonly fechaCorte = signal(this.hoy);
+  protected readonly tramo = signal<TramoCartera>('TODOS');
+  protected readonly busquedaCartera = signal('');
+  protected readonly resumen = signal<ResumenCarteraCxp>(RESUMEN_VACIO);
+  protected readonly proveedores = signal<ProveedorCarteraCxp[]>([]);
+  protected readonly carteraPage = signal(0);
+  protected readonly carteraSize = signal(25);
+  protected readonly carteraTotal = signal(0);
+
   protected readonly proveedorExpandido = signal<string | null>(null);
-  protected readonly documentoExpandidoId = signal<string | null>(null);
-  protected readonly cargandoPendientes = signal(false);
-  protected readonly documentosPendientesProveedor = signal<DocumentoPorPagar[]>([]);
-  protected readonly documentosSeleccionados = signal<Set<string>>(new Set());
-  private readonly cursors = new Map<number, DocumentosPorPagarPageCursor | null>([[0, null]]);
+  protected readonly cargandoDetalle = signal(false);
+  protected readonly documentosProveedor = signal<DocumentoCarteraCxp[]>([]);
+  protected readonly detallePage = signal(0);
+  protected readonly detalleSize = signal(50);
+  protected readonly detalleTotal = signal(0);
+  protected readonly seleccionados = signal<Set<string>>(new Set());
 
-  protected readonly proveedores = computed<ProveedorCxpOpcion[]>(() => {
-    const opciones = new Map<string, ProveedorCxpOpcion>();
-    for (const documento of this.documentos()) {
-      const clave = this.claveProveedor(documento);
-      if (!opciones.has(clave)) {
-        opciones.set(clave, { clave, nombre: documento.proveedorNombre, identificacion: documento.proveedorIdentificacion });
+  protected readonly fechaDesde = signal(this.inicioMes());
+  protected readonly fechaHasta = signal(this.hoy);
+  protected readonly estadoHistorial = signal<'TODOS' | EstadoDocumentoPorPagar>('TODOS');
+  protected readonly origenHistorial = signal<'TODOS' | OrigenDocumentoPorPagar>('TODOS');
+  protected readonly busquedaHistorial = signal('');
+  protected readonly historial = signal<DocumentoHistorialCxp[]>([]);
+  protected readonly historialPage = signal(0);
+  protected readonly historialSize = signal(25);
+  protected readonly historialTotal = signal(0);
+
+  protected readonly cargandoTrazabilidad = signal(false);
+  protected readonly trazabilidad = signal<TrazabilidadDocumentoCxp | null>(null);
+
+  protected readonly corteActual = computed(() => this.fechaCorte() === this.hoy);
+  protected readonly puedePrepararPago = computed(() => this.corteActual() && this.seleccionados().size > 0);
+  protected readonly proveedorSeleccionado = computed(() =>
+    this.proveedores().find((proveedor) => proveedor.proveedorClave === this.proveedorExpandido()) ?? null
+  );
+
+  ngOnInit(): void {
+    this.hidratarDesdeUrl();
+    this.route.queryParamMap.pipe(skip(1), takeUntilDestroyed(this.destroyRef)).subscribe((params) => {
+      if (this.ignorarSiguienteUrl) {
+        this.ignorarSiguienteUrl = false;
+        return;
       }
-    }
-    const seleccionada = this.opcionProveedorSeleccionada();
-    if (seleccionada && !opciones.has(seleccionada.clave)) {
-      opciones.set(seleccionada.clave, seleccionada);
-    }
-    return Array.from(opciones.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
-  });
-  protected readonly documentosFiltrados = computed(() => this.documentos().filter((documento) =>
-    (!this.filtroProveedor() || this.claveProveedor(documento) === this.filtroProveedor())
-    && (this.filtroEstado() === 'TODOS' || documento.estadoPago === this.filtroEstado())
-  ));
-  protected readonly totalPaginador = computed(() => this.pageIndex() * this.pageSize() + this.documentos().length + (this.hasMore() ? 1 : 0));
-  protected readonly totalPendiente = computed(() => this.documentosFiltrados().filter((documento) => documento.estadoPago !== 'ANULADA').reduce((suma, documento) => suma + Number(documento.saldoPendiente ?? 0), 0));
-  protected readonly conSaldo = computed(() => this.documentosFiltrados().filter((documento) => documento.estadoPago !== 'ANULADA' && Number(documento.saldoPendiente ?? 0) > 0).length);
-
-  ngOnInit(): void { if (this.periodo()) this.buscar(); }
-
-  protected cambiarPeriodo(periodo: string): void { this.periodo.set(periodo ?? ''); this.periodoService.setPeriodo('cuentas-por-pagar', periodo ?? ''); this.reiniciarConsulta(); }
-  protected cambiarProveedor(proveedor: ProveedorCxpOpcion | null): void { this.opcionProveedorSeleccionada.set(proveedor); this.filtroProveedor.set(proveedor?.clave ?? null); this.pageIndex.set(0); if (this.consultaRealizada()) this.buscar(); }
-  protected cambiarEstado(estado: 'TODOS' | EstadoDocumentoPorPagar): void { this.filtroEstado.set(estado); this.pageIndex.set(0); if (this.consultaRealizada()) this.buscar(); }
-  protected buscar(): void { if (this.periodo()) { this.reiniciarConsulta(); void this.cargarPagina(0); } }
-  protected actualizarPagina(event: PageEvent): void { if (event.pageSize !== this.pageSize()) { this.pageSize.set(event.pageSize); this.buscar(); return; } if (this.cursors.has(event.pageIndex)) { void this.cargarPagina(event.pageIndex); } }
-
-  protected async alternarProveedor(documento: DocumentoPorPagar): Promise<void> {
-    const clave = this.claveProveedor(documento);
-    if (this.proveedorExpandido() === clave) { this.proveedorExpandido.set(null); this.documentoExpandidoId.set(null); return; }
-    this.proveedorExpandido.set(clave); this.documentoExpandidoId.set(documento.id ?? null); this.documentosSeleccionados.set(new Set()); this.cargandoPendientes.set(true);
-    try { this.documentosPendientesProveedor.set(await this.service.getDocumentosPendientesProveedor(clave)); }
-    catch { this.documentosPendientesProveedor.set([]); this.snackBar.open('No se pudieron cargar las cuentas pendientes.', 'Cerrar', { duration: 4000 }); }
-    finally { this.cargandoPendientes.set(false); }
+      this.hidratarDesdeUrl(params);
+      this.cerrarDetalle();
+      this.cerrarTrazabilidad();
+      void this.cargarVista();
+    });
+    void this.cargarVista();
   }
 
-  protected seleccionarDocumento(id: string, seleccionado: boolean): void { this.documentosSeleccionados.update((actual) => { const siguiente = new Set(actual); seleccionado ? siguiente.add(id) : siguiente.delete(id); return siguiente; }); }
-  protected procesarPago(): void { const documentos = Array.from(this.documentosSeleccionados()); const proveedor = this.proveedorExpandido(); if (!proveedor || documentos.length === 0) return; void this.router.navigate(['/workspace/contabilidad/cuentas-por-pagar/pagos/nuevo'], { queryParams: { proveedor, documentos: documentos.join(',') } }); }
-  protected estaVencido(documento: DocumentoPorPagar): boolean { return documento.estadoPago !== 'PAGADA' && documento.estadoPago !== 'ANULADA' && Number(documento.saldoPendiente ?? 0) > 0 && documento.fechaVencimiento < Date.now(); }
-  protected referenciaDocumento(documento: DocumentoPorPagar): string { return documento.origenNumero || documento.numero || 'Documento sin referencia'; }
-  protected claveProveedor(documento: DocumentoPorPagar): string { return documento.proveedorId ?? `sin:${documento.proveedorNombre}`; }
-  protected etiquetaOrigen(origen: DocumentoPorPagar['origenTipo']): string { return { FACTURA_COMPRA: 'Factura', MANUAL: 'Manual', RETENCION: 'Retención', NOMINA: 'Nómina' }[origen]; }
+  protected cambiarVista(vista: VistaConsulta): void {
+    if (this.vista() === vista) return;
+    this.vista.set(vista);
+    this.error.set(null);
+    this.cerrarDetalle();
+    this.cerrarTrazabilidad();
+    void this.actualizarUrl();
+    void this.cargarVista();
+  }
 
-  protected async anular(documento: DocumentoPorPagar): Promise<void> { if (!documento.id) return; try { await this.service.anularDocumento(documento.id); this.documentos.update((items) => items.map((item) => item.id === documento.id ? { ...item, estadoPago: 'ANULADA', saldoPendiente: 0 } : item)); this.snackBar.openFromComponent(SuccessSnackbarComponent, { data: { message: 'Documento anulado.', icon: 'block' }, duration: 2600, horizontalPosition: 'end', verticalPosition: 'top' }); } catch (error: unknown) { this.snackBar.open(error instanceof Error ? error.message : 'No se pudo anular.', 'Cerrar', { duration: 4000 }); } }
+  protected buscarCartera(): void {
+    this.carteraPage.set(0);
+    this.cerrarDetalle();
+    void this.actualizarUrl();
+    void this.cargarCartera();
+  }
 
-  private async cargarPagina(pageIndex: number): Promise<void> { const periodo = this.periodo(); if (!periodo || !this.cursors.has(pageIndex)) return; this.cargando.set(true); this.consultaRealizada.set(true); try { const page = await this.service.getDocumentosPorPagarPage(periodo, this.pageSize(), this.cursors.get(pageIndex) ?? null); this.documentos.set(page.items); this.pageIndex.set(pageIndex); this.hasMore.set(page.hasMore); if (page.nextCursor) this.cursors.set(pageIndex + 1, page.nextCursor); else this.cursors.delete(pageIndex + 1); } catch (error) { this.documentos.set([]); this.hasMore.set(false); this.snackBar.open(error instanceof Error ? error.message : 'No se pudieron cargar los documentos.', 'Cerrar', { duration: 4000 }); } finally { this.cargando.set(false); } }
-  private reiniciarConsulta(): void { this.documentos.set([]); this.pageIndex.set(0); this.hasMore.set(false); this.consultaRealizada.set(false); this.proveedorExpandido.set(null); this.documentoExpandidoId.set(null); this.documentosPendientesProveedor.set([]); this.cursors.clear(); this.cursors.set(0, null); }
+  protected buscarHistorial(): void {
+    this.historialPage.set(0);
+    this.cerrarTrazabilidad();
+    void this.actualizarUrl();
+    void this.cargarHistorial();
+  }
+
+  protected actualizarPaginaCartera(event: PageEvent): void {
+    this.carteraPage.set(event.pageIndex);
+    this.carteraSize.set(event.pageSize);
+    this.cerrarDetalle();
+    void this.actualizarUrl();
+    void this.cargarCartera();
+  }
+
+  protected actualizarPaginaHistorial(event: PageEvent): void {
+    this.historialPage.set(event.pageIndex);
+    this.historialSize.set(event.pageSize);
+    void this.actualizarUrl();
+    void this.cargarHistorial();
+  }
+
+  protected async alternarProveedor(proveedor: ProveedorCarteraCxp): Promise<void> {
+    if (this.proveedorExpandido() === proveedor.proveedorClave) {
+      this.cerrarDetalle();
+      return;
+    }
+    this.proveedorExpandido.set(proveedor.proveedorClave);
+    this.detallePage.set(0);
+    this.documentosProveedor.set([]);
+    this.seleccionados.set(new Set());
+    await this.cargarDetalleProveedor();
+  }
+
+  protected cambiarPaginaDetalle(delta: number): void {
+    const siguiente = this.detallePage() + delta;
+    const paginas = Math.ceil(this.detalleTotal() / this.detalleSize());
+    if (siguiente < 0 || siguiente >= paginas) return;
+    this.detallePage.set(siguiente);
+    void this.cargarDetalleProveedor();
+  }
+
+  protected seleccionarDocumento(documento: DocumentoCarteraCxp, checked: boolean): void {
+    if (!documento.elegiblePago) return;
+    this.seleccionados.update((actual) => {
+      const siguiente = new Set(actual);
+      checked ? siguiente.add(documento.id) : siguiente.delete(documento.id);
+      return siguiente;
+    });
+  }
+
+  protected prepararPago(): void {
+    const proveedor = this.proveedorExpandido();
+    const documentos = Array.from(this.seleccionados());
+    if (!proveedor || documentos.length === 0 || !this.corteActual()) return;
+    void this.router.navigate(['/workspace/contabilidad/cuentas-por-pagar/pagos/nuevo'], {
+      queryParams: { proveedor, documentos: documentos.join(',') }
+    });
+  }
+
+  protected async abrirTrazabilidad(documento: DocumentoHistorialCxp | DocumentoCarteraCxp): Promise<void> {
+    const request = ++this.trazabilidadRequest;
+    this.trazabilidad.set(null);
+    this.cargandoTrazabilidad.set(true);
+    try {
+      const resultado = await this.api.consultarTrazabilidad(documento.id);
+      if (request !== this.trazabilidadRequest) return;
+      this.trazabilidad.set(resultado);
+    } catch (error: unknown) {
+      if (request !== this.trazabilidadRequest) return;
+      this.snackBar.open(this.mensajeError(error, 'No se pudo cargar la trazabilidad del documento.'), 'Cerrar', { duration: 4500 });
+    } finally {
+      if (request === this.trazabilidadRequest) this.cargandoTrazabilidad.set(false);
+    }
+  }
+
+  protected cerrarTrazabilidad(): void {
+    this.trazabilidadRequest++;
+    this.trazabilidad.set(null);
+    this.cargandoTrazabilidad.set(false);
+  }
+
+  protected etiquetaOrigen(origen: OrigenDocumentoPorPagar): string {
+    return { FACTURA_COMPRA: 'Factura', MANUAL: 'Manual', RETENCION: 'Retención', NOMINA: 'Nómina' }[origen];
+  }
+
+  protected etiquetaEstado(estado: EstadoDocumentoPorPagar): string {
+    return { PENDIENTE: 'Pendiente', PARCIAL: 'Parcial', PAGADA: 'Pagada', ANULADA: 'Anulada' }[estado];
+  }
+
+  protected estadoCambio(documento: DocumentoCarteraCxp): string | null {
+    if (documento.estadoAlCorte === documento.estadoActual) return null;
+    return `${this.etiquetaEstado(documento.estadoAlCorte)} al corte · ${this.etiquetaEstado(documento.estadoActual)} actualmente`;
+  }
+
+  protected formatearFecha(fecha: string | null | undefined): string {
+    if (!fecha) return '—';
+    const [anio, mes, dia] = fecha.split('-');
+    return anio && mes && dia ? `${dia}/${mes}/${anio}` : fecha;
+  }
+
+  protected detalleAnulacion(documento: DocumentoHistorialCxp): string | null {
+    if (documento.estadoActual !== 'ANULADA') return null;
+    if (documento.motivoAnulacion === 'ASIENTO_REVERSADO') {
+      return 'Por reverso del asiento · no suma en cartera';
+    }
+    if (documento.motivoAnulacion === 'COMPRA_ANULADA_SIN_ASIENTO') {
+      return 'Compra anulada sin asiento · no suma en cartera';
+    }
+    return 'No suma en cartera';
+  }
+
+  protected rutaDocumentoOrigen(trace: TrazabilidadDocumentoCxp): string[] | null {
+    if (!trace.origen?.id) return null;
+    return trace.documento.origenTipo === 'FACTURA_COMPRA'
+      ? ['/workspace/contabilidad/compras', trace.origen.id, 'editar']
+      : null;
+  }
+
+  private async cargarVista(): Promise<void> {
+    if (this.vista() === 'cartera') await this.cargarCartera();
+    else await this.cargarHistorial();
+  }
+
+  private async cargarCartera(): Promise<void> {
+    if (!this.fechaCorte()) return;
+    const request = ++this.carteraRequest;
+    this.cargando.set(true);
+    this.error.set(null);
+    try {
+      const resultado = await this.api.consultarCartera({
+        fechaCorte: this.fechaCorte(),
+        tramo: this.tramo(),
+        busqueda: this.busquedaCartera(),
+        pagina: this.carteraPage(),
+        limite: this.carteraSize()
+      });
+      if (request !== this.carteraRequest || this.vista() !== 'cartera') return;
+      this.resumen.set(resultado.resumen);
+      this.proveedores.set(resultado.items);
+      this.carteraTotal.set(resultado.total);
+    } catch (error: unknown) {
+      if (request !== this.carteraRequest || this.vista() !== 'cartera') return;
+      this.resumen.set(RESUMEN_VACIO);
+      this.proveedores.set([]);
+      this.carteraTotal.set(0);
+      this.error.set(this.mensajeError(error, 'No se pudo reconstruir la cartera. Revisa los filtros e inténtalo nuevamente.'));
+    } finally {
+      if (request === this.carteraRequest && this.vista() === 'cartera') this.cargando.set(false);
+    }
+  }
+
+  private async cargarDetalleProveedor(): Promise<void> {
+    const proveedorClave = this.proveedorExpandido();
+    if (!proveedorClave) return;
+    const request = ++this.detalleRequest;
+    this.cargandoDetalle.set(true);
+    try {
+      const resultado = await this.api.consultarProveedor({
+        fechaCorte: this.fechaCorte(), proveedorClave, pagina: this.detallePage(), limite: this.detalleSize()
+      });
+      if (request !== this.detalleRequest || this.proveedorExpandido() !== proveedorClave) return;
+      this.documentosProveedor.set(resultado.items);
+      this.detalleTotal.set(resultado.total);
+    } catch (error: unknown) {
+      if (request !== this.detalleRequest || this.proveedorExpandido() !== proveedorClave) return;
+      this.documentosProveedor.set([]);
+      this.detalleTotal.set(0);
+      this.snackBar.open(this.mensajeError(error, 'No se pudo cargar la composición del saldo.'), 'Cerrar', { duration: 4500 });
+    } finally {
+      if (request === this.detalleRequest) this.cargandoDetalle.set(false);
+    }
+  }
+
+  private async cargarHistorial(): Promise<void> {
+    if (!this.fechaDesde() || !this.fechaHasta()) return;
+    const request = ++this.historialRequest;
+    this.cargando.set(true);
+    this.error.set(null);
+    try {
+      const resultado = await this.api.consultarHistorial({
+        fechaDesde: this.fechaDesde(), fechaHasta: this.fechaHasta(), estado: this.estadoHistorial(),
+        origen: this.origenHistorial(), busqueda: this.busquedaHistorial(), pagina: this.historialPage(),
+        limite: this.historialSize()
+      });
+      if (request !== this.historialRequest || this.vista() !== 'historial') return;
+      this.historial.set(resultado.items);
+      this.historialTotal.set(resultado.total);
+    } catch (error: unknown) {
+      if (request !== this.historialRequest || this.vista() !== 'historial') return;
+      this.historial.set([]);
+      this.historialTotal.set(0);
+      this.error.set(this.mensajeError(error, 'No se pudo consultar el historial. Revisa el rango de fechas.'));
+    } finally {
+      if (request === this.historialRequest && this.vista() === 'historial') this.cargando.set(false);
+    }
+  }
+
+  private cerrarDetalle(): void {
+    this.detalleRequest++;
+    this.proveedorExpandido.set(null);
+    this.documentosProveedor.set([]);
+    this.detalleTotal.set(0);
+    this.detallePage.set(0);
+    this.seleccionados.set(new Set());
+  }
+
+  private hidratarDesdeUrl(params: ParamMap = this.route.snapshot.queryParamMap): void {
+    this.vista.set(params.get('vista') === 'historial' ? 'historial' : 'cartera');
+    this.fechaCorte.set(params.get('corte') || this.hoy);
+    this.tramo.set(this.esTramo(params.get('tramo')) ? params.get('tramo') as TramoCartera : 'TODOS');
+    this.busquedaCartera.set(params.get('q') || '');
+    this.fechaDesde.set(params.get('desde') || this.inicioMes());
+    this.fechaHasta.set(params.get('hasta') || this.hoy);
+    this.estadoHistorial.set(this.esEstado(params.get('estado')) ? params.get('estado') as 'TODOS' | EstadoDocumentoPorPagar : 'TODOS');
+    this.origenHistorial.set(this.esOrigen(params.get('origen')) ? params.get('origen') as 'TODOS' | OrigenDocumentoPorPagar : 'TODOS');
+    this.busquedaHistorial.set(params.get('q') || '');
+    const pageValue = Number(params.get('page') || 0);
+    const page = Number.isSafeInteger(pageValue) && pageValue >= 0 ? Math.min(pageValue, 100_000) : 0;
+    const size = [25, 50, 100].includes(Number(params.get('size'))) ? Number(params.get('size')) : 25;
+    if (this.vista() === 'cartera') { this.carteraPage.set(page); this.carteraSize.set(size); }
+    else { this.historialPage.set(page); this.historialSize.set(size); }
+  }
+
+  private actualizarUrl(): Promise<boolean> {
+    const cartera = this.vista() === 'cartera';
+    this.ignorarSiguienteUrl = true;
+    const navegacion = this.router.navigate([], {
+      relativeTo: this.route,
+      replaceUrl: true,
+      queryParams: cartera ? {
+        vista: 'cartera', corte: this.fechaCorte(), tramo: this.tramo(), q: this.busquedaCartera().trim() || null,
+        page: this.carteraPage(), size: this.carteraSize()
+      } : {
+        vista: 'historial', desde: this.fechaDesde(), hasta: this.fechaHasta(), estado: this.estadoHistorial(),
+        origen: this.origenHistorial(), q: this.busquedaHistorial().trim() || null,
+        page: this.historialPage(), size: this.historialSize()
+      }
+    });
+    void navegacion.finally(() => queueMicrotask(() => { this.ignorarSiguienteUrl = false; }));
+    return navegacion;
+  }
+
+  private fechaIsoGuayaquil(fecha: Date): string {
+    const partes = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Guayaquil', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(fecha);
+    const valor = (tipo: Intl.DateTimeFormatPartTypes) => partes.find((parte) => parte.type === tipo)?.value ?? '';
+    return `${valor('year')}-${valor('month')}-${valor('day')}`;
+  }
+
+  private inicioMes(): string {
+    return `${this.hoy.slice(0, 7)}-01`;
+  }
+
+  private mensajeError(error: unknown, fallback: string): string {
+    if (error && typeof error === 'object' && 'error' in error) {
+      const payload = (error as { error?: { message?: string } | string }).error;
+      if (typeof payload === 'string' && payload.trim()) return payload;
+      if (payload && typeof payload === 'object' && payload.message) return payload.message;
+    }
+    return error instanceof Error && error.message ? error.message : fallback;
+  }
+
+  private esTramo(value: string | null): boolean {
+    return ['TODOS', 'POR_VENCER', 'VENCIDO', '1_30', '31_60', '61_90', 'MAS_90', 'CREDITOS'].includes(value ?? '');
+  }
+
+  private esEstado(value: string | null): boolean {
+    return ['TODOS', 'PENDIENTE', 'PARCIAL', 'PAGADA', 'ANULADA'].includes(value ?? '');
+  }
+
+  private esOrigen(value: string | null): boolean {
+    return ['TODOS', 'FACTURA_COMPRA', 'MANUAL', 'RETENCION', 'NOMINA'].includes(value ?? '');
+  }
 }

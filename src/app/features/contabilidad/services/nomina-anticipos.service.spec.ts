@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { Database } from '@angular/fire/database';
 
 import { AuthService } from '../../../core/services/auth.service';
+import { AuditService } from '../../../core/services/audit.service';
 import {
   AnticipoNominaDetalle,
   anticipoAfectaNomina,
@@ -16,7 +17,13 @@ import { AsientosContablesService } from './asientos-contables.service';
 import { ConfiguracionContableService } from './configuracion-contable.service';
 import { calcularDiasTrabajadosPeriodo, calcularProporcionalMensual } from './nomina-calculos.util';
 import { IntegracionContableService } from './integracion-contable.service';
-import { NominaService } from './nomina.service';
+import {
+  NominaService,
+  construirPatchCambioPeriodoAnticipo,
+  prepararPendientesReprogramados,
+  reemplazarLineaAnticipoRol,
+  validarCambioPeriodoAnticipo
+} from './nomina.service';
 import { PlanCuentasService } from './plan-cuentas.service';
 
 function linea(overrides: Partial<RolPagoLinea> = {}): RolPagoLinea {
@@ -72,6 +79,7 @@ describe('NominaService · anticipos en el rol', () => {
         NominaService,
         { provide: Database, useValue: {} },
         { provide: AuthService, useValue: { getTenantId: () => 'tenant-1' } },
+        { provide: AuditService, useValue: { currentActor: () => ({ userId: 'uid-1' }), recordSafe: async () => undefined } },
         { provide: AsientosContablesService, useValue: {} },
         { provide: PlanCuentasService, useValue: {} },
         { provide: IntegracionContableService, useValue: {} },
@@ -166,6 +174,7 @@ describe('NominaService · varios anticipos en el mismo periodo', () => {
         NominaService,
         { provide: Database, useValue: {} },
         { provide: AuthService, useValue: { getTenantId: () => 'tenant-1' } },
+        { provide: AuditService, useValue: { currentActor: () => ({ userId: 'uid-1' }), recordSafe: async () => undefined } },
         { provide: AsientosContablesService, useValue: {} },
         { provide: PlanCuentasService, useValue: {} },
         { provide: IntegracionContableService, useValue: {} },
@@ -286,6 +295,59 @@ describe('anticipos · ciclo de borrador', () => {
     expect(anticipoEsOperativo('REGISTRADO')).toBe(true);
     expect(anticipoEsOperativo('DESCONTADO')).toBe(true);
     expect(anticipoEsOperativo('ANULADO')).toBe(false);
+  });
+});
+
+describe('anticipos · reprogramacion de periodo', () => {
+  it('solo admite un periodo distinto para anticipos registrados', () => {
+    expect(validarCambioPeriodoAnticipo({ estado: 'REGISTRADO', periodo: '2026-08' }, '2026-09')).toBe('2026-09');
+    expect(() => validarCambioPeriodoAnticipo({ estado: 'BORRADOR', periodo: '2026-08' }, '2026-09')).toThrow(/registrado/);
+    expect(() => validarCambioPeriodoAnticipo({ estado: 'DESCONTADO', periodo: '2026-08' }, '2026-09')).toThrow(/registrado/);
+    expect(() => validarCambioPeriodoAnticipo({ estado: 'ANULADO', periodo: '2026-08' }, '2026-09')).toThrow(/registrado/);
+    expect(() => validarCambioPeriodoAnticipo({ estado: 'REGISTRADO', periodo: '2026-08' }, '2026-08')).toThrow(/diferente/);
+    expect(() => validarCambioPeriodoAnticipo({ estado: 'REGISTRADO', periodo: '2026-08' }, '2026-13')).toThrow(/AAAA-MM/);
+  });
+
+  it('traslada los montos y conserva otros anticipos de ambos periodos', () => {
+    const origen = new Map([['emp-1', 180], ['emp-2', 75]]);
+    const destino = new Map([['emp-1', 20]]);
+    const resultado = prepararPendientesReprogramados(origen, destino, [
+      { empleadoId: 'emp-1', empleadoNombre: 'Ana', cedula: '', cargo: '', sueldoBase: 600, monto: 100 },
+      { empleadoId: 'emp-2', empleadoNombre: 'Luis', cedula: '', cargo: '', sueldoBase: 600, monto: 75 }
+    ]);
+
+    expect(Array.from(resultado.anterior.entries())).toEqual([['emp-1', 80]]);
+    expect(Array.from(resultado.destino.entries())).toEqual([['emp-1', 120], ['emp-2', 75]]);
+    expect(Array.from(origen.entries())).toEqual([['emp-1', 180], ['emp-2', 75]]);
+    expect(Array.from(destino.entries())).toEqual([['emp-1', 20]]);
+  });
+
+  it('reemplaza cualquier agregado ANTIC sin alterar las demas lineas del rol', () => {
+    const original = detalle([
+      linea({ codigo: 'SUELDO', monto: 600 }),
+      linea({ codigo: 'ANTIC', tipo: 'DESCUENTO', monto: 40 }),
+      linea({ codigo: 'ANTIC', tipo: 'DESCUENTO', monto: 60 }),
+      linea({ codigo: 'MULTA', tipo: 'DESCUENTO', monto: 10 })
+    ]);
+    const nueva = linea({ codigo: 'ANTIC', tipo: 'DESCUENTO', monto: 125 });
+
+    const resultado = reemplazarLineaAnticipoRol(original, nueva);
+
+    expect(resultado.lineas.filter((item) => item.codigo === 'ANTIC')).toEqual([nueva]);
+    expect(resultado.lineas.some((item) => item.codigo === 'MULTA')).toBe(true);
+    expect(original.lineas.filter((item) => item.codigo === 'ANTIC')).toHaveLength(2);
+  });
+
+  it('construye un patch que no puede modificar la entrega ni el asiento', () => {
+    const patch = construirPatchCambioPeriodoAnticipo('ant-1', '2026-10', 1234, 'uid-1');
+
+    expect(patch).toEqual({
+      'anticipos/ant-1/periodo': '2026-10',
+      'anticipos/ant-1/actualizadoEn': 1234,
+      'anticipos/ant-1/actualizadoPor': 'uid-1',
+      'anticipos/ant-1/ultimaAccion': 'actualizar'
+    });
+    expect(Object.keys(patch).some((key) => /fecha|asiento|total|concepto|cuenta/.test(key))).toBe(false);
   });
 });
 

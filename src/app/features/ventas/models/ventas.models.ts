@@ -1,5 +1,7 @@
 export type EstadoVenta = 'COMPLETADA' | 'ANULADA' | 'REVERTIDA';
 
+export const VENTA_NOTAS_MAX_LENGTH = 300;
+
 export type MetodoPagoVenta =
   | 'EFECTIVO'
   | 'TARJETA_CREDITO'

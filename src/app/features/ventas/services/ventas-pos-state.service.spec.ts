@@ -109,4 +109,17 @@ describe('VentasPosStateService', () => {
     expect(localStorage.getItem('winsuite.pos.tabs')).toBeNull();
     expect(localStorage.getItem('winsuite.pos.activeTabId')).toBeNull();
   });
+
+  it('limita las notas a 300 caracteres al escribir y al retomar una cuenta', () => {
+    service.setNotas('a'.repeat(301));
+
+    expect(service.carrito().notas).toHaveLength(300);
+
+    service.cargarCarrito({
+      ...service.carrito(),
+      notas: 'b'.repeat(350)
+    });
+
+    expect(service.carrito().notas).toBe('b'.repeat(300));
+  });
 });

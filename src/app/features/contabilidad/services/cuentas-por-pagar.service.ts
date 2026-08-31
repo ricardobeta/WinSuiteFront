@@ -1,5 +1,5 @@
 import { Injectable, inject } from '@angular/core';
-import { Database, endAt, get, limitToLast, onValue, orderByChild, push, query, ref, runTransaction, set, startAt, update } from '@angular/fire/database';
+import { Database, endAt, equalTo, get, limitToLast, onValue, orderByChild, push, query, ref, runTransaction, set, startAt, update } from '@angular/fire/database';
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
@@ -91,6 +91,14 @@ export class CuentasPorPagarService {
     return ref(this.database, `${this.getDocumentosPath()}/${id}`);
   }
 
+  private getAsientoRef(id: string) {
+    return ref(this.database, `${this.getTenantPath()}/asientos/${id}`);
+  }
+
+  private getFacturaCompraRef(id: string) {
+    return ref(this.database, `${this.getTenantPath()}/facturasCompra/${id}`);
+  }
+
   private getPagosPath(): string {
     return `${this.getTenantPath()}/pagosProveedor`;
   }
@@ -162,7 +170,34 @@ export class CuentasPorPagarService {
       return [];
     }
     const raw = snapshot.val() as Record<string, DocumentoPorPagar>;
-    return Object.entries(raw).map(([id, documento]) => ({ ...documento, id }));
+    const documentos = Object.entries(raw).map(([id, documento]) => ({ ...documento, id }));
+    let normalizados: DocumentoPorPagar[] = documentos;
+    try {
+      normalizados = await this.sincronizarDocumentosConComprasAnuladas(normalizados);
+    } catch (error) {
+      // La reparación del legado es auxiliar: una falla de índice, permiso o red no debe impedir
+      // abrir el formulario. registrarPago vuelve a validar cada documento antes de contabilizar.
+      console.warn('No se pudo verificar compras anuladas durante la carga de CxP.', error);
+    }
+    try {
+      normalizados = await this.sincronizarDocumentosConAsientosReversados(normalizados);
+    } catch (error) {
+      console.warn('No se pudo verificar asientos reversados durante la carga de CxP.', error);
+    }
+    return normalizados;
+  }
+
+  /** Sincroniza el auxiliar inmediatamente despues de aprobar un asiento de reverso. */
+  async sincronizarReversoAsiento(asientoId: string): Promise<void> {
+    const asientoSnapshot = await get(this.getAsientoRef(asientoId));
+    if (!asientoSnapshot.exists()) return;
+    const asiento = { ...(asientoSnapshot.val() as AsientoContable), id: asientoId };
+    if (asiento.estado !== 'REVERSADO') return;
+    const documentosSnapshot = await get(this.getDocumentosRef());
+    if (!documentosSnapshot.exists()) return;
+    const raw = documentosSnapshot.val() as Record<string, DocumentoPorPagar>;
+    const documentos = Object.entries(raw).map(([id, documento]) => ({ ...documento, id }));
+    await this.aplicarAsientosReversados(documentos, new Map([[asientoId, asiento]]));
   }
 
   /** Consulta una página de documentos por mes, sin dejar un listener sobre todo el auxiliar. */
@@ -234,7 +269,7 @@ export class CuentasPorPagarService {
    */
   async sincronizarDesdeFacturaCompra(factura: FacturaCompra): Promise<void> {
     const facturaId = factura.id ?? '';
-    if (!facturaId) {
+    if (!facturaId || factura.estado === 'ANULADA') {
       return;
     }
     const config = await this.getConfiguracionOnce();
@@ -265,8 +300,9 @@ export class CuentasPorPagarService {
       numero: await this.generarNumeroDocumento(),
       origenTipo: 'FACTURA_COMPRA',
       origenId: facturaId,
-      origenNumero: factura.numero ?? documento,
+      origenNumero: documento,
       proveedorId: factura.proveedorId ?? null,
+      proveedorClave: factura.proveedorId ?? `sin:${factura.razonSocialProv}`,
       proveedorNombre: factura.razonSocialProv,
       proveedorIdentificacion: factura.idProv,
       fechaEmision,
@@ -282,6 +318,24 @@ export class CuentasPorPagarService {
       actualizadoEn: timestamp
     };
     await set(documentoRef, nuevo);
+  }
+
+  /**
+   * Retira de la cartera el documento espejo de una compra anulada que nunca tuvo asiento.
+   * Conserva el monto original y el registro para explicar la anulacion en el historial.
+   */
+  async sincronizarAnulacionFacturaCompra(facturaId: string, anuladoEn = Date.now()): Promise<void> {
+    const documento = await this.getDocumentoPorOrigen('FACTURA_COMPRA', facturaId);
+    if (!documento?.id) {
+      return;
+    }
+    const asientoExiste = documento.asientoId
+      ? (await get(this.getAsientoRef(documento.asientoId))).exists()
+      : false;
+    if (asientoExiste) {
+      return;
+    }
+    await this.anularDocumentoPorCompraAnulada(documento, anuladoEn);
   }
 
   /**
@@ -318,6 +372,7 @@ export class CuentasPorPagarService {
       origenId: documentoId,
       origenNumero: numero,
       proveedorId: input.proveedorId ?? null,
+      proveedorClave: input.proveedorId ?? `sin:${input.proveedorNombre}`,
       proveedorNombre: input.proveedorNombre,
       proveedorIdentificacion: input.proveedorIdentificacion ?? '',
       fechaEmision: input.fechaEmision,
@@ -353,6 +408,13 @@ export class CuentasPorPagarService {
       return documentoId;
     }
 
+    const proveedorNombre = input.datos.proveedorNombre.trim();
+    const proveedorIdentificacion = input.datos.proveedorIdentificacion.trim();
+    const proveedorId = input.datos.proveedorId?.trim() || null;
+    if (!proveedorNombre || !proveedorIdentificacion) {
+      throw new Error('La cuenta por pagar manual requiere nombre e identificación del proveedor.');
+    }
+
     const monto = this.round2(input.datos.montoOriginal);
     if (monto <= 0) {
       throw new Error('El credito neto de la cuenta por pagar debe ser mayor a cero.');
@@ -369,9 +431,10 @@ export class CuentasPorPagarService {
       origenTipo: 'MANUAL',
       origenId: asientoId,
       origenNumero: input.datos.referencia || input.asiento.numero || numero,
-      proveedorId: input.datos.proveedorId,
-      proveedorNombre: input.datos.proveedorNombre,
-      proveedorIdentificacion: input.datos.proveedorIdentificacion,
+      proveedorId,
+      proveedorClave: proveedorId ?? `sin:${proveedorNombre}`,
+      proveedorNombre,
+      proveedorIdentificacion,
       fechaEmision,
       fechaVencimiento,
       moneda: 'USD',
@@ -414,10 +477,12 @@ export class CuentasPorPagarService {
       documento.numero ?? null,
       `Reverso CxP manual ${documento.numero ?? ''}`.trim()
     );
+    const anuladoEn = Date.now();
     await update(this.getDocumentoRef(id), {
       estadoPago: 'ANULADA' as EstadoDocumentoPorPagar,
       saldoPendiente: 0,
-      actualizadoEn: Date.now()
+      anuladoEn,
+      actualizadoEn: anuladoEn
     });
   }
 
@@ -475,6 +540,19 @@ export class CuentasPorPagarService {
       if (!documento || documento.estadoPago === 'ANULADA') {
         throw new Error('Uno de los documentos ya no está disponible para pago.');
       }
+      const compraAnulada = await this.getCompraAnuladaSinAsiento(documento);
+      if (compraAnulada) {
+        await this.anularDocumentoPorCompraAnulada(
+          documento,
+          Number(compraAnulada.actualizadoEn ?? Date.now())
+        );
+        throw new Error('Uno de los documentos pertenece a una compra anulada sin asiento contable. Actualiza la selección.');
+      }
+      const asientoReversado = await this.getAsientoReversado(documento.asientoId);
+      if (asientoReversado) {
+        await this.anularDocumentoPorReverso(documento, asientoReversado);
+        throw new Error('Uno de los documentos fue anulado porque su asiento contable está reversado. Actualiza la selección.');
+      }
       if (this.claveProveedor(documento) !== claveProveedor) {
         throw new Error('Todos los documentos aplicados deben pertenecer al proveedor seleccionado.');
       }
@@ -504,6 +582,7 @@ export class CuentasPorPagarService {
     const nuevo: PagoProveedor = {
       numero,
       proveedorId: input.proveedorId ?? null,
+      proveedorClave: input.proveedorId ?? `sin:${input.proveedorNombre}`,
       proveedorNombre: input.proveedorNombre,
       fecha: input.fecha,
       cuentaOrigenId: input.cuentaOrigenId,
@@ -545,9 +624,11 @@ export class CuentasPorPagarService {
     for (const aplicacion of pago.aplicaciones ?? []) {
       await this.restaurarAbono(aplicacion.documentoId, this.round2(aplicacion.monto));
     }
+    const anuladoEn = Date.now();
     await update(this.getPagoRef(id), {
       estado: 'ANULADO',
-      actualizadoEn: Date.now()
+      anuladoEn,
+      actualizadoEn: anuladoEn
     });
   }
 
@@ -638,6 +719,186 @@ export class CuentasPorPagarService {
   }
 
   // ===== Helpers privados =====
+
+  /**
+   * Repara documentos antiguos cuya compra fue anulada, incluso si conservan un asientoId
+   * huérfano. Solo se consultan los asientos de esas compras, no todo el diario contable.
+   */
+  private async sincronizarDocumentosConComprasAnuladas(
+    documentos: DocumentoPorPagar[]
+  ): Promise<DocumentoPorPagar[]> {
+    const candidatos = documentos.filter((documento) =>
+      documento.origenTipo === 'FACTURA_COMPRA'
+      && !!documento.origenId
+      && documento.estadoPago !== 'ANULADA'
+      && documento.estadoPago !== 'PAGADA'
+      && Number(documento.saldoPendiente ?? 0) > 0
+    );
+    if (candidatos.length === 0) return documentos;
+
+    const snapshot = await get(query(
+      ref(this.database, `${this.getTenantPath()}/facturasCompra`),
+      orderByChild('estado'),
+      equalTo('ANULADA')
+    ));
+    if (!snapshot.exists()) return documentos;
+    const facturasAnuladas = snapshot.val() as Record<string, FacturaCompra>;
+    const candidatosAnulados = candidatos.filter((documento) =>
+      !!documento.origenId && !!facturasAnuladas[documento.origenId]
+    );
+    if (candidatosAnulados.length === 0) return documentos;
+
+    const asientoIds = Array.from(new Set(
+      candidatosAnulados.map((documento) => documento.asientoId).filter((id): id is string => !!id)
+    ));
+    const existencia = new Map<string, boolean>(await Promise.all(asientoIds.map(async (id) => {
+      try {
+        return [id, (await get(this.getAsientoRef(id))).exists()] as const;
+      } catch {
+        // Ante una lectura fallida se conserva la obligación para no anularla por error.
+        return [id, true] as const;
+      }
+    })));
+
+    const updates: Record<string, unknown> = {};
+    const normalizados = documentos.map((documento) => {
+      const factura = documento.origenId ? facturasAnuladas[documento.origenId] : null;
+      const asientoExiste = documento.asientoId ? existencia.get(documento.asientoId) !== false : false;
+      if (!factura || documento.origenTipo !== 'FACTURA_COMPRA' || asientoExiste) return documento;
+
+      const anuladoEn = Number(factura.actualizadoEn ?? documento.actualizadoEn ?? Date.now());
+      const normalizado: DocumentoPorPagar = {
+        ...documento,
+        asientoId: null,
+        estadoPago: 'ANULADA',
+        saldoPendiente: 0,
+        anuladoEn,
+        motivoAnulacion: 'COMPRA_ANULADA_SIN_ASIENTO'
+      };
+      if (documento.id && (
+        documento.estadoPago !== 'ANULADA'
+        || Number(documento.saldoPendiente ?? 0) !== 0
+        || !!documento.asientoId
+        || documento.motivoAnulacion !== 'COMPRA_ANULADA_SIN_ASIENTO'
+      )) {
+        const base = `${this.getDocumentosPath()}/${documento.id}`;
+        updates[`${base}/asientoId`] = null;
+        updates[`${base}/estadoPago`] = 'ANULADA';
+        updates[`${base}/saldoPendiente`] = 0;
+        updates[`${base}/anuladoEn`] = anuladoEn;
+        updates[`${base}/motivoAnulacion`] = 'COMPRA_ANULADA_SIN_ASIENTO';
+        updates[`${base}/actualizadoEn`] = Date.now();
+      }
+      return normalizado;
+    });
+    if (Object.keys(updates).length > 0) {
+      try {
+        await update(ref(this.database), updates);
+      } catch (error) {
+        console.warn('La compra anulada se excluyó de esta carga, pero no pudo persistirse la reparación.', error);
+      }
+    }
+    return normalizados;
+  }
+
+  private async sincronizarDocumentosConAsientosReversados(
+    documentos: DocumentoPorPagar[]
+  ): Promise<DocumentoPorPagar[]> {
+    if (!documentos.some((documento) => !!documento.asientoId && documento.estadoPago !== 'PAGADA')) {
+      return documentos;
+    }
+    const snapshot = await get(query(
+      ref(this.database, `${this.getTenantPath()}/asientos`),
+      orderByChild('estado'),
+      equalTo('REVERSADO')
+    ));
+    if (!snapshot.exists()) return documentos;
+    const raw = snapshot.val() as Record<string, AsientoContable>;
+    const asientos = new Map(Object.entries(raw).map(([id, asiento]) => [id, { ...asiento, id }]));
+    return this.aplicarAsientosReversados(documentos, asientos);
+  }
+
+  private async aplicarAsientosReversados(
+    documentos: DocumentoPorPagar[],
+    asientos: Map<string, AsientoContable>
+  ): Promise<DocumentoPorPagar[]> {
+    const updates: Record<string, unknown> = {};
+    const normalizados = documentos.map((documento) => {
+      const asiento = documento.asientoId ? asientos.get(documento.asientoId) : null;
+      if (!asiento || asiento.estado !== 'REVERSADO' || documento.estadoPago === 'PAGADA') return documento;
+      const anuladoEn = Number(asiento.reversadoEn ?? asiento.actualizadoEn ?? Date.now());
+      const normalizado: DocumentoPorPagar = {
+        ...documento,
+        estadoPago: 'ANULADA',
+        saldoPendiente: 0,
+        anuladoEn,
+        motivoAnulacion: 'ASIENTO_REVERSADO'
+      };
+      if (documento.id && (
+        documento.estadoPago !== 'ANULADA'
+        || Number(documento.saldoPendiente ?? 0) !== 0
+        || documento.motivoAnulacion !== 'ASIENTO_REVERSADO'
+      )) {
+        const base = `${this.getDocumentosPath()}/${documento.id}`;
+        updates[`${base}/estadoPago`] = 'ANULADA';
+        updates[`${base}/saldoPendiente`] = 0;
+        updates[`${base}/anuladoEn`] = anuladoEn;
+        updates[`${base}/motivoAnulacion`] = 'ASIENTO_REVERSADO';
+        updates[`${base}/actualizadoEn`] = Date.now();
+      }
+      return normalizado;
+    });
+    if (Object.keys(updates).length > 0) {
+      try {
+        await update(ref(this.database), updates);
+      } catch (error) {
+        console.warn('El asiento reversado se excluyó de esta carga, pero no pudo persistirse la reparación.', error);
+      }
+    }
+    return normalizados;
+  }
+
+  private async getAsientoReversado(asientoId: string | null | undefined): Promise<AsientoContable | null> {
+    if (!asientoId) return null;
+    const snapshot = await get(this.getAsientoRef(asientoId));
+    if (!snapshot.exists()) return null;
+    const asiento = { ...(snapshot.val() as AsientoContable), id: asientoId };
+    return asiento.estado === 'REVERSADO' ? asiento : null;
+  }
+
+  private async getCompraAnuladaSinAsiento(documento: DocumentoPorPagar): Promise<FacturaCompra | null> {
+    if (documento.origenTipo !== 'FACTURA_COMPRA' || !documento.origenId) return null;
+    const facturaSnapshot = await get(this.getFacturaCompraRef(documento.origenId));
+    if (!facturaSnapshot.exists()) return null;
+    const factura = facturaSnapshot.val() as FacturaCompra;
+    if (factura.estado !== 'ANULADA') return null;
+    if (!documento.asientoId) return factura;
+    const asientoSnapshot = await get(this.getAsientoRef(documento.asientoId));
+    return asientoSnapshot.exists() ? null : factura;
+  }
+
+  private async anularDocumentoPorCompraAnulada(
+    documento: DocumentoPorPagar,
+    anuladoEn: number
+  ): Promise<void> {
+    if (!documento.id) return;
+    await update(this.getDocumentoRef(documento.id), {
+      asientoId: null,
+      estadoPago: 'ANULADA' as EstadoDocumentoPorPagar,
+      saldoPendiente: 0,
+      anuladoEn,
+      motivoAnulacion: 'COMPRA_ANULADA_SIN_ASIENTO',
+      actualizadoEn: Date.now()
+    });
+  }
+
+  private async anularDocumentoPorReverso(
+    documento: DocumentoPorPagar,
+    asiento: AsientoContable
+  ): Promise<void> {
+    if (!documento.id || documento.estadoPago === 'PAGADA') return;
+    await this.aplicarAsientosReversados([documento], new Map([[asiento.id!, asiento]]));
+  }
 
   private async validarPeriodo(fechaTimestamp: number): Promise<void> {
     if (!(await this.integracionContable.contabilidadActiva())) {

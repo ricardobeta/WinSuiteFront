@@ -173,14 +173,14 @@ import { NominaPdfApiService } from '../../../contabilidad/services/nomina-pdf-a
                           <mat-icon>attach_file</mat-icon>
                         </button>
                       }
-                      @if (anticipo.estado === 'BORRADOR' && canUpdate()) {
+                      @if ((anticipo.estado === 'BORRADOR' || anticipo.estado === 'REGISTRADO') && canUpdate()) {
                         <a
                           mat-icon-button
                           [routerLink]="[anticipo.id, 'editar']"
-                          matTooltip="Editar y confirmar entrega"
-                          aria-label="Editar y confirmar entrega"
+                          [matTooltip]="anticipo.estado === 'BORRADOR' ? 'Editar y confirmar entrega' : 'Cambiar periodo de descuento'"
+                          [attr.aria-label]="anticipo.estado === 'BORRADOR' ? 'Editar y confirmar entrega' : 'Cambiar periodo de descuento'"
                         >
-                          <mat-icon>edit_note</mat-icon>
+                          <mat-icon>{{ anticipo.estado === 'BORRADOR' ? 'edit_note' : 'event_repeat' }}</mat-icon>
                         </a>
                       }
                       @if (anticipo.asientoId) {

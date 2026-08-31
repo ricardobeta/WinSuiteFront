@@ -15,6 +15,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { firstValueFrom } from 'rxjs';
 
 import { AuthorizationService } from '../../../../core/services/authorization.service';
+import { ConfirmDialogComponent } from '../../../../shared/components/confirm-dialog/confirm-dialog.component';
 import { DataTableFrameComponent } from '../../../../shared/components/data-table-frame/data-table-frame.component';
 import { CuentaBancaria } from '../../models/bancos.models';
 import { BancosCuentasService } from '../../services/bancos-cuentas.service';
@@ -150,8 +151,9 @@ import { MovimientoTesoreriaDialogComponent } from './movimiento-tesoreria-dialo
                 <th mat-header-cell *matHeaderCellDef class="num">Acciones</th>
                 <td mat-cell *matCellDef="let row" class="num">
                   @if (row.estado === 'REGISTRADO' && canUpdate()) {
-                    <button mat-icon-button matTooltip="Anular" (click)="anular(row)">
-                      <mat-icon>block</mat-icon>
+                    <button mat-icon-button [matTooltip]="anulandoId() === row.id ? 'Generando reverso contable' : 'Anular'"
+                            [disabled]="anulandoId() !== null" (click)="anular(row)">
+                      <mat-icon>{{ anulandoId() === row.id ? 'hourglass_empty' : 'block' }}</mat-icon>
                     </button>
                   }
                 </td>
@@ -209,6 +211,7 @@ export class TesoreriaListComponent {
   protected readonly movimientos = signal<MovimientoTesoreria[]>([]);
   protected readonly cargando = signal(false);
   protected readonly consultaRealizada = signal(false);
+  protected readonly anulandoId = signal<string | null>(null);
 
   protected readonly cuenta = new FormControl('', { nonNullable: true });
   protected readonly periodo = new FormControl('', { nonNullable: true });
@@ -266,12 +269,33 @@ export class TesoreriaListComponent {
   }
 
   protected async anular(movimiento: MovimientoTesoreria): Promise<void> {
+    if (!movimiento.id || this.anulandoId() !== null) {
+      return;
+    }
+
+    const confirmado = await firstValueFrom(this.dialog.open(ConfirmDialogComponent, {
+      width: '440px',
+      data: {
+        title: 'Confirmar anulación',
+        message: `Se generará un asiento de reverso en el mismo período contable del movimiento (${movimiento.periodo}) y luego el movimiento quedará anulado. ¿Deseas continuar?`,
+        confirmText: 'Anular y generar reverso',
+        cancelText: 'Conservar movimiento',
+        confirmColor: 'warn'
+      }
+    }).afterClosed());
+    if (!confirmado) {
+      return;
+    }
+
+    this.anulandoId.set(movimiento.id);
     try {
       await this.tesoreriaService.anularMovimiento(movimiento);
-      this.snackBar.open('Movimiento anulado. Recuerda reversar su asiento si corresponde.', 'OK', { duration: 5000 });
+      this.snackBar.open('Movimiento anulado con su asiento contable de reverso.', 'OK', { duration: 5000 });
       await this.cargar();
     } catch (error) {
       this.snackBar.open((error as Error).message ?? 'No se pudo anular.', 'OK', { duration: 4500 });
+    } finally {
+      this.anulandoId.set(null);
     }
   }
 

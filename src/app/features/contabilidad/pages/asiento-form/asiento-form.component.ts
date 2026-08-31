@@ -163,34 +163,48 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
             @if (modoCorreccion()) {
               <p>Los datos del auxiliar no se modifican desde aqui: para cambiarlos, anula el documento por pagar.</p>
             } @else {
-              <p>El asiento acredita la cuenta configurada de CxP. Completa los datos del auxiliar antes de aprobar.</p>
+              <p>El asiento acredita la cuenta configurada de CxP. Ingresa el nombre y la identificación del proveedor antes de aprobar.</p>
             }
           </div>
-          <div class="grid-4">
-            <mat-form-field appearance="outline">
-              <mat-label>Proveedor</mat-label>
+          <div class="cxp-grid">
+            <mat-form-field appearance="outline" class="cxp-catalog-field">
+              <mat-label>Proveedor registrado (opcional)</mat-label>
               <mat-select [ngModel]="cxpProveedorId()" (ngModelChange)="seleccionarProveedorCxP($event)" [disabled]="!cxpEditable()">
-                <mat-option value="">Selecciona un proveedor</mat-option>
+                <mat-option value="">Ingresar proveedor manualmente</mat-option>
                 @for (proveedor of proveedores(); track proveedor.id) {
                   <mat-option [value]="proveedor.id">{{ proveedor.nombre }}</mat-option>
                 }
               </mat-select>
+              <mat-hint>Si lo seleccionas, completaremos los datos para que puedas revisarlos.</mat-hint>
             </mat-form-field>
             <mat-form-field appearance="outline">
-              <mat-label>Identificacion</mat-label>
-              <input matInput [value]="cxpProveedorIdentificacion()" readonly />
+              <mat-label>Nombre del proveedor</mat-label>
+              <input matInput required maxlength="160" autocomplete="organization"
+                     [ngModel]="cxpProveedorNombre()" (ngModelChange)="actualizarProveedorNombreCxP($event)"
+                     [readonly]="!cxpEditable()" />
+              <mat-hint>Obligatorio para crear la cuenta por pagar.</mat-hint>
+            </mat-form-field>
+            <mat-form-field appearance="outline">
+              <mat-label>Identificación</mat-label>
+              <input matInput required maxlength="32" autocomplete="off"
+                     [ngModel]="cxpProveedorIdentificacion()" (ngModelChange)="actualizarProveedorIdentificacionCxP($event)"
+                     [readonly]="!cxpEditable()" />
+              <mat-hint>RUC, cédula o identificación equivalente.</mat-hint>
             </mat-form-field>
             <mat-form-field appearance="outline">
               <mat-label>Fecha de vencimiento</mat-label>
-              <input matInput [matDatepicker]="cxpVencimientoPicker" [ngModel]="cxpFechaVencimientoDate()" (ngModelChange)="actualizarFechaVencimientoCxP($event)" (input)="limpiarFechaSiVacia('cxp', $event)" [disabled]="!cxpEditable()" />
+              <input matInput required [matDatepicker]="cxpVencimientoPicker" [ngModel]="cxpFechaVencimientoDate()" (ngModelChange)="actualizarFechaVencimientoCxP($event)" (input)="limpiarFechaSiVacia('cxp', $event)" [disabled]="!cxpEditable()" />
               <mat-datepicker-toggle matIconSuffix [for]="cxpVencimientoPicker"></mat-datepicker-toggle>
               <mat-datepicker #cxpVencimientoPicker></mat-datepicker>
             </mat-form-field>
             <mat-form-field appearance="outline">
               <mat-label>Referencia de la obligacion</mat-label>
-              <input matInput [ngModel]="cxpReferencia()" (ngModelChange)="cxpReferencia.set($event)" [readonly]="!cxpEditable()" />
+              <input matInput required maxlength="120" [ngModel]="cxpReferencia()" (ngModelChange)="cxpReferencia.set($event)" [readonly]="!cxpEditable()" />
             </mat-form-field>
           </div>
+          @if (cxpEditable() && !datosCxPCompletos()) {
+            <p class="cxp-required" aria-live="polite">Completa nombre e identificación del proveedor, vencimiento y referencia para aprobar el asiento.</p>
+          }
           <p class="cxp-total">Monto de la obligacion: <strong>{{ montoCxP() | number:'1.2-2' }}</strong></p>
         </section>
       }
@@ -316,7 +330,8 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
           </button>
         } @else if (editable()) {
           <button mat-stroked-button type="button" (click)="guardarBorrador()" [disabled]="guardando()">Guardar borrador</button>
-          <button mat-raised-button color="primary" type="button" (click)="aprobar()" [disabled]="guardando() || diferencia() !== 0">
+          <button mat-raised-button color="primary" type="button" (click)="aprobar()"
+                  [disabled]="guardando() || diferencia() !== 0 || (requiereCxP() && !datosCxPCompletos())">
             Aprobar
           </button>
         }
@@ -332,6 +347,9 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
     .form-card, .lines-card, .cxp-card { padding: 1.25rem; display: grid; gap: 1rem; background: var(--tc-surface-container-lowest); }
     .cxp-card h3, .cxp-card p { margin: 0; }
     .cxp-card p { color: var(--muted-foreground); }
+    .cxp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+    .cxp-catalog-field { grid-column: 1 / -1; }
+    .cxp-required { color: var(--destructive, #b3261e) !important; font-size: .85rem; }
     .cxp-total { text-align: right; }
     .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .75rem; }
     .section-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
@@ -348,9 +366,9 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
     .totals-locked { margin: .5rem 0 0; text-align: right; font-size: .85rem; }
     .notice-box { display: flex; gap: .75rem; align-items: flex-start; padding: .9rem 1.1rem; }
     .notice-box p { margin: .25rem 0 0; color: var(--muted-foreground); }
-    .notice-fix { border-left: 4px solid var(--primary); }
+    .notice-fix { background: color-mix(in srgb, var(--primary) 8%, var(--tc-surface-container-lowest)); }
     .notice-fix mat-icon { color: var(--primary); }
-    .notice-locked { border-left: 4px solid var(--muted-foreground); }
+    .notice-locked { background: color-mix(in srgb, var(--muted-foreground) 8%, var(--tc-surface-container-lowest)); }
     .notice-locked mat-icon { color: var(--muted-foreground); }
     .actions-row { display: flex; justify-content: flex-end; align-items: center; gap: .5rem; }
     .accion-hint { color: var(--muted-foreground); font-size: .85rem; text-align: right; }
@@ -362,7 +380,8 @@ import { PlanCuentasService } from '../../services/plan-cuentas.service';
       .line-head { display: none; }
     }
     @media (max-width: 720px) {
-      .grid-4 { grid-template-columns: 1fr; }
+      .grid-4, .cxp-grid { grid-template-columns: 1fr; }
+      .cxp-catalog-field { grid-column: auto; }
       .section-toolbar, .page-header, .actions-row { align-items: flex-start; flex-direction: column; }
     }
   `]
@@ -662,6 +681,22 @@ export class AsientoFormComponent implements OnInit {
     }
   }
 
+  protected actualizarProveedorNombreCxP(nombre: string): void {
+    const proveedor = this.proveedores().find((item) => item.id === this.cxpProveedorId());
+    this.cxpProveedorNombre.set(nombre);
+    if (proveedor && proveedor.nombre.trim() !== nombre.trim()) {
+      this.cxpProveedorId.set('');
+    }
+  }
+
+  protected actualizarProveedorIdentificacionCxP(identificacion: string): void {
+    const proveedor = this.proveedores().find((item) => item.id === this.cxpProveedorId());
+    this.cxpProveedorIdentificacion.set(identificacion);
+    if (proveedor && (proveedor.ruc ?? '').trim() !== identificacion.trim()) {
+      this.cxpProveedorId.set('');
+    }
+  }
+
   protected actualizarFechaVencimientoCxP(fecha: Date | null): void {
     if (fecha) {
       this.cxpFechaVencimiento.set(dateAIso(fecha));
@@ -779,7 +814,7 @@ export class AsientoFormComponent implements OnInit {
       }
 
       if (accion === 'APROBADO' && this.requiereCxP() && !this.datosCxPCompletos()) {
-        throw new Error('Completa proveedor, vencimiento y referencia de la cuenta por pagar.');
+        throw new Error('Completa nombre e identificación del proveedor, vencimiento y referencia de la cuenta por pagar.');
       }
       const id = accion === 'APROBADO'
         ? await this.service.aprobarAsiento(asiento)
@@ -787,6 +822,7 @@ export class AsientoFormComponent implements OnInit {
 
       if (accion === 'APROBADO' && this.asientoReversadoId()) {
         await this.service.marcarReversado(this.asientoReversadoId()!);
+        await this.cuentasPorPagarService.sincronizarReversoAsiento(this.asientoReversadoId()!);
       }
 
       if (accion === 'APROBADO' && asiento.cuentaPorPagarManual) {
@@ -872,12 +908,9 @@ export class AsientoFormComponent implements OnInit {
     };
   }
 
-  private datosCxPCompletos(): boolean {
-    // Se acepta el proveedor por identificación (RUC/cédula) cuando no hay un proveedor vinculado:
-    // muchas facturas de compra traen identificación pero no un registro de proveedor.
-    const proveedorOk = !!this.cxpProveedorId() || !!this.cxpProveedorIdentificacion().trim();
-    return proveedorOk
-      && !!this.cxpProveedorNombre().trim()
+  protected datosCxPCompletos(): boolean {
+    return !!this.cxpProveedorNombre().trim()
+      && !!this.cxpProveedorIdentificacion().trim()
       && !!this.cxpFechaVencimiento()
       && !!this.cxpReferencia().trim();
   }

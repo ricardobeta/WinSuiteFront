@@ -424,12 +424,51 @@
             "estado"
           ],
           "$anticipoId": {
-            ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true",
+            "numero": {
+              ".validate": "!data.parent().exists() || data.parent().child('estado').val() !== 'REGISTRADO' || newData.parent().child('estado').val() !== 'REGISTRADO' || newData.val() === data.val()"
+            },
+            "periodo": {
+              ".validate": "newData.isString() && newData.val().matches(/^[0-9]{4}-(0[1-9]|1[0-2])$/)"
+            },
+            "fecha": {
+              ".validate": "!data.parent().exists() || data.parent().child('estado').val() !== 'REGISTRADO' || newData.parent().child('estado').val() !== 'REGISTRADO' || newData.val() === data.val()"
+            },
+            "concepto": {
+              ".validate": "!data.parent().exists() || data.parent().child('estado').val() !== 'REGISTRADO' || newData.parent().child('estado').val() !== 'REGISTRADO' || newData.val() === data.val()"
+            },
+            "cuentaAnticipoId": {
+              ".validate": "!data.parent().exists() || data.parent().child('estado').val() !== 'REGISTRADO' || newData.parent().child('estado').val() !== 'REGISTRADO' || newData.val() === data.val()"
+            },
+            "cuentaOrigenId": {
+              ".validate": "!data.parent().exists() || data.parent().child('estado').val() !== 'REGISTRADO' || newData.parent().child('estado').val() !== 'REGISTRADO' || newData.val() === data.val()"
+            },
+            "total": {
+              ".validate": "!data.parent().exists() || data.parent().child('estado').val() !== 'REGISTRADO' || newData.parent().child('estado').val() !== 'REGISTRADO' || newData.val() === data.val()"
+            },
+            "totalEmpleados": {
+              ".validate": "!data.parent().exists() || data.parent().child('estado').val() !== 'REGISTRADO' || newData.parent().child('estado').val() !== 'REGISTRADO' || newData.val() === data.val()"
+            },
+            "modoAsiento": {
+              ".validate": "!data.parent().exists() || data.parent().child('estado').val() !== 'REGISTRADO' || newData.parent().child('estado').val() !== 'REGISTRADO' || newData.val() === data.val()"
+            },
+            "asientoId": {
+              ".validate": "!data.parent().exists() || data.parent().child('estado').val() !== 'REGISTRADO' || newData.parent().child('estado').val() !== 'REGISTRADO' || newData.val() === data.val()"
+            },
+            "comprobanteEntrega": {
+              ".validate": "!data.parent().exists() || data.parent().child('estado').val() !== 'REGISTRADO' || newData.parent().child('estado').val() !== 'REGISTRADO' || newData.val() === data.val()"
+            },
+            "registradoEn": {
+              ".validate": "!data.parent().exists() || data.parent().child('estado').val() !== 'REGISTRADO' || newData.parent().child('estado').val() !== 'REGISTRADO' || newData.val() === data.val()"
+            }
           }
         },
         "anticiposDetalles": {
           "$anticipoId": {
-            ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
+            ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true && (!root.child('nomina').child($tenantId).child('anticipos').child($anticipoId).exists() || root.child('nomina').child($tenantId).child('anticipos').child($anticipoId).child('estado').val() === 'BORRADOR')",
+            "$empleadoId": {
+              ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true && (!root.child('nomina').child($tenantId).child('anticipos').child($anticipoId).exists() || root.child('nomina').child($tenantId).child('anticipos').child($anticipoId).child('estado').val() === 'BORRADOR' || (data.exists() && newData.exists() && newData.child('empleadoId').val() === data.child('empleadoId').val() && newData.child('empleadoNombre').val() === data.child('empleadoNombre').val() && newData.child('cedula').val() === data.child('cedula').val() && newData.child('cargo').val() === data.child('cargo').val() && newData.child('sueldoBase').val() === data.child('sueldoBase').val() && newData.child('diasTrabajadosPeriodo').val() === data.child('diasTrabajadosPeriodo').val() && newData.child('sueldoPeriodo').val() === data.child('sueldoPeriodo').val() && newData.child('monto').val() === data.child('monto').val() && newData.child('observacion').val() === data.child('observacion').val()))"
+            }
           }
         },
         "pagosNomina": {
@@ -525,7 +564,8 @@
         },
         "asientos": {
           ".indexOn": [
-            "fecha"
+            "fecha",
+            "estado"
           ],
           "$asientoId": {
             ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
@@ -533,7 +573,8 @@
         },
         "facturasCompra": {
           ".indexOn": [
-            "fechaEmision"
+            "fechaEmision",
+            "estado"
           ],
           "$facturaId": {
             ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
@@ -548,14 +589,20 @@
           }
         },
         "documentosPorPagar": {
-          ".indexOn": "fechaEmision",
+          ".indexOn": [
+            "fechaEmision",
+            "proveedorClave",
+            "estadoPago"
+          ],
           "$documentoId": {
             ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"
           }
         },
         "pagosProveedor": {
           ".indexOn": [
-            "fecha"
+            "fecha",
+            "proveedorClave",
+            "estado"
           ],
           "$pagoId": {
             ".write": "auth != null && auth.token.tenantId === $tenantId && auth.token.sessionId != null && auth.token.sessionVersion != null && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('activeTenantId').val() === $tenantId && root.child('auth_sessions').child(auth.uid).child(auth.token.sessionId).child('version').val() === auth.token.sessionVersion && root.child('tenant_users').child($tenantId).child(auth.uid).child('active').val() === true"

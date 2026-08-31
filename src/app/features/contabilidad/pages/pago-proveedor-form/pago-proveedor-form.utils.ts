@@ -4,6 +4,8 @@ export interface DocumentoPagoSeleccionable {
   id?: string;
   numero?: string;
   origenNumero?: string | null;
+  origenTipo?: string;
+  glosa?: string;
   saldoPendiente: number;
 }
 
@@ -12,7 +14,15 @@ export function fechaPagoLocal(iso: string): number | null {
 }
 
 export function referenciaDocumentoPago(documento: DocumentoPagoSeleccionable): string {
-  return documento.origenNumero || documento.numero || 'Documento sin referencia';
+  const origenNumero = documento.origenNumero?.trim() ?? '';
+  const numeroFiscalEnGlosa = documento.glosa?.match(/\b\d{3}-\d{3}-\d{9}\b/)?.[0] ?? '';
+  const origenEsConsecutivoInterno = /^(?:FC|CXP)-\d+$/i.test(origenNumero);
+
+  if (documento.origenTipo === 'FACTURA_COMPRA' && numeroFiscalEnGlosa
+      && (!origenNumero || origenEsConsecutivoInterno)) {
+    return numeroFiscalEnGlosa;
+  }
+  return origenNumero || numeroFiscalEnGlosa || documento.numero || 'Documento sin referencia';
 }
 
 export function construirGlosaPago(

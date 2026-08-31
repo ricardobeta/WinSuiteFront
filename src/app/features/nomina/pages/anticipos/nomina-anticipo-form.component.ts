@@ -29,7 +29,8 @@ import { CuentaContableAutocompleteComponent } from '../../../contabilidad/compo
 import {
   AnticipoNomina,
   AnticipoNominaDetalle,
-  ComprobanteEntregaAnticipo
+  ComprobanteEntregaAnticipo,
+  EstadoAnticipoNomina
 } from '../../../contabilidad/models/anticipos-nomina.models';
 import { AsientoContableLinea, CuentaContable } from '../../../contabilidad/models/contabilidad.models';
 import { EmpleadoNomina } from '../../../contabilidad/models/nomina.models';
@@ -53,6 +54,8 @@ interface FilaEmpleado {
   fechaIngreso: string;
   sueldoBase: number;
   monto: number;
+  sueldoPeriodoCongelado?: number;
+  diasTrabajadosPeriodoCongelados?: number;
 }
 
 /**
@@ -94,13 +97,19 @@ interface BasePeriodo {
       <header class="surface-card page-header">
         <div class="header-copy">
           <div class="title-line">
-            <h2>{{ anticipoId() ? 'Preparar entrega del anticipo' : 'Nuevo anticipo' }}</h2>
-            @if (numero()) { <span class="draft-chip">Borrador · {{ numero() }}</span> }
+            <h2>{{ tituloPagina() }}</h2>
+            @if (numero()) {
+              <span class="draft-chip" [class.registered]="esRegistrado()">
+                {{ esRegistrado() ? 'Registrado' : 'Borrador' }} · {{ numero() }}
+              </span>
+            }
           </div>
           <p>
-            {{ anticipoId()
-              ? 'Revisa los valores, emite las constancias y confirma cuando el dinero haya sido entregado.'
-              : 'Selecciona empleados y guarda la propuesta antes de emitir documentos o afectar la nomina.' }}
+            {{ esRegistrado()
+              ? 'Elige el rol mensual que cobrara este anticipo. La entrega y el asiento permanecen intactos.'
+              : anticipoId()
+                ? 'Revisa los valores, emite las constancias y confirma cuando el dinero haya sido entregado.'
+                : 'Selecciona empleados y guarda la propuesta antes de emitir documentos o afectar la nomina.' }}
           </p>
         </div>
         <a mat-stroked-button routerLink="/workspace/contabilidad/nomina/anticipos">
@@ -117,9 +126,21 @@ interface BasePeriodo {
         <section class="aviso-box">
           <mat-icon>info</mat-icon>
           <span>
-            El rol mensual de {{ periodo() }} ya esta generado en borrador. Despues de registrar el anticipo,
-            abre el rol y usa <strong>Traer anticipos del periodo</strong> para incluirlo.
+            @if (esRegistrado()) {
+              Al guardar se sincronizara{{ rolesBorradorAfectados().length === 1 ? '' : 'n' }}
+              <strong>{{ rolesBorradorAfectados().join(' y ') }}</strong> para evitar descuentos duplicados.
+            } @else {
+              El rol mensual de {{ periodo() }} ya esta generado en borrador. Despues de registrar el anticipo,
+              abre el rol y usa <strong>Traer anticipos del periodo</strong> para incluirlo.
+            }
           </span>
+        </section>
+      }
+
+      @if (esRegistrado()) {
+        <section class="locked-note" aria-label="Datos contables protegidos">
+          <mat-icon>lock</mat-icon>
+          <span><strong>Entrega contabilizada.</strong> La fecha de pago, los valores y el asiento no se modificaran al cambiar el periodo.</span>
         </section>
       }
 
@@ -134,15 +155,17 @@ interface BasePeriodo {
 
           <mat-form-field appearance="outline">
             <mat-label>Fecha de entrega</mat-label>
-            <input matInput [matDatepicker]="pickerEntrega" [ngModel]="fechaEntregaDate()" (ngModelChange)="fechaEntregaDate.set($event)" name="fechaEntrega" />
-            <mat-datepicker-toggle matSuffix [for]="pickerEntrega"></mat-datepicker-toggle>
+            <input matInput [matDatepicker]="pickerEntrega" [ngModel]="fechaEntregaDate()" (ngModelChange)="fechaEntregaDate.set($event)" name="fechaEntrega" [disabled]="esRegistrado()" />
+            <mat-datepicker-toggle matSuffix [for]="pickerEntrega" [disabled]="esRegistrado()"></mat-datepicker-toggle>
             <mat-datepicker #pickerEntrega></mat-datepicker>
+            @if (esRegistrado()) { <mat-hint>Fecha del asiento contable</mat-hint> }
           </mat-form-field>
 
           <app-cuenta-contable-autocomplete
             [cuentas]="cuentas()"
             [cuentaId]="cuentaOrigenId()"
             [mostrarNumero]="false"
+            [disabled]="esRegistrado()"
             label="Cuenta de origen (caja / banco)"
             (cuentaSeleccionada)="cuentaOrigenId.set($event?.id ?? '')"
           />
@@ -150,8 +173,8 @@ interface BasePeriodo {
 
         <mat-form-field appearance="outline" class="concepto-field">
           <mat-label>Concepto</mat-label>
-          <input matInput [ngModel]="concepto()" (ngModelChange)="concepto.set($event)" name="concepto" maxlength="120" />
-          <mat-hint>Se copia a cada linea del asiento junto al nombre del empleado</mat-hint>
+          <input matInput [ngModel]="concepto()" (ngModelChange)="concepto.set($event)" name="concepto" maxlength="120" [disabled]="esRegistrado()" />
+          <mat-hint>{{ esRegistrado() ? 'Concepto conservado en el asiento original' : 'Se copia a cada linea del asiento junto al nombre del empleado' }}</mat-hint>
         </mat-form-field>
       </section>
 
@@ -170,11 +193,19 @@ interface BasePeriodo {
               <mat-icon>picture_as_pdf</mat-icon>
               {{ descargandoPdf() ? 'Generando…' : 'Constancias para firmar' }}
             </button>
-            <input #comprobanteInput hidden type="file" accept=".pdf,application/pdf" (change)="subirComprobante($event)" />
-            <button mat-stroked-button type="button" (click)="comprobanteInput.click()" [disabled]="subiendoComprobante() || cambiosSinGuardar()">
-              <mat-icon>{{ comprobante() ? 'published_with_changes' : 'upload_file' }}</mat-icon>
-              {{ subiendoComprobante() ? 'Subiendo…' : (comprobante() ? 'Reemplazar respaldo' : 'Adjuntar respaldo') }}
-            </button>
+            @if (!esRegistrado()) {
+              <input #comprobanteInput hidden type="file" accept=".pdf,application/pdf" (change)="subirComprobante($event)" />
+              <button mat-stroked-button type="button" (click)="comprobanteInput.click()" [disabled]="subiendoComprobante() || cambiosSinGuardar()">
+                <mat-icon>{{ comprobante() ? 'published_with_changes' : 'upload_file' }}</mat-icon>
+                {{ subiendoComprobante() ? 'Subiendo…' : (comprobante() ? 'Reemplazar respaldo' : 'Adjuntar respaldo') }}
+              </button>
+            }
+            @if (esRegistrado() && anticipoActual()?.asientoId) {
+              <a mat-stroked-button [routerLink]="['/workspace/contabilidad/asientos', anticipoActual()!.asientoId, 'editar']">
+                <mat-icon>account_tree</mat-icon>
+                Ver asiento
+              </a>
+            }
           </div>
 
           @if (comprobante()) {
@@ -218,6 +249,7 @@ interface BasePeriodo {
           </div>
         </header>
 
+        @if (!esRegistrado()) {
         <div class="masivo">
           <span class="masivo-label">Aplicar a seleccionados</span>
           <mat-form-field appearance="outline">
@@ -235,8 +267,9 @@ interface BasePeriodo {
             Aplicar %
           </button>
         </div>
+        }
 
-        @if (conAnticipoPrevio() > 0) {
+        @if (!esRegistrado() && conAnticipoPrevio() > 0) {
           <p class="nota-periodo">
             <mat-icon>history</mat-icon>
             {{ conAnticipoPrevio() }} empleado(s) ya tienen anticipos de {{ periodo() }} sin descontar.
@@ -244,7 +277,7 @@ interface BasePeriodo {
           </p>
         }
 
-        @if (sinDiasEnPeriodo() > 0) {
+        @if (!esRegistrado() && sinDiasEnPeriodo() > 0) {
           <p class="nota-periodo">
             <mat-icon>info</mat-icon>
             {{ sinDiasEnPeriodo() }} empleado(s) no aparecen porque ingresan despues de {{ periodo() }}:
@@ -265,14 +298,14 @@ interface BasePeriodo {
             <table>
               <thead>
                 <tr>
-                  <th class="check">
+                  @if (!esRegistrado()) { <th class="check">
                     <mat-checkbox
                       [checked]="todosSeleccionados()"
                       [indeterminate]="algunoSeleccionado() && !todosSeleccionados()"
                       (change)="alternarTodos($event.checked)"
                       aria-label="Seleccionar todos los empleados visibles"
                     ></mat-checkbox>
-                  </th>
+                  </th> }
                   <th>Empleado</th>
                   <th>Cargo</th>
                   <th class="num">Sueldo del periodo</th>
@@ -284,13 +317,13 @@ interface BasePeriodo {
               <tbody>
                 @for (fila of filasVisibles(); track fila.empleadoId) {
                   <tr [class.seleccionada]="seleccion().has(fila.empleadoId)" [class.sobre-neto]="superaNeto(fila)">
-                    <td class="check">
+                    @if (!esRegistrado()) { <td class="check">
                       <mat-checkbox
                         [checked]="seleccion().has(fila.empleadoId)"
                         (change)="alternar(fila, $event.checked)"
                         [attr.aria-label]="'Seleccionar ' + fila.nombre"
                       ></mat-checkbox>
-                    </td>
+                    </td> }
                     <td>
                       <strong>{{ fila.nombre }}</strong>
                       <span class="sub">{{ fila.cedula }}</span>
@@ -309,7 +342,10 @@ interface BasePeriodo {
                       }
                     </td>
                     <td class="num monto-col">
-                      <mat-form-field appearance="outline" class="monto-field">
+                      @if (esRegistrado()) {
+                        <strong>{{ fila.monto | currency:'USD':'symbol-narrow':'1.2-2' }}</strong>
+                      } @else {
+                        <mat-form-field appearance="outline" class="monto-field">
                         <input
                           matInput
                           type="text"
@@ -320,7 +356,8 @@ interface BasePeriodo {
                           [name]="'monto-' + fila.empleadoId"
                           [attr.aria-label]="'Monto de anticipo de ' + fila.nombre"
                         />
-                      </mat-form-field>
+                        </mat-form-field>
+                      }
                     </td>
                     <td class="num">{{ porcentaje(fila) }}</td>
                     <td class="alerta-col">
@@ -336,7 +373,7 @@ interface BasePeriodo {
         }
       </section>
 
-      @if (filasSobreNeto().length > 0) {
+      @if (!esRegistrado() && filasSobreNeto().length > 0) {
         <section class="aviso-box">
           <mat-icon>warning</mat-icon>
           <span>
@@ -349,10 +386,22 @@ interface BasePeriodo {
 
       <footer class="surface-card resumen-bar">
         <div class="resumen-datos">
-          <span><strong>{{ seleccionados().length }}</strong> empleado(s) con anticipo</span>
-          <span class="total">Total {{ total() | currency:'USD':'symbol-narrow':'1.2-2' }}</span>
+          <span><strong>{{ esRegistrado() ? filas().length : seleccionados().length }}</strong> empleado(s) con anticipo</span>
+          <span class="total">Total {{ (esRegistrado() ? totalRegistrado() : total()) | currency:'USD':'symbol-narrow':'1.2-2' }}</span>
         </div>
         <div class="resumen-acciones">
+          @if (esRegistrado()) {
+          <button
+            mat-raised-button
+            color="primary"
+            type="button"
+            (click)="confirmarCambioPeriodo()"
+            [disabled]="!puedeCambiarPeriodo() || procesando()"
+          >
+            <mat-icon>event_repeat</mat-icon>
+            {{ procesando() ? 'Guardando…' : 'Guardar nuevo periodo' }}
+          </button>
+          } @else {
           <button mat-button type="button" (click)="limpiar()" [disabled]="seleccion().size === 0">Limpiar</button>
           <button
             mat-stroked-button
@@ -374,6 +423,7 @@ interface BasePeriodo {
             <mat-icon>account_balance_wallet</mat-icon>
             Confirmar entrega
           </button>
+          }
         </div>
       </footer>
     </section>
@@ -385,6 +435,7 @@ interface BasePeriodo {
     .header-copy > p { margin: .4rem 0 0; color: var(--muted-foreground); max-width: 70ch; }
     .title-line { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; }
     .draft-chip { display: inline-flex; min-height: 28px; align-items: center; padding: .15rem .65rem; border-radius: 999px; background: color-mix(in srgb, #f59e0b 16%, var(--tc-surface-container-lowest)); color: #8a4b08; font-size: .78rem; font-weight: 750; }
+    .draft-chip.registered { background: color-mix(in srgb, var(--primary) 14%, var(--tc-surface-container-lowest)); color: var(--primary); }
     .form-card, .table-card { padding: 1.25rem; background: var(--tc-surface-container-lowest); }
     .form-card h3, .table-head h3 { margin: 0 0 .85rem; font-size: 1rem; }
     .grid-datos { display: grid; grid-template-columns: minmax(180px, 220px) minmax(180px, 220px) minmax(260px, 1fr); gap: .75rem; align-items: start; }
@@ -422,6 +473,9 @@ interface BasePeriodo {
     .empty-state p { color: var(--muted-foreground); }
     .error-box { padding: .8rem 1rem; border-radius: .5rem; background: color-mix(in srgb, #b3261e 12%, transparent); color: #b3261e; }
     .aviso-box { display: flex; gap: .6rem; align-items: center; padding: .8rem 1rem; border-radius: .5rem; background: color-mix(in srgb, #f59e0b 14%, transparent); }
+    .locked-note { display: flex; gap: .7rem; align-items: center; padding: .9rem 1rem; border-radius: 14px; background: color-mix(in srgb, var(--primary) 9%, var(--tc-surface-container-lowest)); color: var(--foreground); }
+    .locked-note mat-icon { flex: 0 0 auto; color: var(--primary); }
+    .locked-note span { min-width: 0; overflow-wrap: anywhere; }
     .entrega-card { padding: 1.25rem; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem 1.5rem; align-items: center; background: color-mix(in srgb, var(--primary) 5%, var(--tc-surface-container-lowest)); }
     .entrega-copy { display: flex; gap: .85rem; align-items: center; min-width: 0; }
     .entrega-copy h3, .entrega-copy p { margin: 0; }
@@ -440,7 +494,9 @@ interface BasePeriodo {
       .filtros mat-form-field { width: 100%; }
       .entrega-card { grid-template-columns: 1fr; }
       .entrega-actions { justify-content: stretch; }
-      .entrega-actions button { flex: 1 1 220px; }
+      .entrega-actions button, .entrega-actions a { flex: 1 1 220px; }
+      .resumen-acciones { width: 100%; }
+      .resumen-acciones button { flex: 1 1 auto; min-height: 44px; }
     }
   `]
 })
@@ -470,7 +526,13 @@ export class NominaAnticipoFormComponent implements OnInit {
   protected readonly procesando = signal(false);
   protected readonly error = signal<string | null>(null);
   protected readonly avisoRolBorrador = signal(false);
+  protected readonly rolesBorradorAfectados = signal<string[]>([]);
+  private readonly rolDestinoAprobado = signal(false);
+  private readonly periodoVerificado = signal(false);
   protected readonly anticipoId = signal<string | null>(null);
+  protected readonly anticipoActual = signal<AnticipoNomina | null>(null);
+  private readonly estado = signal<EstadoAnticipoNomina>('BORRADOR');
+  private readonly periodoOriginal = signal('');
   protected readonly numero = signal('');
   protected readonly comprobante = signal<ComprobanteEntregaAnticipo | null>(null);
   protected readonly subiendoComprobante = signal(false);
@@ -492,6 +554,15 @@ export class NominaAnticipoFormComponent implements OnInit {
    * haria que matDatepicker lo lea como valor distinto en cada deteccion de cambios.
    */
   protected readonly fechaEntregaDate = signal<Date | null>(new Date());
+
+  protected readonly esRegistrado = computed(() => this.estado() === 'REGISTRADO');
+  protected readonly tituloPagina = computed(() => this.esRegistrado()
+    ? 'Cambiar periodo de descuento'
+    : this.anticipoId() ? 'Preparar entrega del anticipo' : 'Nuevo anticipo'
+  );
+  protected readonly totalRegistrado = computed(() => this.redondear(
+    this.filas().reduce((suma, fila) => suma + Number(fila.monto ?? 0), 0)
+  ));
 
   protected readonly departamentos = computed(() => Array.from(
     new Set(this.filas().map((fila) => fila.departamento).filter((valor) => !!valor))
@@ -529,7 +600,7 @@ export class NominaAnticipoFormComponent implements OnInit {
     const bases = this.basesPeriodo();
     return this.filas().filter((fila) =>
       // Quien aun no ingresa en el periodo no entra al rol, asi que su anticipo nunca se descontaria.
-      (bases.get(fila.empleadoId)?.dias ?? 0) > 0
+      (this.esRegistrado() || (bases.get(fila.empleadoId)?.dias ?? 0) > 0)
       && (!departamento || fila.departamento === departamento)
       && (!termino || fila.nombre.toLowerCase().includes(termino) || fila.cedula.includes(termino))
     );
@@ -570,7 +641,18 @@ export class NominaAnticipoFormComponent implements OnInit {
   protected readonly puedeGenerar = computed(() =>
     this.seleccionados().length > 0 && !!this.concepto().trim() && !!this.periodo()
   );
-  protected readonly cambiosSinGuardar = computed(() => this.huellaActual() !== this.huellaGuardada());
+  protected readonly cambiosSinGuardar = computed(() => this.esRegistrado()
+    ? this.periodo() !== this.periodoOriginal()
+    : this.huellaActual() !== this.huellaGuardada()
+  );
+  protected readonly puedeCambiarPeriodo = computed(() =>
+    this.esRegistrado()
+    && /^\d{4}-(0[1-9]|1[0-2])$/.test(this.periodo())
+    && this.periodo() !== this.periodoOriginal()
+    && !this.rolDestinoAprobado()
+    && this.periodoVerificado()
+    && this.authorization.canAccess('contabilidad', 'update')
+  );
   protected readonly puedeConfirmar = computed(() =>
     !!this.anticipoId()
     && !this.cambiosSinGuardar()
@@ -600,7 +682,7 @@ export class NominaAnticipoFormComponent implements OnInit {
       this.anticipoId.set(anticipoId);
       this.concepto.set(this.conceptoPorDefecto(this.periodo()));
 
-      const [empleados, cuentas, configNomina, configIntegracion, borrador] = await Promise.all([
+      const [empleados, cuentas, configNomina, configIntegracion, registro] = await Promise.all([
         firstValueFrom(this.nominaService.getEmpleados()),
         this.planCuentasService.getCuentasOnce(),
         this.nominaService.getConfiguracionOnce(),
@@ -625,16 +707,19 @@ export class NominaAnticipoFormComponent implements OnInit {
       this.cuentaAnticipoId.set(configNomina.cuentaAnticiposEmpleadosId ?? '');
       this.cuentaOrigenId.set(configIntegracion.cuentaCajaBancoId ?? '');
       if (anticipoId) {
-        if (!borrador) {
-          throw new Error('El borrador de anticipo ya no existe.');
+        if (!registro) {
+          throw new Error('El anticipo ya no existe.');
         }
-        if (borrador.anticipo.estado !== 'BORRADOR') {
-          throw new Error('Este anticipo ya no se puede editar porque fue confirmado o anulado.');
+        if (!['BORRADOR', 'REGISTRADO'].includes(registro.anticipo.estado)) {
+          throw new Error('Este anticipo ya fue descontado o anulado y no se puede modificar.');
         }
-        this.aplicarBorrador(borrador.anticipo, borrador.detalles);
+        this.estado.set(registro.anticipo.estado);
+        this.anticipoActual.set(registro.anticipo);
+        this.periodoOriginal.set(registro.anticipo.periodo);
+        this.aplicarAnticipo(registro.anticipo, registro.detalles);
       }
       await this.revisarRolDelPeriodo();
-      this.huellaGuardada.set(anticipoId ? this.huellaActual() : '');
+      this.huellaGuardada.set(anticipoId && !this.esRegistrado() ? this.huellaActual() : '');
     } catch (error) {
       this.error.set(error instanceof Error ? error.message : 'No se pudieron cargar los datos del anticipo.');
     } finally {
@@ -646,7 +731,7 @@ export class NominaAnticipoFormComponent implements OnInit {
     const anterior = this.periodo();
     this.periodo.set(periodo ?? '');
     // El concepto por defecto sigue al periodo mientras el usuario no lo haya personalizado.
-    if (this.concepto().trim() === this.conceptoPorDefecto(anterior)) {
+    if (!this.esRegistrado() && this.concepto().trim() === this.conceptoPorDefecto(anterior)) {
       this.concepto.set(this.conceptoPorDefecto(this.periodo()));
     }
     void this.revisarRolDelPeriodo();
@@ -720,10 +805,20 @@ export class NominaAnticipoFormComponent implements OnInit {
   }
 
   protected base(fila: FilaEmpleado): BasePeriodo {
+    if (this.esRegistrado()) {
+      const sueldoPeriodo = fila.sueldoPeriodoCongelado ?? fila.sueldoBase;
+      return {
+        dias: fila.diasTrabajadosPeriodoCongelados ?? 30,
+        sueldoPeriodo,
+        netoEstimado: sueldoPeriodo,
+        anticipoPrevio: 0,
+        disponible: sueldoPeriodo
+      };
+    }
     return this.basesPeriodo().get(fila.empleadoId) ?? {
-      dias: 30,
-      sueldoPeriodo: fila.sueldoBase,
-      netoEstimado: fila.sueldoBase,
+      dias: fila.diasTrabajadosPeriodoCongelados ?? 30,
+      sueldoPeriodo: fila.sueldoPeriodoCongelado ?? fila.sueldoBase,
+      netoEstimado: fila.sueldoPeriodoCongelado ?? fila.sueldoBase,
       anticipoPrevio: 0,
       disponible: fila.sueldoBase
     };
@@ -832,6 +927,52 @@ export class NominaAnticipoFormComponent implements OnInit {
         this.procesando.set(false);
       }
     });
+  }
+
+  protected async confirmarCambioPeriodo(): Promise<void> {
+    const anticipoId = this.anticipoId();
+    if (!anticipoId || !this.puedeCambiarPeriodo()) {
+      return;
+    }
+    if (!this.authorization.canAccess('contabilidad', 'update')) {
+      this.error.set('No tienes permiso para cambiar el periodo de este anticipo.');
+      return;
+    }
+
+    const roles = this.rolesBorradorAfectados();
+    const sincronizacion = roles.length > 0
+      ? ` Tambien se recalculara${roles.length === 1 ? '' : 'n'} ${roles.join(' y ')}.`
+      : '';
+    const confirmado = await firstValueFrom(this.dialog.open(ConfirmDialogComponent, {
+      width: '480px',
+      data: {
+        title: 'Cambiar periodo de descuento',
+        message: `El anticipo ${this.numero()} pasara de ${this.periodoOriginal()} a ${this.periodo()}.${sincronizacion} La fecha de entrega y el asiento contable no cambiaran.`,
+        confirmText: 'Cambiar periodo',
+        confirmColor: 'primary'
+      }
+    }).afterClosed());
+    if (!confirmado) {
+      return;
+    }
+
+    this.error.set(null);
+    this.procesando.set(true);
+    try {
+      const resultado = await this.nominaService.cambiarPeriodoDescuento(anticipoId, this.periodo());
+      this.periodoOriginal.set(resultado.periodoNuevo);
+      this.anticipoActual.update((anticipo) => anticipo ? { ...anticipo, periodo: resultado.periodoNuevo } : anticipo);
+      this.rolesBorradorAfectados.set([]);
+      this.avisoRolBorrador.set(false);
+      const detalleRoles = resultado.rolesSincronizados.length > 0
+        ? ` Se sincronizo${resultado.rolesSincronizados.length === 1 ? '' : 'n'} ${resultado.rolesSincronizados.map((rol) => rol.numero ?? rol.periodo).join(' y ')}.`
+        : '';
+      this.toast(`Periodo cambiado a ${resultado.periodoNuevo}.${detalleRoles}`, 'event_repeat');
+    } catch (error) {
+      this.error.set(error instanceof Error ? error.message : 'No se pudo cambiar el periodo del anticipo.');
+    } finally {
+      this.procesando.set(false);
+    }
   }
 
   protected async guardarBorrador(): Promise<void> {
@@ -997,20 +1138,54 @@ export class NominaAnticipoFormComponent implements OnInit {
    */
   private async revisarRolDelPeriodo(): Promise<void> {
     this.avisoRolBorrador.set(false);
+    this.rolesBorradorAfectados.set([]);
+    this.rolDestinoAprobado.set(false);
+    this.periodoVerificado.set(false);
     this.anticiposPrevios.set(new Map());
-    if (!/^\d{4}-\d{2}$/.test(this.periodo())) {
+    const periodoConsultado = this.periodo();
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(periodoConsultado)) {
+      return;
+    }
+    if (this.esRegistrado()) {
+      try {
+        const periodos = periodoConsultado === this.periodoOriginal()
+          ? [periodoConsultado]
+          : [this.periodoOriginal(), periodoConsultado];
+        const roles = await Promise.all(periodos.map((periodo) => this.anticiposService.buscarRolMensual(periodo)));
+        if (this.periodo() !== periodoConsultado) {
+          return;
+        }
+        const destino = roles[periodos.indexOf(periodoConsultado)] ?? null;
+        this.rolDestinoAprobado.set(destino?.estado === 'APROBADO');
+        this.periodoVerificado.set(true);
+        const borradores = roles
+          .filter((rol, indice, todos) => rol?.estado === 'BORRADOR' && todos.findIndex((item) => item?.id === rol.id) === indice)
+          .map((rol) => `el rol ${rol!.numero ?? rol!.periodo}`);
+        this.rolesBorradorAfectados.set(borradores);
+        this.avisoRolBorrador.set(borradores.length > 0 && periodoConsultado !== this.periodoOriginal());
+        this.error.set(destino?.estado === 'APROBADO'
+          ? `El rol mensual de ${periodoConsultado} ya esta aprobado: elige otro periodo.`
+          : null);
+      } catch {
+        if (this.periodo() === periodoConsultado) {
+          this.error.set('No se pudo comprobar el estado de los roles. Vuelve a intentar antes de guardar.');
+        }
+      }
       return;
     }
     try {
-      this.anticiposPrevios.set(await this.anticiposService.getPendientesPorEmpleado(this.periodo()));
+      this.anticiposPrevios.set(await this.anticiposService.getPendientesPorEmpleado(periodoConsultado));
     } catch {
       // Sin lectura de anticipos previos el cupo se calcula solo con el sueldo del periodo.
     }
     try {
-      const rol = await this.anticiposService.buscarRolMensual(this.periodo());
+      const rol = await this.anticiposService.buscarRolMensual(periodoConsultado);
+      if (this.periodo() !== periodoConsultado) {
+        return;
+      }
       this.avisoRolBorrador.set(rol?.estado === 'BORRADOR');
       if (rol?.estado === 'APROBADO') {
-        this.error.set(`El rol mensual de ${this.periodo()} ya esta aprobado: elige otro periodo para el anticipo.`);
+        this.error.set(`El rol mensual de ${periodoConsultado} ya esta aprobado: elige otro periodo para el anticipo.`);
       } else {
         this.error.set(null);
       }
@@ -1035,7 +1210,7 @@ export class NominaAnticipoFormComponent implements OnInit {
     return Math.min(this.redondear(base.sueldoPeriodo * (porcentaje / 100)), base.disponible);
   }
 
-  private aplicarBorrador(anticipo: AnticipoNomina, detalles: AnticipoNominaDetalle[]): void {
+  private aplicarAnticipo(anticipo: AnticipoNomina, detalles: AnticipoNominaDetalle[]): void {
     const montos = new Map(detalles.map((detalle) => [detalle.empleadoId, Number(detalle.monto ?? 0)]));
     this.numero.set(anticipo.numero ?? '');
     this.periodo.set(anticipo.periodo ?? '');
@@ -1045,10 +1220,28 @@ export class NominaAnticipoFormComponent implements OnInit {
     this.cuentaOrigenId.set(anticipo.cuentaOrigenId ?? '');
     this.comprobante.set(anticipo.comprobanteEntrega ?? null);
     this.seleccion.set(new Set(detalles.filter((detalle) => Number(detalle.monto ?? 0) > 0).map((detalle) => detalle.empleadoId)));
-    this.filas.update((filas) => filas.map((fila) => ({
-      ...fila,
-      monto: this.redondear(montos.get(fila.empleadoId) ?? 0)
-    })));
+    const actuales = new Map(this.filas().map((fila) => [fila.empleadoId, fila]));
+    const filasDetalle = detalles.map((detalle) => {
+      const actual = actuales.get(detalle.empleadoId);
+      return {
+        empleadoId: detalle.empleadoId,
+        nombre: detalle.empleadoNombre,
+        cedula: detalle.cedula,
+        cargo: detalle.cargo,
+        departamento: actual?.departamento ?? '',
+        fechaIngreso: actual?.fechaIngreso ?? '',
+        sueldoBase: Number(detalle.sueldoBase ?? actual?.sueldoBase ?? 0),
+        monto: this.redondear(montos.get(detalle.empleadoId) ?? 0),
+        sueldoPeriodoCongelado: Number(detalle.sueldoPeriodo ?? detalle.sueldoBase ?? 0),
+        diasTrabajadosPeriodoCongelados: Number(detalle.diasTrabajadosPeriodo ?? 30)
+      } satisfies FilaEmpleado;
+    });
+    if (this.esRegistrado()) {
+      this.filas.set(filasDetalle);
+    } else {
+      const porId = new Map(filasDetalle.map((fila) => [fila.empleadoId, fila]));
+      this.filas.update((filas) => filas.map((fila) => porId.get(fila.empleadoId) ?? { ...fila, monto: 0 }));
+    }
   }
 
   /** Huella determinista: cualquier cambio visible obliga a guardar antes de imprimir o confirmar. */

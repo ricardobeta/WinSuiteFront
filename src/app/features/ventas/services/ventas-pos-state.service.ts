@@ -2,7 +2,18 @@ import { Injectable, computed, effect, inject, signal } from '@angular/core';
 
 import { AuthService } from '../../../core/services/auth.service';
 import { Cliente as ClienteModel } from '../../../shared/models/clientes.models';
-import { CarritoItem, CarritoState, MetodoPagoState, MetodoPagoVenta, PosTabState } from '../models/ventas.models';
+import {
+  CarritoItem,
+  CarritoState,
+  MetodoPagoState,
+  MetodoPagoVenta,
+  PosTabState,
+  VENTA_NOTAS_MAX_LENGTH
+} from '../models/ventas.models';
+
+function normalizarNotas(notas: unknown): string {
+  return typeof notas === 'string' ? notas.slice(0, VENTA_NOTAS_MAX_LENGTH) : '';
+}
 
 function getItemKey(productoId: string, itemTipo: CarritoItem['itemTipo'] = 'PRODUCTO'): string {
   return `${itemTipo}:${productoId}`;
@@ -158,7 +169,7 @@ export class VentasPosStateService {
   }
 
   setNotas(notas: string): void {
-    this.updateActiveCarrito((state) => ({ ...state, notas }));
+    this.updateActiveCarrito((state) => ({ ...state, notas: normalizarNotas(notas) }));
   }
 
   agregarItem(item: CarritoItem): void {
@@ -305,7 +316,7 @@ export class VentasPosStateService {
         clienteId: carrito.clienteId ?? null,
         clienteNombre: carrito.clienteNombre ?? null,
         descuentoGlobal: Number.isFinite(carrito.descuentoGlobal) ? carrito.descuentoGlobal : 0,
-        notas: carrito.notas ?? '',
+        notas: normalizarNotas(carrito.notas),
         items: Array.isArray(carrito.items) ? [...carrito.items] : [],
         pagos: carrito.pagos?.length ? carrito.pagos.map((pago) => ({ ...pago })) : base.pagos
       };
@@ -379,7 +390,8 @@ export class VentasPosStateService {
               pagos: (tab.carrito?.pagos ?? []).map((pago) => ({
                 ...pago,
                 monto: this.roundToTwo(Number(pago.monto ?? 0))
-              }))
+              })),
+              notas: normalizarNotas(tab.carrito?.notas)
             }
           }));
 

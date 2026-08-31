@@ -55,7 +55,7 @@ export class SitioPublicacionService {
 
     // La version se escribe primero. Solo cuando termina se cambia el puntero visible.
     await update(ref(this.database), {
-      [`sitios/${tenantId}/${sitioId}/releases/${nuevaVersion}`]: release,
+      [`sitios/${tenantId}/${sitioId}/releases/${nuevaVersion}`]: this.sinUndefined(release),
     });
 
     const cambios: Record<string, unknown> = {
@@ -70,6 +70,24 @@ export class SitioPublicacionService {
 
     await update(ref(this.database), cambios);
     return nuevaVersion;
+  }
+
+  /**
+   * RTDB rechaza el update() completo si encuentra un undefined en cualquier nivel.
+   * Un opcional ausente y un opcional en undefined significan lo mismo: se omite la clave.
+   */
+  private sinUndefined<T>(valor: T): T {
+    if (Array.isArray(valor)) {
+      return valor.filter((item) => item !== undefined).map((item) => this.sinUndefined(item)) as T;
+    }
+    if (valor !== null && typeof valor === 'object') {
+      return Object.fromEntries(
+        Object.entries(valor as Record<string, unknown>)
+          .filter(([, item]) => item !== undefined)
+          .map(([clave, item]) => [clave, this.sinUndefined(item)]),
+      ) as T;
+    }
+    return valor;
   }
 
   /** Definiciones de los formularios prehechos referenciados por los bloques de las paginas. */
@@ -90,7 +108,15 @@ export class SitioPublicacionService {
     if (ids.size === 0) return null;
     const todos = await this.formulariosService.getFormulariosUnaVez();
     const usados = Object.fromEntries(
-      Object.entries(todos).filter(([id]) => ids.has(id)),
+      Object.entries(todos)
+        .filter(([id]) => ids.has(id))
+        // La integracion apagada no viaja al snapshot publicado: el renderer no la usa
+        // y sus mapeos solo le interesan al editor.
+        .map(([id, formulario]): [string, FormularioDef] => {
+          if (formulario.integracionClientes?.habilitada) return [id, formulario];
+          const { integracionClientes: _apagada, ...resto } = formulario;
+          return [id, resto];
+        }),
     );
     return Object.keys(usados).length > 0 ? usados : null;
   }

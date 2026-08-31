@@ -19,6 +19,8 @@ export const OPERATIONAL_TABLES: readonly TablePreferenceIdentity[] = [
   { moduleId: 'contabilidad', tableId: 'asientos' },
   { moduleId: 'contabilidad', tableId: 'facturas-compra' },
   { moduleId: 'contabilidad', tableId: 'cuentas-por-pagar' },
+  { moduleId: 'contabilidad', tableId: 'cuentas-por-pagar-cartera' },
+  { moduleId: 'contabilidad', tableId: 'cuentas-por-pagar-historial' },
   { moduleId: 'contabilidad', tableId: 'pagos-proveedor' },
   { moduleId: 'bancos', tableId: 'cuentas' },
   { moduleId: 'bancos', tableId: 'movimientos' },

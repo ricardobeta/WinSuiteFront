@@ -3,7 +3,14 @@ import { Database, get, limitToLast, onValue, orderByChild, push, query, ref, ru
 import { Observable } from 'rxjs';
 
 import { AuthService } from '../../../core/services/auth.service';
+import { AuditService } from '../../../core/services/audit.service';
 import { CampoPersonalizado } from '../../../shared/models/clientes.models';
+import {
+  AnticipoNomina,
+  AnticipoNominaDetalle,
+  CambioPeriodoAnticipoResultado,
+  RolSincronizadoCambioPeriodo
+} from '../models/anticipos-nomina.models';
 import { AsientoContable, AsientoContableLinea, CuentaContable, TipoCuenta } from '../models/contabilidad.models';
 import {
   AcumuladoEmpleado,
@@ -65,12 +72,82 @@ import {
   normalizarCausalTerminacion
 } from './nomina-liquidacion.util';
 
+/** Valida la unica mutacion admitida sobre un anticipo ya entregado. */
+export function validarCambioPeriodoAnticipo(
+  anticipo: Pick<AnticipoNomina, 'estado' | 'periodo'>,
+  nuevoPeriodo: string
+): string {
+  const normalizado = (nuevoPeriodo ?? '').trim();
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(normalizado)) {
+    throw new Error('Selecciona un periodo valido en formato AAAA-MM.');
+  }
+  if (anticipo.estado !== 'REGISTRADO') {
+    throw new Error('Solo se puede cambiar el periodo de un anticipo registrado y pendiente de descuento.');
+  }
+  if (anticipo.periodo === normalizado) {
+    throw new Error('El nuevo periodo debe ser diferente del periodo actual.');
+  }
+  return normalizado;
+}
+
+/** Mueve los montos del documento entre mapas agregados sin alterar sus detalles congelados. */
+export function prepararPendientesReprogramados(
+  pendientesAnterior: ReadonlyMap<string, number>,
+  pendientesDestino: ReadonlyMap<string, number>,
+  detalles: readonly AnticipoNominaDetalle[]
+): { anterior: Map<string, number>; destino: Map<string, number> } {
+  const anterior = new Map(pendientesAnterior);
+  const destino = new Map(pendientesDestino);
+  const movidos = new Map<string, number>();
+  const redondear = (valor: number) => Math.round((Number(valor || 0) + Number.EPSILON) * 100) / 100;
+  for (const detalle of detalles) {
+    movidos.set(detalle.empleadoId, redondear((movidos.get(detalle.empleadoId) ?? 0) + Number(detalle.monto ?? 0)));
+  }
+  for (const [empleadoId, monto] of movidos) {
+    const restante = redondear((anterior.get(empleadoId) ?? 0) - monto);
+    if (restante > 0) {
+      anterior.set(empleadoId, restante);
+    } else {
+      anterior.delete(empleadoId);
+    }
+    destino.set(empleadoId, redondear((destino.get(empleadoId) ?? 0) + monto));
+  }
+  return { anterior, destino };
+}
+
+/** Sustituye cualquier agregado ANTIC anterior por la linea autoritativa del periodo. */
+export function reemplazarLineaAnticipoRol(
+  detalle: RolPagoDetalle,
+  lineaAnticipo: RolPagoLinea | null
+): RolPagoDetalle {
+  const restantes = (detalle.lineas ?? [])
+    .filter((linea) => linea.codigo !== NominaService.CODIGO_RUBRO_ANTICIPO)
+    .map((linea) => ({ ...linea }));
+  return { ...detalle, lineas: lineaAnticipo ? [...restantes, lineaAnticipo] : restantes };
+}
+
+/** Patch minimo de cabecera: deliberadamente no incluye fecha, asiento, monto ni concepto. */
+export function construirPatchCambioPeriodoAnticipo(
+  anticipoId: string,
+  periodo: string,
+  timestamp: number,
+  usuarioId: string
+): Record<string, unknown> {
+  return {
+    [`anticipos/${anticipoId}/periodo`]: periodo,
+    [`anticipos/${anticipoId}/actualizadoEn`]: timestamp,
+    [`anticipos/${anticipoId}/actualizadoPor`]: usuarioId,
+    [`anticipos/${anticipoId}/ultimaAccion`]: 'actualizar'
+  };
+}
+
 @Injectable({
   providedIn: 'root'
 })
 export class NominaService {
   private readonly database = inject(Database);
   private readonly authService = inject(AuthService);
+  private readonly audit = inject(AuditService);
   private readonly asientosService = inject(AsientosContablesService);
   private readonly planCuentasService = inject(PlanCuentasService);
   private readonly integracionContable = inject(IntegracionContableService);
@@ -1820,6 +1897,130 @@ export class NominaService {
       totalEmpleados: recalculados.length,
       actualizadoEn: Date.now()
     });
+  }
+
+  /**
+   * Mueve un anticipo ya entregado a otro rol mensual sin tocar su fecha ni su asiento. Los roles
+   * en borrador de ambos periodos se reconstruyen desde los anticipos REGISTRADOS vigentes para
+   * que una linea agregada antigua no termine descontando el mismo dinero dos veces.
+   */
+  async cambiarPeriodoDescuento(
+    anticipoId: string,
+    nuevoPeriodo: string
+  ): Promise<CambioPeriodoAnticipoResultado> {
+    const resumen = await this.anticiposService.getAnticipoDetalle(anticipoId);
+    if (!resumen) {
+      throw new Error('El anticipo ya no existe.');
+    }
+    const anticipo = resumen.anticipo;
+    const periodoNormalizado = validarCambioPeriodoAnticipo(anticipo, nuevoPeriodo);
+
+    const periodoAnterior = anticipo.periodo;
+    const [rolAnterior, rolDestino, pendientesAnterior, pendientesDestino, config, rubros] = await Promise.all([
+      this.anticiposService.buscarRolMensual(periodoAnterior),
+      this.anticiposService.buscarRolMensual(periodoNormalizado),
+      this.anticiposService.getPendientesPorEmpleado(periodoAnterior),
+      this.anticiposService.getPendientesPorEmpleado(periodoNormalizado),
+      this.getConfiguracionOnce(),
+      this.getRubrosOnce()
+    ]);
+
+    if (rolDestino?.estado === 'APROBADO') {
+      throw new Error(`El rol mensual de ${periodoNormalizado} ya esta aprobado. Elige otro periodo.`);
+    }
+
+    const pendientesReprogramados = prepararPendientesReprogramados(
+      pendientesAnterior,
+      pendientesDestino,
+      resumen.detalles
+    );
+
+    const rubroAnticipo = rubros.find((rubro) => rubro.codigo === NominaService.CODIGO_RUBRO_ANTICIPO) ?? null;
+    const rolesSincronizados: RolSincronizadoCambioPeriodo[] = [];
+    const rolesPreparados: Array<{ rol: RolPago; detalles: RolPagoDetalle[] }> = [];
+    const candidatos = [
+      { rol: rolAnterior, pendientes: pendientesReprogramados.anterior, esDestino: false },
+      { rol: rolDestino, pendientes: pendientesReprogramados.destino, esDestino: true }
+    ];
+
+    for (const candidato of candidatos) {
+      const rol = candidato.rol;
+      if (!rol?.id || rol.estado !== 'BORRADOR') {
+        continue;
+      }
+      const detalleRol = await this.getRolPagoDetalle(rol.id);
+      if (!detalleRol || detalleRol.rol.estado !== 'BORRADOR') {
+        throw new Error(`El rol ${rol.numero ?? rol.periodo} cambio mientras se preparaba la reprogramacion. Vuelve a intentar.`);
+      }
+
+      if (candidato.esDestino) {
+        const empleadosRol = new Set(detalleRol.detalles.map((detalle) => detalle.empleadoId));
+        const faltantes = resumen.detalles
+          .filter((detalle) => !empleadosRol.has(detalle.empleadoId))
+          .map((detalle) => detalle.empleadoNombre);
+        if (faltantes.length > 0) {
+          const muestra = faltantes.slice(0, 3).join(', ');
+          const resto = faltantes.length > 3 ? ` y ${faltantes.length - 3} mas` : '';
+          throw new Error(
+            `No se puede cambiar el periodo: ${muestra}${resto} no pertenece${faltantes.length === 1 ? '' : 'n'} al rol borrador ${rol.numero ?? rol.periodo}.`
+          );
+        }
+      }
+
+      const recalculados = detalleRol.detalles.map((detalle) => {
+        const lineaAnticipo = this.crearLineaAnticipo(
+          candidato.pendientes.get(detalle.empleadoId) ?? 0,
+          rubroAnticipo,
+          config
+        );
+        return this.recalcularDetalle(reemplazarLineaAnticipoRol(detalle, lineaAnticipo), config);
+      });
+      rolesPreparados.push({ rol: detalleRol.rol, detalles: recalculados });
+      rolesSincronizados.push({ id: rol.id, periodo: rol.periodo, numero: rol.numero ?? null });
+    }
+
+    const timestamp = Date.now();
+    const actor = this.audit.currentActor();
+    const updates = construirPatchCambioPeriodoAnticipo(
+      anticipoId,
+      periodoNormalizado,
+      timestamp,
+      actor.userId
+    );
+
+    for (const preparado of rolesPreparados) {
+      const rolId = preparado.rol.id!;
+      const detallesPorId: Record<string, RolPagoDetalle> = {};
+      for (const detalle of preparado.detalles) {
+        detallesPorId[detalle.id] = detalle;
+      }
+      updates[`rolesPagoDetalles/${rolId}`] = detallesPorId;
+      const totales = this.calcularTotales(preparado.detalles);
+      for (const [campo, valor] of Object.entries(totales)) {
+        updates[`rolesPago/${rolId}/${campo}`] = valor;
+      }
+      updates[`rolesPago/${rolId}/totalEmpleados`] = preparado.detalles.length;
+      updates[`rolesPago/${rolId}/actualizadoEn`] = timestamp;
+    }
+
+    await update(ref(this.database, this.getNominaPath()), updates);
+    await this.audit.recordSafe({
+      action: 'actualizar',
+      target: {
+        module: 'nomina',
+        entityType: 'anticipo_nomina',
+        entityId: anticipoId,
+        label: anticipo.numero
+      },
+      summary: `Cambio el periodo de descuento del anticipo ${anticipo.numero} de ${periodoAnterior} a ${periodoNormalizado}`,
+      changesBefore: { periodo: periodoAnterior },
+      changesAfter: {
+        periodo: periodoNormalizado,
+        rolesSincronizados: rolesSincronizados.map((rol) => rol.numero ?? rol.periodo)
+      }
+    });
+
+    return { periodoAnterior, periodoNuevo: periodoNormalizado, rolesSincronizados };
   }
 
   /**

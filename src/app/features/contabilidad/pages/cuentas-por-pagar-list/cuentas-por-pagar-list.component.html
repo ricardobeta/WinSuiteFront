@@ -1,0 +1,270 @@
+<!--
+  THESIS: una cartera es una fotografia verificable, no una lista mensual repetida.
+  OWN-WORLD: superficies tonales verde pizarra, tipografia editorial y datos tabulares sin lineas duras.
+  STORY: entender el total al corte, localizar el proveedor y comprobar cada documento antes de actuar.
+  FIRST VIEWPORT: titulo y acciones, selector Cartera/Historial, lectura de saldo y filtros de corte.
+  FORM: mesa de trabajo contable, agrupacion por proveedor y detalle documental diferido.
+-->
+<section class="cxp-workspace">
+  <header class="page-intro surface-card">
+    <div class="intro-copy">
+      <h1>Cuentas por pagar</h1>
+      <p>Consulta la cartera en una fecha exacta o rastrea la historia completa de cada obligación.</p>
+    </div>
+    <div class="header-actions">
+      <a mat-stroked-button routerLink="pagos"><mat-icon>payments</mat-icon> Pagos registrados</a>
+      <a mat-raised-button color="primary" routerLink="nueva"><mat-icon>add</mat-icon> Nueva CxP manual</a>
+    </div>
+  </header>
+
+  <nav class="view-switch" aria-label="Vistas de cuentas por pagar">
+    <button type="button" [class.active]="vista() === 'cartera'" [attr.aria-pressed]="vista() === 'cartera'" (click)="cambiarVista('cartera')">
+      <mat-icon>account_balance_wallet</mat-icon>
+      <span><strong>Cartera al corte</strong><small>Qué se debía y cuándo vencía</small></span>
+    </button>
+    <button type="button" [class.active]="vista() === 'historial'" [attr.aria-pressed]="vista() === 'historial'" (click)="cambiarVista('historial')">
+      <mat-icon>history</mat-icon>
+      <span><strong>Historial de documentos</strong><small>Qué ocurrió con cada obligación</small></span>
+    </button>
+  </nav>
+
+  @if (error()) {
+    <section class="error-banner" role="alert">
+      <mat-icon>error_outline</mat-icon><div><strong>No pudimos completar la consulta</strong><span>{{ error() }}</span></div>
+    </section>
+  }
+
+  @if (vista() === 'cartera') {
+    <section class="ledger-summary" aria-label="Resumen de cartera">
+      <div class="balance-focus">
+        <span>Saldo neto al {{ formatearFecha(fechaCorte()) }}</span>
+        <strong>{{ resumen().saldoNeto | currency:'USD':'symbol-narrow':'1.2-2' }}</strong>
+        <small>Deuda {{ resumen().deudaBruta | currency:'USD':'symbol-narrow':'1.2-2' }} − créditos {{ resumen().creditos | currency:'USD':'symbol-narrow':'1.2-2' }}</small>
+      </div>
+      <dl>
+        <div class="overdue"><dt>Vencido</dt><dd>{{ resumen().vencido | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
+        <div><dt>Por vencer</dt><dd>{{ resumen().porVencer | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div>
+        <div><dt>Proveedores con saldo</dt><dd>{{ resumen().proveedores }}</dd></div>
+        <div><dt>Documentos abiertos</dt><dd>{{ resumen().documentos }}</dd></div>
+      </dl>
+    </section>
+
+    <section class="filters-surface surface-card" aria-label="Filtros de cartera">
+      <div class="filter-heading"><strong>Composición de la cartera</strong><span>Los tramos se calculan desde la fecha de vencimiento.</span></div>
+      <div class="filter-grid cartera-filters">
+        <mat-form-field appearance="outline">
+          <mat-label>Fecha de corte</mat-label>
+          <input matInput type="date" [ngModel]="fechaCorte()" (ngModelChange)="fechaCorte.set($event)" [max]="hoy" />
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Proveedor</mat-label>
+          <input matInput [ngModel]="busquedaCartera()" (ngModelChange)="busquedaCartera.set($event)" placeholder="Nombre o identificación" (keyup.enter)="buscarCartera()" />
+          <mat-icon matSuffix>storefront</mat-icon>
+        </mat-form-field>
+        <mat-form-field appearance="outline">
+          <mat-label>Situación de vencimiento</mat-label>
+          <mat-select [ngModel]="tramo()" (ngModelChange)="tramo.set($event)">
+            <mat-option value="TODOS">Todos los saldos</mat-option>
+            <mat-option value="POR_VENCER">Por vencer</mat-option>
+            <mat-option value="VENCIDO">Todo lo vencido</mat-option>
+            <mat-option value="1_30">Vencido 1–30 días</mat-option>
+            <mat-option value="31_60">Vencido 31–60 días</mat-option>
+            <mat-option value="61_90">Vencido 61–90 días</mat-option>
+            <mat-option value="MAS_90">Vencido más de 90 días</mat-option>
+            <mat-option value="CREDITOS">Con créditos disponibles</mat-option>
+          </mat-select>
+        </mat-form-field>
+        <button mat-raised-button color="primary" type="button" class="consult-button" (click)="buscarCartera()" [disabled]="cargando() || !fechaCorte()">
+          <mat-icon>search</mat-icon> Consultar
+        </button>
+      </div>
+    </section>
+
+    <section class="results-surface surface-card">
+      @if (cargando()) {
+        <div class="state-panel" aria-live="polite"><mat-icon class="spin">progress_activity</mat-icon><h2>Reconstruyendo saldos</h2><p>Aplicamos documentos, pagos y anulaciones hasta la fecha elegida.</p></div>
+      } @else if (proveedores().length === 0) {
+        <div class="state-panel"><mat-icon>task_alt</mat-icon><h2>No hay saldos con estos filtros</h2><p>Prueba otra fecha o limpia el proveedor y el tramo de vencimiento.</p></div>
+      } @else {
+        <app-data-table-frame tableModule="contabilidad" tableId="cuentas-por-pagar-cartera" [showSearch]="false"
+          [total]="carteraTotal()" [pageIndex]="carteraPage()" [pageSize]="carteraSize()" [pageSizeOptions]="[25, 50, 100]"
+          (pageChange)="actualizarPaginaCartera($event)">
+          <div class="desktop-table table-scroll">
+            <table class="provider-table">
+              <thead><tr><th>Proveedor</th><th class="center">Docs.</th><th>Próximo vencimiento</th><th class="num">Por vencer</th><th class="num">1–30</th><th class="num">31–60</th><th class="num">61–90</th><th class="num">+90</th><th class="num">Créditos</th><th class="num">Saldo neto</th></tr></thead>
+              <tbody>
+                @for (proveedor of proveedores(); track proveedor.proveedorClave) {
+                  <tr class="provider-row" [class.expanded]="proveedorExpandido() === proveedor.proveedorClave">
+                    <td><button class="provider-toggle" type="button" (click)="alternarProveedor(proveedor)" [attr.aria-expanded]="proveedorExpandido() === proveedor.proveedorClave"><mat-icon>{{ proveedorExpandido() === proveedor.proveedorClave ? 'expand_less' : 'expand_more' }}</mat-icon><span><strong>{{ proveedor.proveedorNombre }}</strong><small>{{ proveedor.proveedorIdentificacion || 'Sin identificación registrada' }}</small></span></button></td>
+                    <td class="center">{{ proveedor.cantidadDocumentos }}</td><td>{{ formatearFecha(proveedor.proximoVencimiento) }}</td>
+                    <td class="num">{{ proveedor.porVencer | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
+                    <td class="num" [class.attention]="proveedor.tramo1_30 > 0">{{ proveedor.tramo1_30 | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
+                    <td class="num" [class.attention]="proveedor.tramo31_60 > 0">{{ proveedor.tramo31_60 | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
+                    <td class="num" [class.danger]="proveedor.tramo61_90 > 0">{{ proveedor.tramo61_90 | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
+                    <td class="num" [class.danger]="proveedor.tramoMas90 > 0">{{ proveedor.tramoMas90 | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
+                    <td class="num credit">{{ proveedor.creditos | currency:'USD':'symbol-narrow':'1.2-2' }}</td><td class="num total">{{ proveedor.saldoNeto | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
+                  </tr>
+                  @if (proveedorExpandido() === proveedor.proveedorClave) { <tr class="detail-row"><td colspan="10"><ng-container [ngTemplateOutlet]="providerDetail" /></td></tr> }
+                }
+              </tbody>
+            </table>
+          </div>
+
+          <div class="mobile-provider-list">
+            @for (proveedor of proveedores(); track proveedor.proveedorClave) {
+              <article class="provider-card" [class.expanded]="proveedorExpandido() === proveedor.proveedorClave">
+                <button type="button" class="provider-card-head" (click)="alternarProveedor(proveedor)" [attr.aria-expanded]="proveedorExpandido() === proveedor.proveedorClave">
+                  <span><strong>{{ proveedor.proveedorNombre }}</strong><small>{{ proveedor.cantidadDocumentos }} documentos · vence {{ formatearFecha(proveedor.proximoVencimiento) }}</small></span>
+                  <span class="card-total">{{ proveedor.saldoNeto | currency:'USD':'symbol-narrow':'1.2-2' }}<mat-icon>{{ proveedorExpandido() === proveedor.proveedorClave ? 'expand_less' : 'expand_more' }}</mat-icon></span>
+                </button>
+                <dl class="aging-compact"><div><dt>Por vencer</dt><dd>{{ proveedor.porVencer | currency:'USD':'symbol-narrow':'1.0-0' }}</dd></div><div><dt>Vencido</dt><dd>{{ proveedor.vencido | currency:'USD':'symbol-narrow':'1.0-0' }}</dd></div><div><dt>Créditos</dt><dd>{{ proveedor.creditos | currency:'USD':'symbol-narrow':'1.0-0' }}</dd></div></dl>
+                @if (proveedorExpandido() === proveedor.proveedorClave) { <ng-container [ngTemplateOutlet]="providerDetail" /> }
+              </article>
+            }
+          </div>
+        </app-data-table-frame>
+      }
+    </section>
+
+    <ng-template #providerDetail>
+      <section class="provider-detail" aria-live="polite">
+        <header><div><h2>Documentos que componen el saldo</h2><p>{{ proveedorSeleccionado()?.proveedorNombre }} · corte {{ formatearFecha(fechaCorte()) }}</p></div>@if (!corteActual()) { <span class="historical-badge"><mat-icon>lock_clock</mat-icon> Consulta histórica</span> }</header>
+        @if (cargandoDetalle()) {
+          <div class="detail-loading"><mat-icon class="spin">progress_activity</mat-icon> Calculando aplicaciones al corte…</div>
+        } @else if (documentosProveedor().length === 0) {
+          <p class="detail-loading">No hay documentos en esta página del detalle.</p>
+        } @else {
+          <div class="table-scroll detail-table-desktop"><table class="document-table"><thead><tr>@if (corteActual()) { <th class="check"></th> }<th>Factura / referencia</th><th>Emisión</th><th>Vence</th><th class="num">Original</th><th class="num">Aplicado al corte</th><th class="num">Saldo al corte</th><th>Estado</th><th></th></tr></thead><tbody>
+            @for (documento of documentosProveedor(); track documento.id) {
+              <tr [class.credit-document]="documento.credito">
+                @if (corteActual()) { <td class="check"><mat-checkbox [checked]="seleccionados().has(documento.id)" [disabled]="!documento.elegiblePago" (change)="seleccionarDocumento(documento, $event.checked)" [aria-label]="'Seleccionar ' + documento.referencia"></mat-checkbox></td> }
+                <td><strong>{{ documento.referencia }}</strong><span class="sub">{{ documento.numero }} · {{ documento.glosa }}</span></td><td>{{ formatearFecha(documento.fechaEmision) }}</td><td [class.danger]="documento.diasVencidos > 0 && !documento.credito">{{ formatearFecha(documento.fechaVencimiento) }}</td>
+                <td class="num">{{ documento.montoOriginal | currency:'USD':'symbol-narrow':'1.2-2' }}</td><td class="num">{{ documento.aplicadoAlCorte | currency:'USD':'symbol-narrow':'1.2-2' }}</td><td class="num total">{{ documento.saldoAlCorte | currency:'USD':'symbol-narrow':'1.2-2' }}</td>
+                <td>@if (estadoCambio(documento); as cambio) { <span class="state-change">{{ cambio }}</span> } @else { <span class="status" [attr.data-status]="documento.estadoAlCorte">{{ etiquetaEstado(documento.estadoAlCorte) }}</span> }@if (documento.credito) { <span class="credit-label">Crédito disponible</span> }</td>
+                <td><button mat-icon-button type="button" (click)="abrirTrazabilidad(documento)" aria-label="Ver trazabilidad"><mat-icon>manage_search</mat-icon></button></td>
+              </tr>
+            }
+          </tbody></table></div>
+          <div class="mobile-document-list">
+            @for (documento of documentosProveedor(); track documento.id) {
+              <article class="document-card" [class.credit-document]="documento.credito">
+                <header>
+                  @if (corteActual()) { <mat-checkbox [checked]="seleccionados().has(documento.id)" [disabled]="!documento.elegiblePago" (change)="seleccionarDocumento(documento, $event.checked)" [aria-label]="'Seleccionar ' + documento.referencia"></mat-checkbox> }
+                  <button class="document-link" type="button" (click)="abrirTrazabilidad(documento)"><strong>{{ documento.referencia }}</strong><small>{{ documento.numero }} · {{ documento.glosa }}</small></button>
+                  <strong class="document-card-total">{{ documento.saldoAlCorte | currency:'USD':'symbol-narrow':'1.2-2' }}</strong>
+                </header>
+                <dl><div><dt>Emisión</dt><dd>{{ formatearFecha(documento.fechaEmision) }}</dd></div><div><dt>Vence</dt><dd [class.danger]="documento.diasVencidos > 0 && !documento.credito">{{ formatearFecha(documento.fechaVencimiento) }}</dd></div><div><dt>Original</dt><dd>{{ documento.montoOriginal | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div><div><dt>Aplicado</dt><dd>{{ documento.aplicadoAlCorte | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div></dl>
+                <footer>@if (estadoCambio(documento); as cambio) { <span class="state-change">{{ cambio }}</span> } @else { <span class="status" [attr.data-status]="documento.estadoAlCorte">{{ etiquetaEstado(documento.estadoAlCorte) }}</span> }@if (documento.credito) { <span class="credit-label">Crédito disponible</span> }<button mat-button type="button" (click)="abrirTrazabilidad(documento)"><mat-icon>manage_search</mat-icon> Trazabilidad</button></footer>
+              </article>
+            }
+          </div>
+          <footer class="detail-footer"><div class="detail-pagination"><button mat-button type="button" (click)="cambiarPaginaDetalle(-1)" [disabled]="detallePage() === 0">Anterior</button><span>Página {{ detallePage() + 1 }} · {{ detalleTotal() }} documentos</span><button mat-button type="button" (click)="cambiarPaginaDetalle(1)" [disabled]="(detallePage() + 1) * detalleSize() >= detalleTotal()">Siguiente</button></div>@if (corteActual()) { <div class="payment-action"><span>{{ seleccionados().size }} seleccionados</span><button mat-raised-button color="primary" type="button" (click)="prepararPago()" [disabled]="!puedePrepararPago()"><mat-icon>payments</mat-icon> Preparar pago</button></div> }</footer>
+        }
+      </section>
+    </ng-template>
+  } @else {
+    <section class="filters-surface surface-card" aria-label="Filtros del historial">
+      <div class="filter-heading"><strong>Historial documental</strong><span>El rango corresponde a la fecha de emisión.</span></div>
+      <div class="filter-grid history-filters">
+        <mat-form-field appearance="outline"><mat-label>Desde</mat-label><input matInput type="date" [ngModel]="fechaDesde()" (ngModelChange)="fechaDesde.set($event)" /></mat-form-field>
+        <mat-form-field appearance="outline"><mat-label>Hasta</mat-label><input matInput type="date" [ngModel]="fechaHasta()" (ngModelChange)="fechaHasta.set($event)" [max]="hoy" /></mat-form-field>
+        <mat-form-field appearance="outline"><mat-label>Estado</mat-label><mat-select [ngModel]="estadoHistorial()" (ngModelChange)="estadoHistorial.set($event)"><mat-option value="TODOS">Todos</mat-option><mat-option value="PENDIENTE">Pendiente</mat-option><mat-option value="PARCIAL">Parcial</mat-option><mat-option value="PAGADA">Pagada</mat-option><mat-option value="ANULADA">Anulada</mat-option></mat-select></mat-form-field>
+        <mat-form-field appearance="outline"><mat-label>Origen</mat-label><mat-select [ngModel]="origenHistorial()" (ngModelChange)="origenHistorial.set($event)"><mat-option value="TODOS">Todos</mat-option><mat-option value="FACTURA_COMPRA">Factura de compra</mat-option><mat-option value="MANUAL">Manual</mat-option><mat-option value="RETENCION">Retención</mat-option><mat-option value="NOMINA">Nómina</mat-option></mat-select></mat-form-field>
+        <mat-form-field appearance="outline" class="history-search"><mat-label>Proveedor o referencia</mat-label><input matInput [ngModel]="busquedaHistorial()" (ngModelChange)="busquedaHistorial.set($event)" (keyup.enter)="buscarHistorial()" /><mat-icon matSuffix>search</mat-icon></mat-form-field>
+        <button mat-raised-button color="primary" type="button" class="consult-button" (click)="buscarHistorial()" [disabled]="cargando() || !fechaDesde() || !fechaHasta()"><mat-icon>search</mat-icon> Consultar</button>
+      </div>
+    </section>
+
+    <section class="results-surface surface-card history-results">
+      @if (cargando()) {
+        <div class="state-panel" aria-live="polite"><mat-icon class="spin">progress_activity</mat-icon><h2>Consultando documentos</h2><p>Buscamos obligaciones y su estado actual.</p></div>
+      } @else if (historial().length === 0) {
+        <div class="state-panel"><mat-icon>receipt_long</mat-icon><h2>No encontramos documentos</h2><p>Ajusta el rango o amplía los filtros de estado y origen.</p></div>
+      } @else {
+        <app-data-table-frame tableModule="contabilidad" tableId="cuentas-por-pagar-historial" [showSearch]="false" [total]="historialTotal()" [pageIndex]="historialPage()" [pageSize]="historialSize()" [pageSizeOptions]="[25, 50, 100]" (pageChange)="actualizarPaginaHistorial($event)">
+          <div class="table-scroll history-table-desktop"><table class="history-table"><thead><tr><th>Documento</th><th>Proveedor</th><th>Emisión</th><th>Vence</th><th>Origen</th><th class="num">Original</th><th class="num">Aplicado</th><th class="num">Saldo actual</th><th>Estado actual</th><th></th></tr></thead><tbody>
+            @for (documento of historial(); track documento.id) {
+              <tr><td><button class="document-link" type="button" (click)="abrirTrazabilidad(documento)"><strong>{{ documento.referencia }}</strong><small>{{ documento.numero }}</small></button></td><td><strong>{{ documento.proveedorNombre }}</strong><span class="sub">{{ documento.proveedorIdentificacion }}</span></td><td>{{ formatearFecha(documento.fechaEmision) }}</td><td>{{ formatearFecha(documento.fechaVencimiento) }}</td><td><span class="origin-chip">{{ etiquetaOrigen(documento.origenTipo) }}</span></td><td class="num">{{ documento.montoOriginal | currency:'USD':'symbol-narrow':'1.2-2' }}</td><td class="num">{{ documento.aplicadoActual | currency:'USD':'symbol-narrow':'1.2-2' }}</td><td class="num total">{{ documento.saldoActual | currency:'USD':'symbol-narrow':'1.2-2' }}</td><td><span class="status" [attr.data-status]="documento.estadoActual">{{ etiquetaEstado(documento.estadoActual) }}</span>@if (detalleAnulacion(documento); as detalle) { <span class="excluded-note">{{ detalle }}</span> }</td><td><button mat-icon-button type="button" (click)="abrirTrazabilidad(documento)" aria-label="Ver trazabilidad"><mat-icon>chevron_right</mat-icon></button></td></tr>
+            }
+          </tbody></table></div>
+          <div class="mobile-history-list">
+            @for (documento of historial(); track documento.id) {
+              <article class="history-card">
+                <button class="document-link" type="button" (click)="abrirTrazabilidad(documento)"><strong>{{ documento.referencia }}</strong><small>{{ documento.numero }} · {{ documento.proveedorNombre }}</small></button>
+                <strong class="document-card-total">{{ documento.saldoActual | currency:'USD':'symbol-narrow':'1.2-2' }}</strong>
+                <dl><div><dt>Emisión</dt><dd>{{ formatearFecha(documento.fechaEmision) }}</dd></div><div><dt>Vence</dt><dd>{{ formatearFecha(documento.fechaVencimiento) }}</dd></div><div><dt>Original</dt><dd>{{ documento.montoOriginal | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div><div><dt>Aplicado</dt><dd>{{ documento.aplicadoActual | currency:'USD':'symbol-narrow':'1.2-2' }}</dd></div></dl>
+                <footer><span class="origin-chip">{{ etiquetaOrigen(documento.origenTipo) }}</span><span class="status" [attr.data-status]="documento.estadoActual">{{ etiquetaEstado(documento.estadoActual) }}</span>@if (detalleAnulacion(documento); as detalle) { <span class="excluded-note">{{ detalle }}</span> }<button mat-button type="button" (click)="abrirTrazabilidad(documento)">Ver trazabilidad</button></footer>
+              </article>
+            }
+          </div>
+        </app-data-table-frame>
+      }
+    </section>
+  }
+
+  @if (cargandoTrazabilidad() || trazabilidad()) {
+    <button class="trace-backdrop" type="button" aria-label="Cerrar trazabilidad" (click)="cerrarTrazabilidad()"></button>
+    <aside class="trace-panel" role="dialog" aria-modal="true" aria-labelledby="trace-title" tabindex="-1"
+      cdkTrapFocus [cdkTrapFocusAutoCapture]="true" (keydown.escape)="cerrarTrazabilidad()">
+      <h2 id="trace-title" class="visually-hidden">Trazabilidad del documento</h2>
+      @if (cargandoTrazabilidad()) {
+        <div class="state-panel"><mat-icon class="spin">progress_activity</mat-icon><h2>Cargando trazabilidad</h2></div>
+      } @else if (trazabilidad(); as trace) {
+        <header><div><span>Documento {{ trace.documento.numero }}</span><h2>{{ trace.documento.referencia }}</h2><p>{{ trace.documento.proveedorNombre }}</p></div><button mat-icon-button type="button" (click)="cerrarTrazabilidad()" aria-label="Cerrar"><mat-icon>close</mat-icon></button></header>
+        <section class="trace-balance"><div><span>Monto original</span><strong>{{ trace.documento.montoOriginal | currency:'USD':'symbol-narrow':'1.2-2' }}</strong></div><div><span>Pagos vigentes</span><strong>{{ trace.documento.aplicadoActual | currency:'USD':'symbol-narrow':'1.2-2' }}</strong></div><div><span>Saldo actual</span><strong>{{ trace.documento.saldoActual | currency:'USD':'symbol-narrow':'1.2-2' }}</strong></div></section>
+        <dl class="trace-meta">
+          <div><dt>Origen</dt><dd>{{ etiquetaOrigen(trace.documento.origenTipo) }}</dd></div>
+          <div><dt>Emisión</dt><dd>{{ formatearFecha(trace.documento.fechaEmision) }}</dd></div>
+          <div><dt>Vencimiento</dt><dd>{{ formatearFecha(trace.documento.fechaVencimiento) }}</dd></div>
+          <div><dt>Estado</dt><dd><span class="status" [attr.data-status]="trace.documento.estadoActual">{{ etiquetaEstado(trace.documento.estadoActual) }}</span>@if (detalleAnulacion(trace.documento); as detalle) { <span class="excluded-note">{{ detalle }}</span> }</dd></div>
+          <div class="trace-relation-cell">
+            <dt>Asiento asociado</dt>
+            <dd>
+              @if (trace.asiento; as asiento) {
+                <a class="trace-relation" [routerLink]="['/workspace/contabilidad/asientos', asiento.id, 'editar']" (click)="cerrarTrazabilidad()">
+                  <mat-icon>menu_book</mat-icon>
+                  <span><strong>{{ asiento.numero }}</strong><small>{{ formatearFecha(asiento.fecha) }}{{ asiento.descripcion ? ' · ' + asiento.descripcion : '' }}</small></span>
+                  <mat-icon class="relation-arrow">chevron_right</mat-icon>
+                </a>
+              } @else {
+                <span class="trace-relation-empty">Sin asiento asociado</span>
+              }
+            </dd>
+          </div>
+          <div class="trace-relation-cell">
+            <dt>Documento origen</dt>
+            <dd>
+              @if (trace.origen; as origen) {
+                @if (rutaDocumentoOrigen(trace); as ruta) {
+                  <a class="trace-relation" [routerLink]="ruta" (click)="cerrarTrazabilidad()">
+                    <mat-icon>receipt_long</mat-icon>
+                    <span><strong>{{ origen.numero }}</strong><small>{{ formatearFecha(origen.fecha) }}{{ origen.descripcion ? ' · ' + origen.descripcion : '' }}</small></span>
+                    <mat-icon class="relation-arrow">chevron_right</mat-icon>
+                  </a>
+                } @else {
+                  <span class="trace-relation trace-relation-static"><mat-icon>description</mat-icon><span><strong>{{ origen.numero }}</strong><small>{{ formatearFecha(origen.fecha) }}{{ origen.descripcion ? ' · ' + origen.descripcion : '' }}</small></span></span>
+                }
+              } @else {
+                <span class="trace-relation-empty">Sin vínculo de origen</span>
+              }
+            </dd>
+          </div>
+        </dl>
+        <section class="trace-note"><h3>Glosa</h3><p>{{ trace.glosa || 'Sin glosa registrada.' }}</p></section>
+        <section class="payment-timeline"><h3>Aplicaciones de pago</h3>
+          @if (trace.movimientos.length === 0) { <p class="timeline-empty">Este documento todavía no registra aplicaciones de pago.</p> }
+          @for (movimiento of trace.movimientos; track movimiento.pagoId) {
+            <article [class.cancelled]="movimiento.estado === 'ANULADO'">
+              <span class="timeline-dot"><mat-icon>{{ movimiento.estado === 'ANULADO' ? 'undo' : 'payments' }}</mat-icon></span>
+              <a class="payment-trace-link" [routerLink]="['/workspace/contabilidad/cuentas-por-pagar/pagos']" [queryParams]="{ pago: movimiento.pagoId }" (click)="cerrarTrazabilidad()">
+                <span><strong>{{ movimiento.pagoNumero }} · {{ movimiento.monto | currency:'USD':'symbol-narrow':'1.2-2' }}</strong><mat-icon>chevron_right</mat-icon></span>
+                <p>{{ formatearFecha(movimiento.fecha) }} · {{ movimiento.metodoPago }}{{ movimiento.referencia ? ' · ' + movimiento.referencia : '' }}</p>
+                @if (movimiento.estado === 'ANULADO') { <small>Anulado {{ formatearFecha(movimiento.anuladoEn) }}</small> }
+              </a>
+            </article>
+          }
+        </section>
+      }
+    </aside>
+  }
+</section>

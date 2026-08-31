@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { Database, endAt, get, limitToLast, onValue, orderByKey, query, ref, remove, set } from '@angular/fire/database';
 import { Observable } from 'rxjs';
-import { CampoFormulario, FormSubmission, FormularioDef, formularioDefSchema } from '@winsuite/bloques';
+import { CampoFormulario, FormSubmission, FormularioDef, MapeoClienteFormulario, formularioDefSchema } from '@winsuite/bloques';
 import { AuthService } from '../../../core/services/auth.service';
 import { ConfiguracionClientesService } from '../../../core/services/configuracion-clientes.service';
 
@@ -142,16 +142,21 @@ export class FormulariosService {
     const campos = Array.isArray(formulario.campos)
       ? formulario.campos
       : (Object.values(formulario.campos ?? {}) as CampoFormulario[]);
+    const integracion = formulario.integracionClientes;
     return {
       ...formulario,
-      integracionClientes: formulario.integracionClientes?.habilitada
+      // La clave nunca puede quedar en undefined: el update() multipath de la publicacion
+      // rechaza el snapshot completo si encuentra un undefined.
+      ...(integracion
         ? {
-            ...formulario.integracionClientes,
-            mapeos: Array.isArray(formulario.integracionClientes.mapeos)
-              ? formulario.integracionClientes.mapeos
-              : Object.values(formulario.integracionClientes.mapeos ?? {}),
+            integracionClientes: {
+              ...integracion,
+              mapeos: Array.isArray(integracion.mapeos)
+                ? integracion.mapeos
+                : (Object.values(integracion.mapeos ?? {}) as MapeoClienteFormulario[]),
+            },
           }
-        : undefined,
+        : {}),
       campos: campos.map((campo) =>
         campo.tipo === 'seleccion'
           ? { ...campo, opciones: Array.isArray(campo.opciones) ? campo.opciones : [] }

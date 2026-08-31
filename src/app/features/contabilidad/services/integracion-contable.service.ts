@@ -569,7 +569,7 @@ export class IntegracionContableService {
       origen: 'FACTURA_COMPRA',
       origenTipo: 'FACTURA_COMPRA',
       origenId,
-      origenNumero: factura.numero ?? documento,
+      origenNumero: documento,
       origenModulo: 'COMPRAS',
       lineas,
       totalDebe: 0,

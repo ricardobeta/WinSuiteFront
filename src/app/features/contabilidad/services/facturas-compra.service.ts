@@ -513,6 +513,9 @@ export class FacturasCompraService {
 
   async cambiarEstado(facturaId: string, estado: EstadoFacturaCompra): Promise<void> {
     await this.actualizarFacturaCompra(facturaId, { estado });
+    if (estado === 'ANULADA') {
+      await this.cuentasPorPagar.sincronizarAnulacionFacturaCompra(facturaId);
+    }
   }
 
   private async generarNumero(): Promise<string> {

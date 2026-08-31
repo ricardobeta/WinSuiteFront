@@ -58,7 +58,10 @@ export interface AnticipoNomina {
   rolId?: string | null;
   rolNumero?: string | null;
   creadoEn?: number;
+  creadoPor?: string | null;
   actualizadoEn?: number;
+  actualizadoPor?: string | null;
+  ultimaAccion?: string | null;
   registradoEn?: number | null;
   descontadoEn?: number | null;
   anuladoEn?: number | null;
@@ -90,6 +93,20 @@ export interface AnticipoNominaDetalle {
 export interface ResumenAnticipoNomina {
   anticipo: AnticipoNomina;
   detalles: AnticipoNominaDetalle[];
+}
+
+/** Rol mensual en borrador que fue recalculado al reprogramar un anticipo. */
+export interface RolSincronizadoCambioPeriodo {
+  id: string;
+  periodo: string;
+  numero?: string | null;
+}
+
+/** Resultado auditable de mover el descuento sin alterar la entrega ni su asiento. */
+export interface CambioPeriodoAnticipoResultado {
+  periodoAnterior: string;
+  periodoNuevo: string;
+  rolesSincronizados: RolSincronizadoCambioPeriodo[];
 }
 
 /** Datos de cabecera que el formulario envia al registrar el anticipo. */

@@ -2,6 +2,7 @@ import { TestBed } from '@angular/core/testing';
 import { Database } from '@angular/fire/database';
 
 import { AuthService } from '../../../core/services/auth.service';
+import { AuditService } from '../../../core/services/audit.service';
 import { ConfiguracionNominaContable, ModoDecimos, RolPagoDetalle } from '../models/nomina.models';
 import { AnticiposNominaService } from './anticipos-nomina.service';
 import { AsientosContablesService } from './asientos-contables.service';
@@ -57,6 +58,7 @@ describe('NominaService · decimos mensualizados vs provisionados', () => {
         NominaService,
         { provide: Database, useValue: {} },
         { provide: AuthService, useValue: { getTenantId: () => 'tenant-1' } },
+        { provide: AuditService, useValue: { currentActor: () => ({ userId: 'uid-1' }), recordSafe: async () => undefined } },
         { provide: AsientosContablesService, useValue: {} },
         { provide: PlanCuentasService, useValue: {} },
         { provide: IntegracionContableService, useValue: {} },

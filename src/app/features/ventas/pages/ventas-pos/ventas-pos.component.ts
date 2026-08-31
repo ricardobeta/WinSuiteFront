@@ -41,7 +41,16 @@ import {
   pasoDe,
   redondearCantidad
 } from '../../../inventario/utils/producto.util';
-import { CarritoItem, CuentaAbierta, MetodoPagoVenta, ModoPos, PerfilPos, SesionCaja, VentaItemTipo } from '../../models/ventas.models';
+import {
+  CarritoItem,
+  CuentaAbierta,
+  MetodoPagoVenta,
+  ModoPos,
+  PerfilPos,
+  SesionCaja,
+  VENTA_NOTAS_MAX_LENGTH,
+  VentaItemTipo
+} from '../../models/ventas.models';
 import { VentasConfigService } from '../../services/ventas-config.service';
 import { FacturacionConfigService } from '../../../../core/services/facturacion-config.service';
 import { VentasPosStateService } from '../../services/ventas-pos-state.service';
@@ -646,7 +655,15 @@ type VistaPosCompacta = 'productos' | 'cobro';
 
             <mat-form-field appearance="outline" subscriptSizing="dynamic">
               <mat-label>Notas de la venta</mat-label>
-              <textarea matInput rows="2" [value]="state.carrito().notas" (input)="actualizarNotas($event)"></textarea>
+              <textarea
+                matInput
+                rows="2"
+                [attr.maxlength]="notasMaxLength"
+                [value]="state.carrito().notas"
+                (input)="actualizarNotas($event)"
+              ></textarea>
+              <mat-hint>Se incluirá como descripción en la factura electrónica.</mat-hint>
+              <mat-hint align="end">{{ state.carrito().notas.length }}/{{ notasMaxLength }}</mat-hint>
             </mat-form-field>
           </div>
 
@@ -1104,6 +1121,7 @@ type VistaPosCompacta = 'productos' | 'cobro';
 })
 export class VentasPosComponent {
   protected readonly state = inject(VentasPosStateService);
+  protected readonly notasMaxLength = VENTA_NOTAS_MAX_LENGTH;
   private readonly productosService = inject(ProductosService);
   private readonly unidadesService = inject(UnidadesService);
   private readonly configuracionInventario = inject(ConfiguracionInventarioService);

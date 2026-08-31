@@ -31,6 +31,7 @@ export interface DocumentoPorPagar {
 
   // Proveedor (desnormalizado + vínculo opcional al maestro de inventario/proveedores)
   proveedorId?: string | null;
+  proveedorClave?: string;
   proveedorNombre: string;
   proveedorIdentificacion?: string;
 
@@ -44,6 +45,8 @@ export interface DocumentoPorPagar {
   montoOriginal: number;
   saldoPendiente: number;
   estadoPago: EstadoDocumentoPorPagar;
+  anuladoEn?: number | null;
+  motivoAnulacion?: 'COMPRA_ANULADA_SIN_ASIENTO' | 'ASIENTO_REVERSADO' | 'ANULACION_MANUAL' | null;
 
   asientoId?: string | null; // asiento que originó la obligación (el de la compra, o el propio si es manual)
 
@@ -65,6 +68,7 @@ export interface PagoProveedor {
   numero?: string; // consecutivo interno PP-0001
 
   proveedorId?: string | null;
+  proveedorClave?: string;
   proveedorNombre: string;
 
   fecha: number; // timestamp
@@ -78,6 +82,7 @@ export interface PagoProveedor {
 
   asientoId?: string | null;
   estado: EstadoPagoProveedor;
+  anuladoEn?: number | null;
 
   creadoPor?: string;
   creadoEn: number;

@@ -1,7 +1,7 @@
 import { CommonModule } from '@angular/common';
 import { Component, DestroyRef, OnInit, computed, inject, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
@@ -59,7 +59,7 @@ import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service
               </thead>
               <tbody>
                 @for (pago of pagosPaginados(); track pago.id) {
-                  <tr [class.anulado]="pago.estado === 'ANULADO'">
+                  <tr [class.anulado]="pago.estado === 'ANULADO'" [class.destacado]="pago.id === pagoDestacado()" [attr.aria-current]="pago.id === pagoDestacado() ? 'true' : null">
                     <td>{{ pago.numero }}</td>
                     <td>{{ pago.fecha | date:'dd/MM/yyyy' }}</td>
                     <td>{{ pago.proveedorNombre }}</td>
@@ -99,6 +99,8 @@ import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service
     .estado { font-size: .72rem; padding: .15rem .5rem; border-radius: 999px; background: var(--tc-success-container); color: var(--tc-on-success-container); }
     .estado[data-estado='ANULADO'] { background: color-mix(in srgb, var(--outline) 35%, transparent); text-decoration: line-through; }
     tr.anulado { opacity: .6; }
+    tr.destacado { background: color-mix(in srgb, var(--tc-primary-container) 42%, transparent); box-shadow: inset 4px 0 var(--tc-primary); }
+    tr.destacado td:first-child { color: var(--tc-primary); font-weight: 750; }
     .acciones { text-align: right; }
     .empty { padding: 2rem; text-align: center; color: var(--muted-foreground); background: var(--tc-surface-container-lowest); }
   `]
@@ -106,12 +108,14 @@ import { CuentasPorPagarService } from '../../services/cuentas-por-pagar.service
 export class PagosProveedorListComponent implements OnInit {
   private readonly service = inject(CuentasPorPagarService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly route = inject(ActivatedRoute);
   private readonly destroyRef = inject(DestroyRef);
 
   protected readonly pagos = signal<PagoProveedor[]>([]);
   protected readonly busqueda = signal('');
   protected readonly pageIndex = signal(0);
   protected readonly pageSize = signal(10);
+  protected readonly pagoDestacado = signal<string | null>(null);
   protected readonly pagosFiltrados = computed(() => {
     const query = this.normalizar(this.busqueda());
     if (!query) return this.pagos();
@@ -125,9 +129,15 @@ export class PagosProveedorListComponent implements OnInit {
   });
 
   ngOnInit(): void {
+    this.pagoDestacado.set(this.route.snapshot.queryParamMap.get('pago'));
     this.service.getPagos()
       .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe((pagos) => this.pagos.set(pagos));
+      .subscribe((pagos) => {
+        this.pagos.set(pagos);
+        const pagoId = this.pagoDestacado();
+        const indice = pagoId ? pagos.findIndex((pago) => pago.id === pagoId) : -1;
+        if (indice >= 0) this.pageIndex.set(Math.floor(indice / this.pageSize()));
+      });
   }
 
   protected actualizarBusqueda(value: string): void {
